@@ -1,0 +1,26 @@
+# Civic Lens — 依存パッケージ (ADK対応)
+# Google ADK (Agent Development Kit) を使用
+
+# Web Framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+jinja2==3.1.4
+
+# Google ADK (Agent Development Kit)
+google-adk==1.0.0
+
+# Google Cloud (Vertex AI Agent Engine デプロ用)
+google-cloud-aiplatform==1.71.0
+google-cloud-run==0.10.9
+google-cloud-firestore==2.20.2
+
+# Gemini (ADKの内部で利用)
+google-generativeai==0.8.4
+vertexai==1.71.0
+
+# Utilities
+requests==2.32.3
+pydantic==2.10.2
+python-dotenv==1.0.1
+httpx==0.28.1

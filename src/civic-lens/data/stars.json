@@ -1,0 +1,26 @@
+[
+  {
+    "id": "70cd61ab-3c26-424a-b373-9fa4d9a53007",
+    "record_id": "test-record-1",
+    "user_hash": "2673386e705a8c06",
+    "starred_at": "2026-09-05T04:05:39.211466Z"
+  },
+  {
+    "id": "e11dd6ce-12fe-43ea-8014-83712903b5c1",
+    "record_id": "test-record-1",
+    "user_hash": "29e202ec17c20530",
+    "starred_at": "2026-09-05T04:05:39.211967Z"
+  },
+  {
+    "id": "8f40af0e-f19a-4c8b-8479-ca1dbdb2bea3",
+    "record_id": "55937c58-0d1a-478a-aedc-9ee883864b7b",
+    "user_hash": "ca14e45e75674f4a",
+    "starred_at": "2026-09-05T04:12:34.810616Z"
+  },
+  {
+    "id": "562eb30f-059b-4f31-9dd0-93ad520fdd41",
+    "record_id": "55937c58-0d1a-478a-aedc-9ee883864b7b",
+    "user_hash": "5c30b1f258ea3e35",
+    "starred_at": "2026-09-05T04:12:34.811121Z"
+  }
+]

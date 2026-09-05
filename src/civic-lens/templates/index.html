@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+        }
+        .anger-meter {
+            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .situation-card {
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .situation-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .situation-card.selected {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- ヘッダー -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-bold text-gray-900 mb-4">🔍 Civic Lens</h1>
+            <p class="text-xl text-gray-600">市民の怒りを情報公開に変換するAIエージェント</p>
+            <p class="text-sm text-gray-500 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
+            <p class="text-xs text-gray-400 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+        </header>
+
+        <!-- STEP 0: シチュエーション選択（NEW!） -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🎯 STEP 0: 何に怒りを感じていますか？</h2>
+            <p class="text-sm text-gray-600 mb-4">シチュエーションを選ぶと、請求すべき行政文書を自動でリストアップします</p>
+
+            <div id="situationGrid" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <!-- 動的に生成 -->
+            </div>
+
+            <button id="useFreeInputBtn" class="mt-4 w-full text-sm text-blue-600 hover:underline">
+                ↑ どれも違う /具体的な不満を書く →
+            </button>
+        </section>
+
+        <!-- STEP 1: 感情入力 -->
+        <section id="freeInputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- テキスト入力 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">言葉で伝える</label>
+                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+                </div>
+
+                <!-- カメラ入力（YouCam API） -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">表情で伝える（YouCam API）</label>
+                    <div class="bg-gray-100 rounded-md p-4 text-center">
+                        <video id="cameraPreview" class="w-full rounded-md mb-2 hidden" autoplay playsinline></video>
+                        <canvas id="cameraCanvas" class="hidden"></canvas>
+                        <button id="startCamera" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷 カメラ起動</button>
+                        <button id="captureImage" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 hidden">📸 撮影</button>
+                        <p id="cameraStatus" class="text-sm text-gray-500 mt-2"></p>
+                    </div>
+                </div>
+            </div>
+
+            <button id="backToSituationsBtn" class="mt-4 text-sm text-blue-600 hover:underline">
+                ← シチュエーション選択に戻る
+            </button>
+        </section>
+
+        <!-- 自治体選択 -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🏛️ 対象機関</h2>
+            <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
+                <optgroup label="─── 自治体 ───">
+                    <option value="anjo-city">安城市（市長）</option>
+                    <option value="nagoya-city">名古屋市（市長）</option>
+                    <option value="okazaki-city">岡崎市（市長）</option>
+                    <option value="aichi-pref">愛知県（知事）</option>
+                    <option value="aichi-assembly">愛知県議会</option>
+                </optgroup>
+                <optgroup label="─── 警察 ───">
+                    <option value="metropolitan-police">🚔 警視庁（東京）</option>
+                    <option value="aichi-police">🚔 愛知県警察本部</option>
+                    <option value="kanagawa-police">🚔 神奈川県警察本部</option>
+                    <option value="osaka-police">🚔 大阪府警察本部</option>
+                </optgroup>
+            </select>
+        </section>
+
+        <!-- 解析ボタン -->
+        <button id="analyzeBtn" class="mb-6 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-md font-semibold hover:from-blue-600 hover:to-purple-700">
+            🚀 怒りを分析する
+        </button>
+
+        <!-- STEP 2: 結果表示 -->
+        <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">📊 怒りの分析結果</h2>
+            <div id="angerDisplay" class="mb-6"></div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+                <div class="bg-blue-50 p-4 rounded-md">
+                    <h3 class="font-semibold text-blue-900 mb-2">🎯 対象機関</h3>
+                    <p id="authorityDisplay" class="text-blue-700"></p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-md">
+                    <h3 class="font-semibold text-green-900 mb-2">📜 法的根拠</h3>
+                    <p id="legalBasisDisplay" class="text-green-700"></p>
+                </div>
+            </div>
+
+            <div class="mt-4 bg-yellow-50 p-4 rounded-md">
+                <h3 class="font-semibold text-yellow-900 mb-2">📝 必要な行政文書</h3>
+                <ul id="documentsList" class="list-disc list-inside text-yellow-800"></ul>
+            </div>
+        </section>
+
+        <!-- STEP 4: アクション -->
+        <section id="actionSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">⚡ アクションを選択</h2>
+            <div class="grid md:grid-cols-2 gap-4">
+                <button id="disclosureBtn" class="bg-gradient-to-r from-green-500 to-teal-600 text-white p-6 rounded-md hover:from-green-600 hover:to-teal-700">
+                    <div class="text-3xl mb-2">📝</div>
+                    <div class="font-bold">開示請求書を作成</div>
+                    <div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>
+                </button>
+                <button id="reviewBtn" class="bg-gradient-to-r from-orange-500 to-red-600 text-white p-6 rounded-md hover:from-orange-600 hover:to-red-700">
+                    <div class="text-3xl mb-2">⚖️</div>
+                    <div class="font-bold">審査請求書を作成</div>
+                    <div class="text-sm mt-1 opacity-90">不開示決定への反論</div>
+                </button>
+            </div>
+        </section>
+
+        <!-- STEP 5: 生成結果 -->
+        <section id="outputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">✅ 生成されたアクション</h2>
+            <div id="outputContent"></div>
+
+            <!-- 公開設定 (NEW!) -->
+            <div class="mt-6 bg-yellow-50 p-4 rounded-md border-2 border-yellow-300">
+                <h3 class="font-semibold mb-2 text-yellow-900">🌐 この請求を共有しますか？</h3>
+                <p class="text-sm text-yellow-800 mb-3">他の市民と共有すると、<strong>集合知として活用</strong>され、地域の行政問題が可視化されます。<br>
+                <span class="text-xs">※ 個人を特定する情報は自動で匿名化されます（市民#00001 形式）。後から変更可能。</span></p>
+
+                <div class="flex gap-3 mb-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="visibility" value="private" checked class="w-4 h-4">
+                        <span>🔒 <strong>Private</strong>（自分のみ）</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="visibility" value="public" class="w-4 h-4">
+                        <span>🌐 <strong>Public</strong>（みんなと共有）</span>
+                    </label>
+                </div>
+
+                <button id="saveRecordBtn" class="w-full bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 font-semibold">
+                    💾 この請求を保存する
+                </button>
+
+                <div id="saveStatus" class="mt-2 text-sm"></div>
+            </div>
+        </section>
+
+        <!-- STEP 6: 経路案内 -->
+        <section id="routeSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🚉 役所までのアクセス（駅すぱあとAPI）</h2>
+            <div id="routeContent"></div>
+        </section>
+
+        <!-- STEP 7: みんなの請求 (Public ダッシュボード) -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">🌐 みんなの請求 — 集合知プラットフォーム</h2>
+                <button id="refreshPublicBtn" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                    🔄 更新
+                </button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">他の市民がPublic共有した開示請求です。参考になったり、共感できる事例が見つかります。</p>
+
+            <!-- 統計サマリ -->
+            <div id="publicStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="bg-blue-50 p-3 rounded-md text-center">
+                    <div class="text-2xl font-bold text-blue-700" id="statTotal">-</div>
+                    <div class="text-xs text-blue-600">総請求数</div>
+                </div>
+                <div class="bg-green-50 p-3 rounded-md text-center">
+                    <div class="text-2xl font-bold text-green-700" id="statPublic">-</div>
+                    <div class="text-xs text-green-600">Public</div>
+                </div>
+                <div class="bg-purple-50 p-3 rounded-md text-center">
+                    <div class="text-2xl font-bold text-purple-700" id="statAuthority">-</div>
+                    <div class="text-xs text-purple-600">対象自治体</div>
+                </div>
+                <div class="bg-orange-50 p-3 rounded-md text-center">
+                    <div class="text-2xl font-bold text-orange-700" id="statSituation">-</div>
+                    <div class="text-xs text-orange-600">シチュエーション</div>
+                </div>
+            </div>
+
+            <!-- フィルタ -->
+            <div class="flex gap-2 mb-4 flex-wrap">
+                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200 active" data-filter="all">
+                    すべて
+                </button>
+                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="自治体">
+                    🏛️ 自治体
+                </button>
+                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="警察">
+                    🚔 警察
+                </button>
+            </div>
+
+            <!-- Public フィード -->
+            <div id="publicFeed" class="space-y-3">
+                <div class="text-center text-gray-400 py-8">読み込み中...</div>
+            </div>
+        </section>
+
+        <!-- フッター -->
+        <footer class="text-center text-sm text-gray-500 mt-12">
+            <p>Civic Lens — Hackathon Project</p>
+            <p>Google Cloud × GMI Cloud × 駅すぱあと × YouCam API</p>
+            <p class="mt-2">弁護士法72条遵守：AIは情報提供アシスタントであり、法的助言ではありません</p>
+        </footer>
+    </div>
+
+    <script>
+        let selectedSituation = null;
+        let cameraStream = null;
+        let capturedImageData = null;
+
+        // シチュエーション一覧を取得
+        async function loadSituations() {
+            const res = await fetch('/api/situations');
+            const data = await res.json();
+            const grid = document.getElementById('situationGrid');
+            data.situations.forEach(s => {
+                const card = document.createElement('div');
+                card.className = 'situation-card border-2 border-gray-200 rounded-lg p-3 text-center hover:border-blue-400';
+                card.dataset.key = s.key;
+                card.innerHTML = `
+                    <div class="text-3xl mb-1">${s.emoji}</div>
+                    <div class="font-semibold text-sm">${s.label}</div>
+                `;
+                card.addEventListener('click', () => selectSituation(s));
+                grid.appendChild(card);
+            });
+        }
+
+        function selectSituation(s) {
+            selectedSituation = s;
+            document.querySelectorAll('.situation-card').forEach(c => {
+                c.classList.remove('selected');
+                if (c.dataset.key === s.key) c.classList.add('selected');
+            });
+
+            // シチュエーションに応じたサンプルテキストを自動入力
+            fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
+                document.getElementById('userInput').value = detail.sample_anger_text;
+            });
+        }
+
+        document.getElementById('useFreeInputBtn').addEventListener('click', () => {
+            document.getElementById('freeInputSection').classList.remove('hidden');
+            selectedSituation = null;
+        });
+
+        document.getElementById('backToSituationsBtn').addEventListener('click', () => {
+            document.getElementById('freeInputSection').classList.add('hidden');
+            selectedSituation = null;
+        });
+
+        // カメラ起動
+        document.getElementById('startCamera').addEventListener('click', async () => {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const video = document.getElementById('cameraPreview');
+                video.srcObject = cameraStream;
+                video.classList.remove('hidden');
+                document.getElementById('captureImage').classList.remove('hidden');
+                document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+            } catch (err) {
+                document.getElementById('cameraStatus').textContent = 'カメラアクセス拒否';
+            }
+        });
+
+        document.getElementById('captureImage').addEventListener('click', () => {
+            const video = document.getElementById('cameraPreview');
+            const canvas = document.getElementById('cameraCanvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            capturedImageData = canvas.toDataURL('image/jpeg');
+            document.getElementById('cameraStatus').textContent = '✅ 撮影完了';
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                video.classList.add('hidden');
+                document.getElementById('captureImage').classList.add('hidden');
+            }
+        });
+
+        // 怒り分析
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const userInput = document.getElementById('userInput').value.trim();
+            const targetAuthority = document.getElementById('targetAuthority').value;
+
+            if (!userInput && !capturedImageData) {
+                alert('テキストを入力してください');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('user_input', userInput);
+            formData.append('target_authority', targetAuthority);
+            if (capturedImageData) formData.append('image_data', capturedImageData);
+
+            document.getElementById('analyzeBtn').textContent = '🔄 分析中...';
+            document.getElementById('analyzeBtn').disabled = true;
+
+            try {
+                const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                displayAnalysis(data);
+                document.getElementById('resultSection').classList.remove('hidden');
+                document.getElementById('actionSection').classList.remove('hidden');
+
+                if (data.anger_analysis.target_authority_key) {
+                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
+                }
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            } finally {
+                document.getElementById('analyzeBtn').textContent = '🚀 怒りを分析する';
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        });
+
+        function displayAnalysis(data) {
+            const analysis = data.anger_analysis;
+
+            const angerPercent = (analysis.anger_level / 10) * 100;
+            document.getElementById('angerDisplay').innerHTML = `
+                <div class="flex items-center gap-4">
+                    <div class="flex-1">
+                        <div class="anger-meter h-4 rounded-full"></div>
+                        <div class="relative h-4 -mt-4">
+                            <div class="absolute top-0 h-4 w-1 bg-black rounded-full" style="left: ${angerPercent}%"></div>
+                        </div>
+                    </div>
+                    <div class="text-2xl font-bold">${analysis.anger_level}/10</div>
+                </div>
+                <p class="mt-2 text-gray-700">${analysis.pain_summary}</p>
+            `;
+
+            document.getElementById('authorityDisplay').textContent = analysis.target_authority;
+            document.getElementById('legalBasisDisplay').textContent = analysis.legal_basis;
+
+            const docsList = document.getElementById('documentsList');
+            docsList.innerHTML = '';
+
+            // シチュエーションが選択されていれば、その文書リストを優先表示
+            if (selectedSituation) {
+                selectedSituation.documents?.forEach(doc => {
+                    const li = document.createElement('li');
+                    li.textContent = doc + ' ← シチュエーション推奨';
+                    li.classList.add('font-semibold');
+                    docsList.appendChild(li);
+                });
+            }
+
+            analysis.specific_documents_requested.forEach(doc => {
+                const li = document.createElement('li');
+                li.textContent = doc;
+                docsList.appendChild(li);
+            });
+        }
+
+        // 開示請求書生成
+        document.getElementById('disclosureBtn').addEventListener('click', async () => {
+            const userInput = document.getElementById('userInput').value.trim();
+            const targetAuthority = document.getElementById('targetAuthority').value;
+
+            const formData = new FormData();
+            formData.append('user_input', userInput);
+            formData.append('target_authority', targetAuthority);
+            if (selectedSituation) formData.append('situation_key', selectedSituation.key);
+
+            document.getElementById('disclosureBtn').disabled = true;
+            document.getElementById('disclosureBtn').textContent = '📝 生成中...';
+
+            try {
+                const res = await fetch('/api/disclosure-request', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                displayDisclosure(data);
+                document.getElementById('outputSection').classList.remove('hidden');
+
+                const routeFormData = new FormData();
+                routeFormData.append('target_authority', targetAuthority);
+                const routeRes = await fetch('/api/route', { method: 'POST', body: routeFormData });
+                const routeData = await routeRes.json();
+                displayRoute(routeData);
+                document.getElementById('routeSection').classList.remove('hidden');
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            } finally {
+                document.getElementById('disclosureBtn').disabled = false;
+                document.getElementById('disclosureBtn').innerHTML = '<div class="text-3xl mb-2">📝</div><div class="font-bold">開示請求書を作成</div><div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>';
+            }
+        });
+
+        function displayDisclosure(data) {
+            const html = `
+                <div class="bg-gray-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2">📋 ${data.ordinance_name}</h3>
+                    <p class="text-sm text-gray-600">${data.authority} - ${data.contact}</p>
+                </div>
+                <div class="bg-blue-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2 text-blue-900">📅 期限</h3>
+                    <ul class="text-sm text-blue-800">
+                        <li>開示決定まで: ${data.deadline.decision_days}日（${new Date(data.deadline.decision_deadline).toLocaleDateString()}）</li>
+                        <li>延長上限: ${new Date(data.deadline.extended_deadline).toLocaleDateString()}</li>
+                        <li>審査請求期限: ${data.deadline.review_period_days}日</li>
+                    </ul>
+                </div>
+                <div class="bg-white border p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2">📄 開示請求書</h3>
+                    <pre class="whitespace-pre-wrap text-sm font-mono">${data.request_text}</pre>
+                </div>
+                <div class="bg-green-50 p-4 rounded-md">
+                    <h3 class="font-semibold mb-2 text-green-900">🎯 次のステップ</h3>
+                    <ol class="text-sm text-green-800 list-decimal list-inside">
+                        ${data.next_steps.map(s => `<li>${s}</li>`).join('')}
+                    </ol>
+                </div>
+            `;
+            document.getElementById('outputContent').innerHTML = html;
+        }
+
+        function displayRoute(data) {
+            const html = `
+                <div class="bg-gray-50 p-4 rounded-md">
+                    <h3 class="font-semibold mb-2">🏛️ ${data.office.name}</h3>
+                    <p class="text-sm text-gray-600">${data.office.address}</p>
+                    <p class="text-sm text-gray-500 mt-1">最寄り駅: ${data.office.nearest_station}</p>
+                </div>
+                <div class="mt-4 bg-blue-50 p-4 rounded-md">
+                    <h3 class="font-semibold mb-2 text-blue-900">🚉 アクセス経路</h3>
+                    ${data.route ? `
+                        <div class="text-sm text-blue-800">
+                            <p>所要時間: 約${data.route.duration_minutes}分</p>
+                            <p>乗換: ${data.route.transfer_count}回 / 運賃: ${data.route.fare_yen}円</p>
+                            <p class="mt-2 text-xs">${data.route.summary || ''}</p>
+                        </div>
+                    ` : '<p>経路情報を取得できませんでした</p>'}
+                </div>
+            `;
+            document.getElementById('routeContent').innerHTML = html;
+        }
+
+        // 保存ボタン（Private/Public）
+        let currentDisclosureText = '';
+        let currentTargetAuthority = '';
+
+        document.getElementById('saveRecordBtn').addEventListener('click', async () => {
+            const visibility = document.querySelector('input[name="visibility"]:checked').value;
+            const userInput = document.getElementById('userInput').value.trim();
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const situationKey = selectedSituation ? selectedSituation.key : null;
+
+            if (!currentDisclosureText) {
+                document.getElementById('saveStatus').innerHTML = '<span style="color: red;">先に開示請求書を生成してください</span>';
+                return;
+            }
+
+            document.getElementById('saveStatus').textContent = '💾 保存中...';
+            document.getElementById('saveRecordBtn').disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('user_input', userInput);
+                formData.append('request_text', currentDisclosureText);
+                formData.append('target_authority', targetAuthority);
+                formData.append('visibility', visibility);
+                if (situationKey) formData.append('situation_key', situationKey);
+
+                const res = await fetch('/api/visibility/create', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.visibility === 'public') {
+                    document.getElementById('saveStatus').innerHTML = `✅ 公開保存しました（<strong>${data.anonymous_user_id}</strong> として公開されます）`;
+                } else {
+                    document.getElementById('saveStatus').innerHTML = `✅ 非公開で保存しました`;
+                }
+            } catch (err) {
+                document.getElementById('saveStatus').innerHTML = `<span style="color: red;">エラー: ${err.message}</span>`;
+            } finally {
+                document.getElementById('saveRecordBtn').disabled = false;
+            }
+        });
+
+        // displayDisclosureの中でcurrentDisclosureTextを保存
+        const originalDisplayDisclosure = displayDisclosure;
+        displayDisclosure = function(data) {
+            currentDisclosureText = data.request_text;
+            currentTargetAuthority = data.authority;
+            originalDisplayDisclosure(data);
+        };
+
+        // =====================================================
+        // Public ダッシュボード（みんなの請求）
+        // =====================================================
+        let currentFilter = 'all';
+        let publicRecords = [];
+
+        async function loadPublicFeed() {
+            try {
+                // 統計
+                const statsRes = await fetch('/api/visibility/stats');
+                const stats = await statsRes.json();
+                document.getElementById('statTotal').textContent = stats.total_records;
+                document.getElementById('statPublic').textContent = stats.public_count;
+                document.getElementById('statAuthority').textContent = Object.keys(stats.by_authority || {}).length;
+                document.getElementById('statSituation').textContent = Object.keys(stats.by_situation || {}).length;
+
+                // Public フィード
+                const feedRes = await fetch('/api/visibility/public?limit=50');
+                const feedData = await feedRes.json();
+                publicRecords = feedData.records;
+                renderPublicFeed();
+            } catch (err) {
+                document.getElementById('publicFeed').innerHTML =
+                    `<div class="text-red-500 text-center py-8">エラー: ${err.message}</div>`;
+            }
+        }
+
+        function renderPublicFeed() {
+            const filtered = currentFilter === 'all'
+                ? publicRecords
+                : publicRecords.filter(r => r.category === currentFilter);
+
+            if (filtered.length === 0) {
+                document.getElementById('publicFeed').innerHTML =
+                    `<div class="text-center text-gray-400 py-8">まだ共有された請求がありません。<br>
+                     <span class="text-xs">上のSTEP4で「🌐 Public」を選んで保存すると、ここに表示されます。</span></div>`;
+                return;
+            }
+
+            const html = filtered.map(r => {
+                const date = new Date(r.created_at).toLocaleDateString('ja-JP');
+                const categoryBadge = r.category === '警察'
+                    ? '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">🚔 警察</span>'
+                    : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>';
+                const statusBadge = r.status === 'responded'
+                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">✅ 開示あり</span>'
+                    : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">⏳ 申請中</span>';
+
+                return `
+                    <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-gray-800">${r.anonymous_user_id || '匿名市民'}</span>
+                                ${categoryBadge}
+                                ${statusBadge}
+                            </div>
+                            <span class="text-xs text-gray-500">${date}</span>
+                        </div>
+                        <div class="text-sm text-gray-700 mb-2">
+                            <strong>対象機関:</strong> ${r.target_authority}
+                        </div>
+                        <div class="text-sm bg-gray-50 p-2 rounded mb-2">
+                            ${r.summary_public || r.user_input.substring(0, 100)}
+                        </div>
+                        ${r.result_excerpt ? `
+                            <details class="text-xs text-gray-600 mb-2">
+                                <summary class="cursor-pointer text-blue-600 hover:underline">📄 開示結果をみる</summary>
+                                <div class="mt-2 p-2 bg-green-50 rounded">${r.result_excerpt}</div>
+                            </details>
+                        ` : ''}
+                        <!-- GitHub風: スター & フォーク (NEW!) -->
+                        <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
+                            <button class="star-btn text-sm text-gray-600 hover:text-yellow-500 flex items-center gap-1" data-record-id="${r.id}">
+                                <span class="star-icon">☆</span>
+                                <span class="star-count">0</span>
+                                <span class="text-xs">スター</span>
+                            </button>
+                            <button class="fork-btn text-sm text-gray-600 hover:text-blue-500 flex items-center gap-1" data-record-id="${r.id}">
+                                <span>⑂</span>
+                                <span class="fork-count">0</span>
+                                <span class="text-xs">フォーク</span>
+                            </button>
+                            <span class="text-xs text-gray-400 ml-auto">GitHub化機能</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('publicFeed').innerHTML = html;
+
+            // 各レコードのスター・フォーク統計を取得
+            filtered.forEach(r => loadRecordGitHubStats(r.id));
+        }
+
+        async function loadRecordGitHubStats(recordId) {
+            try {
+                const res = await fetch(`/api/github/stats/${recordId}`);
+                const stats = await res.json();
+
+                const starBtn = document.querySelector(`.star-btn[data-record-id="${recordId}"]`);
+                const forkBtn = document.querySelector(`.fork-btn[data-record-id="${recordId}"]`);
+
+                if (starBtn) {
+                    starBtn.querySelector('.star-icon').textContent = stats.starred ? '★' : '☆';
+                    starBtn.querySelector('.star-count').textContent = stats.stars;
+                    starBtn.classList.toggle('text-yellow-500', stats.starred);
+                }
+                if (forkBtn) {
+                    forkBtn.querySelector('.fork-count').textContent = stats.forks;
+                    forkBtn.classList.toggle('text-blue-500', stats.forked);
+                }
+            } catch (err) {
+                console.error('Failed to load stats:', err);
+            }
+        }
+
+        // スター & フォークボタンのクリック処理（イベント委譲）
+        document.getElementById('publicFeed').addEventListener('click', async (e) => {
+            const starBtn = e.target.closest('.star-btn');
+            const forkBtn = e.target.closest('.fork-btn');
+
+            if (starBtn) {
+                const recordId = starBtn.dataset.recordId;
+                const res = await fetch(`/api/github/stats/${recordId}`);
+                const current = await res.json();
+
+                if (current.starred) {
+                    await fetch(`/api/github/unstar/${recordId}`, { method: 'POST' });
+                } else {
+                    await fetch(`/api/github/star/${recordId}`, { method: 'POST' });
+                }
+                await loadRecordGitHubStats(recordId);
+            }
+
+            if (forkBtn) {
+                const recordId = forkBtn.dataset.recordId;
+                await fetch(`/api/github/fork/${recordId}`, { method: 'POST' });
+                alert('✅ フォークしました！\n\nこの請求書を参考にした、新たな開示請求を作成できます。');
+                await loadRecordGitHubStats(recordId);
+            }
+        });
+
+        document.getElementById('refreshPublicBtn').addEventListener('click', loadPublicFeed);
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('bg-blue-500', 'text-white'));
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.add('bg-gray-200'));
+                btn.classList.remove('bg-gray-200');
+                btn.classList.add('bg-blue-500', 'text-white');
+                currentFilter = btn.dataset.filter;
+                renderPublicFeed();
+            });
+        });
+
+        // 起動
+        loadSituations();
+        loadPublicFeed();
+    </script>
+</body>
+</html>
