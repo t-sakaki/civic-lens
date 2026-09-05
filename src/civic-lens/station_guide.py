@@ -128,5 +128,47 @@ def get_office_info(authority_key: str) -> Dict:
             "lon": 136.9067,
             "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
         },
+        "toyota-city": {
+            "name": "豊田市役所",
+            "address": "〒471-8501 愛知県豊田市西町3丁目60番地",
+            "lat": 35.0837,
+            "lon": 137.1561,
+            "nearest_station": "豊田市駅（名鉄三河線）",
+        },
+        "gamagori-city": {
+            "name": "蒲郡市役所",
+            "address": "〒443-8601 愛知県蒲郡市旭町17番1号",
+            "lat": 34.8276,
+            "lon": 137.2215,
+            "nearest_station": "蒲郡駅（JR東海道本線）",
+        },
+        "metropolitan-police": {
+            "name": "警視庁本部庁舎",
+            "address": "〒100-8929 東京都千代田区霞が関二丁目1番1号",
+            "lat": 35.6762,
+            "lon": 139.7528,
+            "nearest_station": "桜田門駅（東京メトロ有楽町線）",
+        },
+        "aichi-police": {
+            "name": "愛知県警察本部",
+            "address": "〒460-8502 名古屋市中区三の丸二丁目1番1号",
+            "lat": 35.1810,
+            "lon": 136.9042,
+            "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
+        },
+        "kanagawa-police": {
+            "name": "神奈川県警察本部",
+            "address": "〒231-8403 横浜市中区海岸通2丁目4番地",
+            "lat": 35.4491,
+            "lon": 139.6425,
+            "nearest_station": "日本大通り駅（みなとみらい線）",
+        },
+        "osaka-police": {
+            "name": "大阪府警察本部",
+            "address": "〒540-8540 大阪市中央区大手前三丁目1番41号",
+            "lat": 34.6863,
+            "lon": 135.5201,
+            "nearest_station": "谷町四丁目駅（Osaka Metro）",
+        },
     }
     return offices.get(authority_key, offices["anjo-city"])

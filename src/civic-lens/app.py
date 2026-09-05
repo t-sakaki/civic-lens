@@ -5,8 +5,12 @@
 import os
 import io
 import base64
+from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -151,8 +155,9 @@ async def generate_disclosure_request(
     user_input: str = Form(...),
     target_authority: str = Form(...),
     situation_key: Optional[str] = Form(None),
+    strategy_option: Optional[str] = Form("option-fast"),
 ):
-    """開示請求書を生成"""
+    """開示請求書を生成（Human-in-the-loop戦略選択対応）"""
     ordinance = ORDINANCES.get(target_authority)
     if not ordinance:
         raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
@@ -171,7 +176,7 @@ async def generate_disclosure_request(
 
     agent = get_agent()
     try:
-        request_text = agent.generate_disclosure_request(user_input, ordinance)
+        request_text = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
     except Exception as e:
         print(f"Gemini エラー: {e}")
         request_text = _mock_disclosure_request(user_input, ordinance)

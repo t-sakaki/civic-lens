@@ -128,14 +128,95 @@
             </div>
 
             <div class="mt-4 bg-yellow-50 p-4 rounded-md">
-                <h3 class="font-semibold text-yellow-900 mb-2">📝 必要な行政文書</h3>
-                <ul id="documentsList" class="list-disc list-inside text-yellow-800"></ul>
+                <h3 class="font-semibold text-yellow-900 mb-2">📝 請求対象の行政文書（実務簿冊レベルに自動補正）</h3>
+                <ul id="documentsList" class="list-disc list-inside text-yellow-800 space-y-1"></ul>
+            </div>
+
+            <!-- メタ認知批評 (Meta-Cognitive Critique) -->
+            <div id="critiqueCard" class="mt-6 bg-purple-50 border-2 border-purple-200 rounded-lg p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">🧠</span>
+                        <h3 class="text-lg font-bold text-purple-900">AIメタ認知批評（自己批判 & 行政逃げ道対策）</h3>
+                    </div>
+                    <span id="critiqueScore" class="bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-full font-semibold">自己信頼度: 91%</span>
+                </div>
+                <p id="critiqueSummary" class="text-sm text-purple-800 mb-4 bg-white/70 p-3 rounded border border-purple-100"></p>
+                
+                <div class="grid md:grid-cols-2 gap-4 text-sm">
+                    <div class="bg-white p-3 rounded border border-purple-100 shadow-sm">
+                        <div class="font-bold text-red-600 mb-1 flex items-center gap-1">
+                            <span>🛡️ 弱点検知（行政の常套逃げ道）</span>
+                        </div>
+                        <p id="critiqueVulnerability" class="text-gray-700 text-xs leading-relaxed"></p>
+                    </div>
+                    <div class="bg-white p-3 rounded border border-purple-100 shadow-sm">
+                        <div class="font-bold text-amber-600 mb-1 flex items-center gap-1">
+                            <span>⚠️ リスク予測 & 代案B</span>
+                        </div>
+                        <p id="critiqueRisk" class="text-gray-700 text-xs leading-relaxed"></p>
+                    </div>
+                </div>
+
+                <div class="mt-3 bg-white p-3 rounded border border-purple-100">
+                    <div class="font-bold text-green-700 text-xs mb-1">✨ メタ認知批評により自動適用された改善策:</div>
+                    <ul id="critiqueImprovements" class="list-disc list-inside text-xs text-gray-700 space-y-1"></ul>
+                </div>
+            </div>
+
+            <!-- タスクDAG (Task DAG) 可視化 -->
+            <div id="dagCard" class="mt-6 bg-slate-50 border border-slate-200 rounded-lg p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">📊</span>
+                        <h3 class="text-lg font-bold text-slate-800">自律オーケストレーション DAG（手続き進捗グラフ）</h3>
+                    </div>
+                    <span class="text-xs text-slate-500 font-mono">TD-Orchestration</span>
+                </div>
+                <div id="dagContainer" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
             </div>
         </section>
 
-        <!-- STEP 4: アクション -->
+        <!-- STEP 4: Human-in-the-Loop & アクション -->
         <section id="actionSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">⚡ アクションを選択</h2>
+            <h2 class="text-2xl font-semibold mb-2 text-gray-800">⚖️ Human-in-the-Loop（市民の意思決定）</h2>
+            <p class="text-sm text-gray-600 mb-4">AIの自己批評に基づき、あなたのアクション方針を選択してください。最終決定権は常に市民にあります。</p>
+
+            <!-- 戦略選択ラジオ -->
+            <div id="strategyOptionsContainer" class="grid md:grid-cols-2 gap-4 mb-6">
+                <label class="strategy-card border-2 border-green-500 bg-green-50/50 p-4 rounded-lg cursor-pointer flex flex-col justify-between hover:bg-green-50 transition">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-green-900 text-base">プランA：迅速開示重視（推奨）</span>
+                            <span class="bg-green-200 text-green-800 text-xs px-2 py-0.5 rounded font-semibold">スピード重視</span>
+                        </div>
+                        <p class="text-xs text-green-800 leading-relaxed">
+                            決裁文書・成果報告書（復命書）に限定。法定決定期限（14日以内）の遵守を求め、行政の延長を許さず早期開示を狙います。
+                        </p>
+                    </div>
+                    <div class="mt-3 flex items-center gap-2">
+                        <input type="radio" name="strategyOption" value="option-fast" checked class="w-4 h-4 text-green-600">
+                        <span class="text-xs font-semibold text-green-900">このプランで請求書を作成</span>
+                    </div>
+                </label>
+
+                <label class="strategy-card border-2 border-gray-200 bg-gray-50/50 p-4 rounded-lg cursor-pointer flex flex-col justify-between hover:bg-gray-100 transition">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-gray-900 text-base">プランB：網羅的徹底追及</span>
+                            <span class="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded font-semibold">徹底調査</span>
+                        </div>
+                        <p class="text-xs text-gray-700 leading-relaxed">
+                            電子メール・精算書・打ち合わせメモを含む全関係文書を一括請求。期間延長リスク（60日等）を許容し全容解明を目指します。
+                        </p>
+                    </div>
+                    <div class="mt-3 flex items-center gap-2">
+                        <input type="radio" name="strategyOption" value="option-thorough" class="w-4 h-4 text-blue-600">
+                        <span class="text-xs font-semibold text-gray-900">このプランで請求書を作成</span>
+                    </div>
+                </label>
+            </div>
+
             <div class="grid md:grid-cols-2 gap-4">
                 <button id="disclosureBtn" class="bg-gradient-to-r from-green-500 to-teal-600 text-white p-6 rounded-md hover:from-green-600 hover:to-teal-700">
                     <div class="text-3xl mb-2">📝</div>
@@ -394,16 +475,68 @@
                 li.textContent = doc;
                 docsList.appendChild(li);
             });
+
+            // メタ認知批評 (Meta-Cognitive Critique) のレンダリング
+            if (analysis.critique) {
+                const c = analysis.critique;
+                document.getElementById('critiqueScore').textContent = `自己評価スコア: ${Math.round((c.confidence_score || 0.9) * 100)}%`;
+                document.getElementById('critiqueSummary').textContent = c.critique_summary || '公文書管理上の簿冊名と不開示回避ロジックを自己検証済み';
+                document.getElementById('critiqueVulnerability').textContent = c.vulnerability || '';
+                document.getElementById('critiqueRisk').textContent = c.risk_prediction || '';
+
+                const impList = document.getElementById('critiqueImprovements');
+                impList.innerHTML = '';
+                (c.improvements_applied || []).forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    impList.appendChild(li);
+                });
+            }
+
+            // タスクDAG (Task DAG) のレンダリング
+            if (analysis.task_dag && analysis.task_dag.tasks) {
+                const dagContainer = document.getElementById('dagContainer');
+                dagContainer.innerHTML = '';
+                analysis.task_dag.tasks.forEach((t, index) => {
+                    const isCompleted = t.status === 'completed';
+                    const isInProgress = t.status === 'in_progress';
+                    const statusBg = isCompleted ? 'bg-emerald-50 border-emerald-300' : (isInProgress ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200');
+                    const badge = isCompleted ? '<span class="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">完了</span>' :
+                                  (isInProgress ? '<span class="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">市民選択中</span>' :
+                                  '<span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">待機中</span>');
+
+                    const depsText = t.dependencies.length > 0 ? `<div class="text-[10px] text-gray-500 mt-1 font-mono">先行依存: ${t.dependencies.join(', ')}</div>` : '';
+
+                    const nodeEl = document.createElement('div');
+                    nodeEl.className = `p-3 rounded-lg border text-xs flex flex-col justify-between ${statusBg}`;
+                    nodeEl.innerHTML = `
+                        <div>
+                            <div class="flex items-center justify-between gap-1 mb-1">
+                                <span class="font-bold text-gray-900">${index + 1}. ${t.name}</span>
+                                ${badge}
+                            </div>
+                            <p class="text-gray-600 text-[11px] leading-snug">${t.description}</p>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-gray-200/60">
+                            <div class="text-[10px] text-emerald-800 font-medium">✓ 判定基準: ${t.acceptance_criteria}</div>
+                            ${depsText}
+                        </div>
+                    `;
+                    dagContainer.appendChild(nodeEl);
+                });
+            }
         }
 
         // 開示請求書生成
         document.getElementById('disclosureBtn').addEventListener('click', async () => {
             const userInput = document.getElementById('userInput').value.trim();
             const targetAuthority = document.getElementById('targetAuthority').value;
+            const strategyOption = document.querySelector('input[name="strategyOption"]:checked')?.value || 'option-fast';
 
             const formData = new FormData();
             formData.append('user_input', userInput);
             formData.append('target_authority', targetAuthority);
+            formData.append('strategy_option', strategyOption);
             if (selectedSituation) formData.append('situation_key', selectedSituation.key);
 
             document.getElementById('disclosureBtn').disabled = true;
