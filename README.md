@@ -70,6 +70,7 @@ SequentialAgent (civic_lens_integrated)
 - **Tailwind CSS** — UI
 - **Cloud Run** — デプロイ
 - **Cloud Scheduler** — 期限通知cron
+- **Firebase Authentication + Firestore** — ユーザー認証（メール/パスワード・Web3ウォレット）、開示請求記録・フォーク・スターの永続化。Cloud Runのステートレスなコンテナ間でもデータを保持するために使用
 
 ## 📁 ファイル構成
 
@@ -101,8 +102,12 @@ export GEMINI_API_KEY="your-gemini-api-key"
 export GMI_API_KEY="your-gmi-api-key"
 export EKISPERT_API_KEY="your-ekispert-key"
 export YOUCAM_API_KEY="your-youcam-key"
+export FIREBASE_WEB_API_KEY="your-firebase-web-api-key"
 
-# 3. 起動
+# 3. Firestoreへのアクセス権を設定（ローカル開発時のみ）
+gcloud auth application-default login
+
+# 4. 起動
 uvicorn app:app --host 0.0.0.0 --port 8080
 ```
 

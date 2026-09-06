@@ -32,19 +32,14 @@ def find_nearest_government_office(
         return _mock_route(office_name)
 
     try:
-        # 駅すぱあとAPI: 経路探索
+        # 駅すぱあとAPI: 経路探索（v1.27 - /search/course は from/to を受け入れ）
         params = {
             "key": EKISPERT_API_KEY,
             "from": f"{current_lat},{current_lon}",
             "to": office_name,
-            "plane": "false",
-            "shinkansen": "false",
-            "limitedExpress": "false",
-            "bus": "false",
-            "ferry": "false",
         }
         response = requests.get(
-            f"{EKISPERT_BASE_URL}/search/course/extreme",
+            f"{EKISPERT_BASE_URL}/search/course",
             params=params,
             timeout=10,
         )
@@ -57,25 +52,35 @@ def find_nearest_government_office(
 
 
 def _parse_route(data: Dict, to_name: str) -> Dict:
-    """APIレスポンスをパース"""
+    """APIレスポンスをパース（v1.27対応）"""
     try:
         result = data["ResultSet"]["Course"][0]
         route = result["Route"]
+        # v1.27: Price は Course レベルに移動
+        price_list = result.get("Price", [])
+        fare = 0
+        for p in price_list:
+            if p.get("Type") == "Fare":
+                fare = int(p.get("Oneway", 0))
+                break
+        points = route.get("Point", [])
         return {
-            "from": route["Line"][0]["StartStation"]["Name"],
-            "to": route["Line"][-1]["EndStation"]["Name"],
-            "duration_minutes": route.get("TimeOnBoard", 0)
-            + route.get("TimeWalk", 0)
-            + route.get("TimeOther", 0),
-            "transfer_count": route.get("TransferCount", 0),
-            "fare_yen": route.get("Fare", {}).get("Oneway", 0),
+            "from": points[0].get("Station", {}).get("Name", "現在地"),
+            "to": points[-1].get("Station", {}).get("Name", to_name),
+            "duration_minutes": (
+                int(route.get("timeOnBoard", 0))
+                + int(route.get("timeWalk", 0))
+                + int(route.get("timeOther", 0))
+            ),
+            "transfer_count": int(route.get("transferCount", 0)),
+            "fare_yen": fare,
             "summary": " → ".join(
-                [line["Name"] for line in route.get("Line", [])]
+                [line.get("Name", "") for line in route.get("Line", [])]
             ),
             "is_mock": False,
         }
-    except (KeyError, IndexError):
-        return _mock_route(to_name, note="駅すぱあとAPIのレスポンス形式が想定と異なるためサンプルデータを表示しています")
+    except (KeyError, IndexError, TypeError) as e:
+        return _mock_route(to_name, note=f"駅すぱあとAPIのレスポンスパースエラー: {e}")
 
 
 def _mock_route(to_name: str, note: str = "駅すぱあとAPIキー未設定のためサンプルデータを表示しています") -> Dict:
