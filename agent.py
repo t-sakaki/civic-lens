@@ -264,46 +264,12 @@ def analyze_user_anger(user_input: str) -> Dict:
             level += 1
     level = min(level, 10)
 
-    # 対象機関の推定
-    authority_map = {
-        "市長": "anjo-city",
-        "安城市": "anjo-city",
-        "名古屋": "nagoya-city",
-        "岡崎": "okazaki-city",
-        "豊田": "toyota-city",
-        "蒲郡": "gamagori-city",
-        "愛知県": "aichi-pref",
-        "県": "aichi-pref",
-        "議会": "aichi-assembly",
-        "愛知県警": "aichi-police",
-        "警察": "aichi-police",
-        "警視庁": "metropolitan-police",
-    }
-    auth_key = "anjo-city"  # default
-    auth_name = "安城市"
-    for k, v in authority_map.items():
-        if k in user_input:
-            auth_key = v
-            break
+    # 対象機関の推定（data/authorities/*.json の aliases を長い順にマッチ）
+    from ordinance_data import match_authority_by_text, get_ordinance
 
-    if auth_key == "anjo-city":
-        auth_name = "安城市"
-    elif auth_key == "nagoya-city":
-        auth_name = "名古屋市"
-    elif auth_key == "okazaki-city":
-        auth_name = "岡崎市"
-    elif auth_key == "toyota-city":
-        auth_name = "豊田市"
-    elif auth_key == "gamagori-city":
-        auth_name = "蒲郡市"
-    elif auth_key == "aichi-pref":
-        auth_name = "愛知県"
-    elif auth_key == "aichi-assembly":
-        auth_name = "愛知県議会"
-    elif auth_key == "aichi-police":
-        auth_name = "愛知県警察本部"
-    elif auth_key == "metropolitan-police":
-        auth_name = "警視庁"
+    auth_key = match_authority_by_text(user_input, default="anjo-city")
+    ordinance = get_ordinance(auth_key)
+    auth_name = ordinance.authority if ordinance else "安城市"
 
     # 文書の特定
     documents = ["行政文書一式"]
