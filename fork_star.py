@@ -41,8 +41,23 @@ class ContributorStats(BaseModel):
 
 
 # ストレージパス
-FORKS_PATH = os.path.join(os.path.dirname(__file__), "data", "forks.json")
-STARS_PATH = os.path.join(os.path.dirname(__file__), "data", "stars.json")
+DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
+if os.getenv("VERCEL"):
+    STORAGE_DIR = "/tmp/civic_lens_data"
+    os.makedirs(STORAGE_DIR, exist_ok=True)
+    FORKS_PATH = os.path.join(STORAGE_DIR, "forks.json")
+    STARS_PATH = os.path.join(STORAGE_DIR, "stars.json")
+    import shutil
+    for path, fname in [(FORKS_PATH, "forks.json"), (STARS_PATH, "stars.json")]:
+        src = os.path.join(DEFAULT_STORAGE_DIR, fname)
+        if os.path.exists(src) and not os.path.exists(path):
+            try:
+                shutil.copyfile(src, path)
+            except Exception:
+                pass
+else:
+    FORKS_PATH = os.path.join(DEFAULT_STORAGE_DIR, "forks.json")
+    STARS_PATH = os.path.join(DEFAULT_STORAGE_DIR, "stars.json")
 
 
 def _ensure_storage():

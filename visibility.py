@@ -39,10 +39,23 @@ class DisclosureRequestRecord(BaseModel):
 
 # ローカル開発用の簡易ストレージ
 # 本番ではFirestore / Cloud SQL を使用
-STORAGE_PATH = os.getenv(
-    "CIVIC_LENS_STORAGE",
-    os.path.join(os.path.dirname(__file__), "data", "disclosure_requests.json")
-)
+DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
+if os.getenv("VERCEL"):
+    STORAGE_DIR = "/tmp/civic_lens_data"
+    os.makedirs(STORAGE_DIR, exist_ok=True)
+    STORAGE_PATH = os.path.join(STORAGE_DIR, "disclosure_requests.json")
+    default_file = os.path.join(DEFAULT_STORAGE_DIR, "disclosure_requests.json")
+    if os.path.exists(default_file) and not os.path.exists(STORAGE_PATH):
+        import shutil
+        try:
+            shutil.copyfile(default_file, STORAGE_PATH)
+        except Exception:
+            pass
+else:
+    STORAGE_PATH = os.getenv(
+        "CIVIC_LENS_STORAGE",
+        os.path.join(DEFAULT_STORAGE_DIR, "disclosure_requests.json")
+    )
 
 
 def _ensure_storage():

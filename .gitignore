@@ -34,3 +34,7 @@ yarn-debug.log*
 
 # Temporary
 *.tmp
+
+# Vercel
+.vercel/
+
