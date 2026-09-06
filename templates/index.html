@@ -52,9 +52,15 @@
                 <!-- 動的に生成 -->
             </div>
 
-            <button id="useFreeInputBtn" class="mt-4 w-full text-sm text-blue-600 hover:underline">
-                ↑ どれも違う /具体的な不満を書く →
-            </button>
+            <div class="mt-4 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-gray-100">
+                <button id="useFreeInputBtn" class="text-sm text-blue-600 hover:underline">
+                    ↑ どれも違う / 具体的な不満を直接入力 →
+                </button>
+                <button id="globalVoiceBtn" type="button" class="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow hover:from-red-600 hover:to-rose-700 transition transform hover:scale-105">
+                    <span class="text-base">🎙️</span>
+                    <span>声で話しかける（音声入力）</span>
+                </button>
+            </div>
         </section>
 
         <!-- STEP 1: 感情入力 -->
@@ -64,8 +70,21 @@
             <div class="grid md:grid-cols-2 gap-6">
                 <!-- テキスト入力 -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">言葉で伝える</label>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-medium text-gray-700">言葉で伝える</label>
+                        <button id="voiceInputBtn" type="button" class="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition-all font-medium">
+                            <span id="voiceIcon">🎙️</span>
+                            <span id="voiceStatusText">音声入力（話して入力）</span>
+                        </button>
+                    </div>
                     <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+                    <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+                        <span class="relative flex h-2.5 w-2.5">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                        </span>
+                        <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
+                    </div>
                 </div>
 
                 <!-- カメラ入力（YouCam API） -->
@@ -328,6 +347,119 @@
         let selectedSituation = null;
         let cameraStream = null;
         let capturedImageData = null;
+
+        // 🎙️ 音声入力 (Web Speech API) 実装
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isVoiceRecording = false;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ja-JP';
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                isVoiceRecording = true;
+                updateVoiceUI(true);
+            };
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                const userInputElem = document.getElementById('userInput');
+                if (transcript) {
+                    userInputElem.value = transcript;
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.warn('音声認識エラー/中断:', event.error);
+                stopVoiceRecognition();
+            };
+
+            recognition.onend = () => {
+                stopVoiceRecognition();
+            };
+        }
+
+        function updateVoiceUI(recording) {
+            const icon = document.getElementById('voiceIcon');
+            const text = document.getElementById('voiceStatusText');
+            const btn = document.getElementById('voiceInputBtn');
+            const indicator = document.getElementById('voiceIndicator');
+            const globalBtn = document.getElementById('globalVoiceBtn');
+
+            if (recording) {
+                if (icon) icon.textContent = '🔴';
+                if (text) text.textContent = '聞き取り中...（完了時はクリック）';
+                if (btn) {
+                    btn.classList.remove('bg-red-50', 'text-red-600');
+                    btn.classList.add('bg-red-600', 'text-white', 'shadow');
+                }
+                if (indicator) indicator.classList.remove('hidden');
+                if (globalBtn) globalBtn.classList.add('animate-pulse');
+            } else {
+                if (icon) icon.textContent = '🎙️';
+                if (text) text.textContent = '音声入力（話して入力）';
+                if (btn) {
+                    btn.classList.add('bg-red-50', 'text-red-600');
+                    btn.classList.remove('bg-red-600', 'text-white', 'shadow');
+                }
+                if (indicator) indicator.classList.add('hidden');
+                if (globalBtn) globalBtn.classList.remove('animate-pulse');
+            }
+        }
+
+        function startVoiceRecognition() {
+            if (!SpeechRecognition) {
+                alert('お使いのブラウザは音声入力（Web Speech API）に対応していません。Google Chromeなどのブラウザでお試しください。');
+                return;
+            }
+            // 入力セクションを開く
+            const freeSection = document.getElementById('freeInputSection');
+            if (freeSection.classList.contains('hidden')) {
+                freeSection.classList.remove('hidden');
+            }
+            const userInput = document.getElementById('userInput');
+            userInput.focus();
+            userInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            try {
+                recognition.start();
+            } catch (err) {
+                console.warn('Recognition start exception:', err);
+            }
+        }
+
+        function stopVoiceRecognition() {
+            isVoiceRecording = false;
+            updateVoiceUI(false);
+            if (recognition) {
+                try {
+                    recognition.stop();
+                } catch (e) {}
+            }
+        }
+
+        function toggleVoiceRecognition() {
+            if (isVoiceRecording) {
+                stopVoiceRecognition();
+            } else {
+                startVoiceRecognition();
+            }
+        }
+
+        document.getElementById('voiceInputBtn').addEventListener('click', toggleVoiceRecognition);
+        document.getElementById('globalVoiceBtn').addEventListener('click', () => {
+            if (!isVoiceRecording) {
+                startVoiceRecognition();
+            } else {
+                stopVoiceRecognition();
+            }
+        });
 
         // シチュエーション一覧を取得
         async function loadSituations() {

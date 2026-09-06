@@ -1,0 +1,42 @@
+[
+  {
+    "id": "11980292-ed91-4e00-ba29-a2ebe2bb4ffa",
+    "original_record_id": "test-record-1",
+    "user_hash": "04d1217f995ec1b6",
+    "forked_at": "2026-09-05T04:05:39.209779Z",
+    "customized_authority": null,
+    "notes": null
+  },
+  {
+    "id": "282d94da-310f-4e20-b95f-c4a93e66c779",
+    "original_record_id": "55937c58-0d1a-478a-aedc-9ee883864b7b",
+    "user_hash": "6fffa0e944e515de",
+    "forked_at": "2026-09-05T04:12:34.811706Z",
+    "customized_authority": "okazaki-city",
+    "notes": null
+  },
+  {
+    "id": "427744ae-2cbe-4af1-a5d0-3b8b176136dc",
+    "original_record_id": "a07fd64a-483b-4044-bc80-b2d0c4bf254d",
+    "user_hash": "d79f9dfc84246282",
+    "forked_at": "2026-09-05T05:38:37.242596Z",
+    "customized_authority": null,
+    "notes": null
+  },
+  {
+    "id": "3f9e37d3-bd59-4ab4-ae95-06c8c9f8955d",
+    "original_record_id": "9c9ec40b-ca66-4b11-9250-791719ce1e83",
+    "user_hash": "d79f9dfc84246282",
+    "forked_at": "2026-09-05T05:39:58.838089Z",
+    "customized_authority": null,
+    "notes": null
+  },
+  {
+    "id": "d2224078-c7ee-43ae-8c9f-6fbc6d9a2de9",
+    "original_record_id": "53154a9e-ca0f-4d99-a88e-5a662d2abd24",
+    "user_hash": "d79f9dfc84246282",
+    "forked_at": "2026-09-05T05:43:05.360198Z",
+    "customized_authority": null,
+    "notes": null
+  }
+]

@@ -22,5 +22,23 @@
     "record_id": "55937c58-0d1a-478a-aedc-9ee883864b7b",
     "user_hash": "5c30b1f258ea3e35",
     "starred_at": "2026-09-05T04:12:34.811121Z"
+  },
+  {
+    "id": "2a4acb21-14b6-4b20-9e49-039d50cabc3e",
+    "record_id": "a07fd64a-483b-4044-bc80-b2d0c4bf254d",
+    "user_hash": "5ec56302577dcabc",
+    "starred_at": "2026-09-05T05:38:37.234046Z"
+  },
+  {
+    "id": "8cef243b-f1ad-4742-814e-cb6f5dde93ba",
+    "record_id": "9c9ec40b-ca66-4b11-9250-791719ce1e83",
+    "user_hash": "5ec56302577dcabc",
+    "starred_at": "2026-09-05T05:39:58.825406Z"
+  },
+  {
+    "id": "e7e5d3ed-f79d-4a7a-b2aa-54d7a1646f48",
+    "record_id": "53154a9e-ca0f-4d99-a88e-5a662d2abd24",
+    "user_hash": "5ec56302577dcabc",
+    "starred_at": "2026-09-05T05:43:05.352586Z"
   }
 ]
