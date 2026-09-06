@@ -1,135 +1,90 @@
-"""Civic Lens — ユーザー認証（ハイブリッド：メール/PW ＆ Web3ウォレット SIWE）
+"""Civic Lens — ユーザー認証（Firebase Authentication + Firestore）
 
-メールアドレス・パスワードによる標準Web認証と、
-MetaMask等のWeb3ウォレットによるSign-In with Ethereum (SIWE) の両方に対応。
-非公開請求の保護、マイページ請求履歴管理、Civic IDの一元化を実現。
+Firebase Authentication をID/パスワードの管理基盤として使用し、
+Civic ID・ウォレット連携などのプロフィール情報は Firestore の
+`users` コレクションに保存する。
+
+Cloud Run のコンテナはリクエスト間でファイルシステムの内容を保持しないため、
+以前のJSONファイル保存方式ではデプロイやスケールのたびにユーザーデータが失われていた。
+
+メール/パスワード認証とMetaMask等のWeb3ウォレットによる
+Sign-In with Ethereum (SIWE) の両方に対応。
 """
 
 import os
-import json
+import re
 import time
 import hmac
-import hashlib
-import secrets
+import json
 import base64
-from typing import Optional, Dict, List
+import secrets
+import hashlib
+from typing import Optional
 from datetime import datetime
+
+import requests
 from pydantic import BaseModel
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from firebase_admin import auth as firebase_auth
 
-DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
-if os.getenv("VERCEL"):
-    STORAGE_DIR = "/tmp/civic_lens_data"
-    os.makedirs(STORAGE_DIR, exist_ok=True)
-    USER_STORAGE_PATH = os.path.join(STORAGE_DIR, "users.json")
-    SESSION_STORAGE_PATH = os.path.join(STORAGE_DIR, "sessions.json")
-    NONCE_STORAGE_PATH = os.path.join(STORAGE_DIR, "wallet_nonces.json")
-else:
-    USER_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "users.json")
-    SESSION_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "sessions.json")
-    NONCE_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "wallet_nonces.json")
+from firebase_client import get_firestore_client
+
+FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "")
+SIGN_IN_WITH_PASSWORD_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 
 SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "civic-lens-super-secret-key-2026")
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7日間有効
 NONCE_EXPIRY_SECONDS = 5 * 60  # SIWE Nonceは5分間のみ有効（ワンタイム）
+
+USERS_COLLECTION = "users"
+NONCES_COLLECTION = "wallet_nonces"
 
 
 class User(BaseModel):
     user_id: str
     username: str
     email: Optional[str] = None
-    password_hash: Optional[str] = None
     wallet_address: Optional[str] = None
     civic_id: str
     created_at: str
     last_login: str
 
 
-def _ensure_storage():
-    os.makedirs(os.path.dirname(USER_STORAGE_PATH), exist_ok=True)
-    if not os.path.exists(USER_STORAGE_PATH):
-        with open(USER_STORAGE_PATH, "w", encoding="utf-8") as f:
-            json.dump({}, f)
-    if not os.path.exists(SESSION_STORAGE_PATH):
-        with open(SESSION_STORAGE_PATH, "w", encoding="utf-8") as f:
-            json.dump({}, f)
-    if not os.path.exists(NONCE_STORAGE_PATH):
-        with open(NONCE_STORAGE_PATH, "w", encoding="utf-8") as f:
-            json.dump({}, f)
+def _users_ref():
+    return get_firestore_client().collection(USERS_COLLECTION)
 
 
-def _load_users() -> Dict[str, dict]:
-    _ensure_storage()
-    try:
-        with open(USER_STORAGE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+def _nonces_ref():
+    return get_firestore_client().collection(NONCES_COLLECTION)
 
 
-def _save_users(users: Dict[str, dict]):
-    _ensure_storage()
-    with open(USER_STORAGE_PATH, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
+def _user_from_doc(data: dict) -> User:
+    return User(**{field: data.get(field) for field in User.model_fields})
 
 
-def _load_sessions() -> Dict[str, dict]:
-    _ensure_storage()
-    try:
-        with open(SESSION_STORAGE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower()) or secrets.token_hex(4)
 
 
-def _save_sessions(sessions: Dict[str, dict]):
-    _ensure_storage()
-    with open(SESSION_STORAGE_PATH, "w", encoding="utf-8") as f:
-        json.dump(sessions, f, ensure_ascii=False, indent=2)
+def _synthetic_email(display_name: str) -> str:
+    """Firebase Authenticationはメールアドレスを識別子として必須とするため、
+    メール未入力のユーザー名のみ登録・ウォレット登録を内部専用ドメインで補う"""
+    return f"{_slug(display_name)}-{secrets.token_hex(3)}@civic-lens.local"
 
 
-def _load_nonces() -> Dict[str, float]:
-    _ensure_storage()
-    try:
-        with open(NONCE_STORAGE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
-
-
-def _save_nonces(nonces: Dict[str, float]):
-    _ensure_storage()
-    with open(NONCE_STORAGE_PATH, "w", encoding="utf-8") as f:
-        json.dump(nonces, f)
-
-
-def _consume_nonce(nonce: str) -> bool:
-    """Nonceが有効（発行済み・未使用・期限内）であれば消費してTrueを返す"""
-    if not nonce:
-        return False
-    nonces = _load_nonces()
-    expires_at = nonces.pop(nonce, None)
-
-    # 期限切れNonceを掃除しておく（ストアの肥大化防止）
-    now = time.time()
-    nonces = {n: exp for n, exp in nonces.items() if exp > now}
-    _save_nonces(nonces)
-
-    if expires_at is None or expires_at < now:
-        return False
-    return True
+def _new_civic_id() -> str:
+    return f"市民#{secrets.randbelow(90000) + 10000}"
 
 
 def hash_password(password: str) -> str:
-    """PBKDF2-HMAC-SHA256 で安全にソルト付きハッシュ化"""
+    """PBKDF2-HMAC-SHA256 で安全にソルト付きハッシュ化（互換性維持用ユーティリティ）"""
     salt = secrets.token_hex(16)
     key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
     return f"{salt}:{key.hex()}"
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    """パスワードの検証"""
     try:
         salt, key_hex = hashed.split(":", 1)
         expected = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000).hex()
@@ -139,25 +94,18 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 def create_session_token(user_id: str) -> str:
-    """署名付きセッショントークンを生成"""
+    """署名付きセッショントークンを生成（自己検証型・ストレージ不要）"""
     now = int(time.time())
     payload = {
         "sub": user_id,
         "iat": now,
         "exp": now + TOKEN_EXPIRY_SECONDS,
-        "nonce": secrets.token_hex(8)
+        "nonce": secrets.token_hex(8),
     }
-    payload_json = json.dumps(payload, separators=(',', ':'))
-    b64_payload = base64.urlsafe_b64encode(payload_json.encode('utf-8')).decode('utf-8').rstrip('=')
-    signature = hmac.new(SECRET_KEY.encode('utf-8'), b64_payload.encode('utf-8'), hashlib.sha256).hexdigest()
-    token = f"{b64_payload}.{signature}"
-
-    # セッションキャッシュに登録
-    sessions = _load_sessions()
-    sessions[token] = {"user_id": user_id, "exp": payload["exp"]}
-    _save_sessions(sessions)
-
-    return token
+    payload_json = json.dumps(payload, separators=(",", ":"))
+    b64_payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("utf-8").rstrip("=")
+    signature = hmac.new(SECRET_KEY.encode("utf-8"), b64_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{b64_payload}.{signature}"
 
 
 def verify_session_token(token: str) -> Optional[str]:
@@ -166,14 +114,13 @@ def verify_session_token(token: str) -> Optional[str]:
         return None
     try:
         b64_payload, signature = token.split(".", 1)
-        expected = hmac.new(SECRET_KEY.encode('utf-8'), b64_payload.encode('utf-8'), hashlib.sha256).hexdigest()
+        expected = hmac.new(SECRET_KEY.encode("utf-8"), b64_payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
             return None
 
-        # パディング補正してデコード
-        padded = b64_payload + '=' * (-len(b64_payload) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded.encode('utf-8')).decode('utf-8'))
-        
+        padded = b64_payload + "=" * (-len(b64_payload) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+
         if payload.get("exp", 0) < int(time.time()):
             return None
         return payload.get("sub")
@@ -182,70 +129,110 @@ def verify_session_token(token: str) -> Optional[str]:
 
 
 def register_user(username: str, password: str, email: Optional[str] = None) -> User:
-    """新規ユーザー登録（パスワード認証）"""
-    users = _load_users()
-
+    """新規ユーザー登録（Firebase Authenticationにアカウント作成 + Firestoreにプロフィール保存）"""
     clean_username = username.strip()
     if len(clean_username) < 2:
         raise ValueError("ユーザー名は2文字以上で入力してください")
     if len(password) < 6:
         raise ValueError("パスワードは6文字以上で入力してください")
 
-    # ユーザー名・メールアドレスの重複確認
-    for u in users.values():
-        if u["username"].lower() == clean_username.lower():
-            raise ValueError("このユーザー名は既に使用されています")
-        if email and u.get("email") and u["email"].lower() == email.strip().lower():
-            raise ValueError("このメールアドレスは既に登録されています")
+    users_ref = _users_ref()
+    if list(users_ref.where("username_lower", "==", clean_username.lower()).limit(1).stream()):
+        raise ValueError("このユーザー名は既に使用されています")
+    clean_email = email.strip().lower() if email else None
+    if clean_email and list(users_ref.where("email", "==", clean_email).limit(1).stream()):
+        raise ValueError("このメールアドレスは既に登録されています")
 
-    user_id = f"usr-{secrets.token_hex(6)}"
-    civic_id = f"市民#{secrets.randbelow(90000) + 10000}"
+    auth_email = email.strip() if email else _synthetic_email(clean_username)
+    try:
+        firebase_user = firebase_auth.create_user(
+            email=auth_email,
+            password=password,
+            display_name=clean_username,
+        )
+    except firebase_auth.EmailAlreadyExistsError:
+        raise ValueError("このメールアドレスは既に登録されています")
+
     now_iso = datetime.utcnow().isoformat() + "Z"
-
     user = User(
-        user_id=user_id,
+        user_id=firebase_user.uid,
         username=clean_username,
-        email=email.strip() if email else None,
-        password_hash=hash_password(password),
+        email=clean_email,
         wallet_address=None,
-        civic_id=civic_id,
+        civic_id=_new_civic_id(),
         created_at=now_iso,
-        last_login=now_iso
+        last_login=now_iso,
     )
-
-    users[user_id] = user.model_dump()
-    _save_users(users)
+    users_ref.document(firebase_user.uid).set({
+        **user.model_dump(),
+        "username_lower": clean_username.lower(),
+        "auth_email": auth_email,
+    })
     return user
 
 
 def authenticate_password(username_or_email: str, password: str) -> Optional[User]:
-    """ユーザー名/メールとパスワードで認証"""
-    users = _load_users()
-    query = username_or_email.strip().lower()
+    """ユーザー名/メールとパスワードで認証（Identity Toolkit REST APIでFirebase側の検証を実施）"""
+    if not FIREBASE_WEB_API_KEY:
+        raise RuntimeError("FIREBASE_WEB_API_KEY が設定されていません")
 
-    for u_data in users.values():
-        u_name = u_data.get("username", "").lower()
-        u_mail = (u_data.get("email") or "").lower()
-        if query == u_name or (u_mail and query == u_mail):
-            if u_data.get("password_hash") and verify_password(password, u_data["password_hash"]):
-                u_data["last_login"] = datetime.utcnow().isoformat() + "Z"
-                users[u_data["user_id"]] = u_data
-                _save_users(users)
-                return User(**u_data)
-    return None
+    query = username_or_email.strip().lower()
+    users_ref = _users_ref()
+
+    doc = None
+    for candidate in (
+        users_ref.where("username_lower", "==", query).limit(1),
+        users_ref.where("email", "==", query).limit(1),
+    ):
+        results = list(candidate.stream())
+        if results:
+            doc = results[0]
+            break
+    if doc is None:
+        return None
+
+    data = doc.to_dict()
+    auth_email = data.get("auth_email") or data.get("email")
+    if not auth_email:
+        return None
+
+    resp = requests.post(
+        SIGN_IN_WITH_PASSWORD_URL,
+        params={"key": FIREBASE_WEB_API_KEY},
+        json={"email": auth_email, "password": password, "returnSecureToken": False},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return None
+
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    users_ref.document(doc.id).update({"last_login": now_iso})
+    data["last_login"] = now_iso
+    return _user_from_doc(data)
 
 
 def generate_siwe_nonce() -> str:
-    """Sign-In with Ethereum 用のランダムなワンタイム Nonce を生成し、サーバー側に記録する
+    """Sign-In with Ethereum 用のランダムなワンタイム Nonce を生成し、Firestoreに記録する
 
     ここで発行・保存した Nonce のみが authenticate_wallet() で消費可能。
     未記録のNonceを送りつけられても検証を通過できないようにし、リプレイ攻撃を防ぐ。
     """
     nonce = secrets.token_hex(16)
-    nonces = _load_nonces()
-    nonces[nonce] = time.time() + NONCE_EXPIRY_SECONDS
-    _save_nonces(nonces)
+    _nonces_ref().document(nonce).set({"expires_at": time.time() + NONCE_EXPIRY_SECONDS})
     return nonce
+
+
+def _consume_nonce(nonce: str) -> bool:
+    """Nonceが有効（発行済み・未使用・期限内）であれば消費してTrueを返す"""
+    if not nonce:
+        return False
+    doc_ref = _nonces_ref().document(nonce)
+    snap = doc_ref.get()
+    if not snap.exists:
+        return False
+    doc_ref.delete()
+    expires_at = snap.to_dict().get("expires_at", 0)
+    return expires_at >= time.time()
 
 
 def build_siwe_message(wallet_address: str, nonce: str) -> str:
@@ -277,42 +264,43 @@ def authenticate_wallet(wallet_address: str, signature: Optional[str] = None, no
     if recovered_address.lower() != wallet_address.strip().lower():
         raise ValueError("署名がウォレットアドレスと一致しません")
 
-    users = _load_users()
     clean_wallet = wallet_address.strip().lower()
-
-    # 既存のウォレットユーザーを検索
-    for u_data in users.values():
-        if u_data.get("wallet_address") and u_data["wallet_address"].lower() == clean_wallet:
-            u_data["last_login"] = datetime.utcnow().isoformat() + "Z"
-            users[u_data["user_id"]] = u_data
-            _save_users(users)
-            return User(**u_data)
-
-    # 初回ログイン時はウォレット連携ユーザーを自動作成
-    user_id = f"usr-w3-{secrets.token_hex(6)}"
-    civic_id = f"市民#{secrets.randbelow(90000) + 10000}"
-    display_name = f"Wallet {clean_wallet[:6]}...{clean_wallet[-4:]}"
+    users_ref = _users_ref()
     now_iso = datetime.utcnow().isoformat() + "Z"
 
+    existing = list(users_ref.where("wallet_address", "==", clean_wallet).limit(1).stream())
+    if existing:
+        doc = existing[0]
+        users_ref.document(doc.id).update({"last_login": now_iso})
+        data = doc.to_dict()
+        data["last_login"] = now_iso
+        return _user_from_doc(data)
+
+    # 初回ログイン時はウォレット連携ユーザーを自動作成
+    display_name = f"Wallet {clean_wallet[:6]}...{clean_wallet[-4:]}"
+    auth_email = _synthetic_email(display_name)
+    firebase_user = firebase_auth.create_user(email=auth_email, display_name=display_name)
+
     user = User(
-        user_id=user_id,
+        user_id=firebase_user.uid,
         username=display_name,
         email=None,
-        password_hash=None,
         wallet_address=clean_wallet,
-        civic_id=civic_id,
+        civic_id=_new_civic_id(),
         created_at=now_iso,
-        last_login=now_iso
+        last_login=now_iso,
     )
-
-    users[user_id] = user.model_dump()
-    _save_users(users)
+    users_ref.document(firebase_user.uid).set({
+        **user.model_dump(),
+        "username_lower": display_name.lower(),
+        "auth_email": auth_email,
+    })
     return user
 
 
 def get_user_by_id(user_id: str) -> Optional[User]:
     """IDからユーザーを取得"""
-    users = _load_users()
-    if user_id in users:
-        return User(**users[user_id])
-    return None
+    doc = _users_ref().document(user_id).get()
+    if not doc.exists:
+        return None
+    return _user_from_doc(doc.to_dict())
