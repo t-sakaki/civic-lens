@@ -15,6 +15,8 @@ import base64
 from typing import Optional, Dict, List
 from datetime import datetime
 from pydantic import BaseModel
+from eth_account import Account
+from eth_account.messages import encode_defunct
 
 DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
 if os.getenv("VERCEL"):
@@ -22,12 +24,15 @@ if os.getenv("VERCEL"):
     os.makedirs(STORAGE_DIR, exist_ok=True)
     USER_STORAGE_PATH = os.path.join(STORAGE_DIR, "users.json")
     SESSION_STORAGE_PATH = os.path.join(STORAGE_DIR, "sessions.json")
+    NONCE_STORAGE_PATH = os.path.join(STORAGE_DIR, "wallet_nonces.json")
 else:
     USER_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "users.json")
     SESSION_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "sessions.json")
+    NONCE_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "wallet_nonces.json")
 
 SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "civic-lens-super-secret-key-2026")
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7日間有効
+NONCE_EXPIRY_SECONDS = 5 * 60  # SIWE Nonceは5分間のみ有効（ワンタイム）
 
 
 class User(BaseModel):
@@ -48,6 +53,9 @@ def _ensure_storage():
             json.dump({}, f)
     if not os.path.exists(SESSION_STORAGE_PATH):
         with open(SESSION_STORAGE_PATH, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    if not os.path.exists(NONCE_STORAGE_PATH):
+        with open(NONCE_STORAGE_PATH, "w", encoding="utf-8") as f:
             json.dump({}, f)
 
 
@@ -79,6 +87,38 @@ def _save_sessions(sessions: Dict[str, dict]):
     _ensure_storage()
     with open(SESSION_STORAGE_PATH, "w", encoding="utf-8") as f:
         json.dump(sessions, f, ensure_ascii=False, indent=2)
+
+
+def _load_nonces() -> Dict[str, float]:
+    _ensure_storage()
+    try:
+        with open(NONCE_STORAGE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
+
+
+def _save_nonces(nonces: Dict[str, float]):
+    _ensure_storage()
+    with open(NONCE_STORAGE_PATH, "w", encoding="utf-8") as f:
+        json.dump(nonces, f)
+
+
+def _consume_nonce(nonce: str) -> bool:
+    """Nonceが有効（発行済み・未使用・期限内）であれば消費してTrueを返す"""
+    if not nonce:
+        return False
+    nonces = _load_nonces()
+    expires_at = nonces.pop(nonce, None)
+
+    # 期限切れNonceを掃除しておく（ストアの肥大化防止）
+    now = time.time()
+    nonces = {n: exp for n, exp in nonces.items() if exp > now}
+    _save_nonces(nonces)
+
+    if expires_at is None or expires_at < now:
+        return False
+    return True
 
 
 def hash_password(password: str) -> str:
@@ -196,12 +236,47 @@ def authenticate_password(username_or_email: str, password: str) -> Optional[Use
 
 
 def generate_siwe_nonce() -> str:
-    """Sign-In with Ethereum 用のランダムなワンタイム Nonce を生成"""
-    return secrets.token_hex(16)
+    """Sign-In with Ethereum 用のランダムなワンタイム Nonce を生成し、サーバー側に記録する
+
+    ここで発行・保存した Nonce のみが authenticate_wallet() で消費可能。
+    未記録のNonceを送りつけられても検証を通過できないようにし、リプレイ攻撃を防ぐ。
+    """
+    nonce = secrets.token_hex(16)
+    nonces = _load_nonces()
+    nonces[nonce] = time.time() + NONCE_EXPIRY_SECONDS
+    _save_nonces(nonces)
+    return nonce
+
+
+def build_siwe_message(wallet_address: str, nonce: str) -> str:
+    """ウォレットが署名するSIWEメッセージを組み立てる（フロントと文言を完全一致させること）"""
+    return (
+        "Civic Lens にサインインします。\n"
+        "このリクエストは送金やトランザクションの承認ではありません。\n\n"
+        f"Wallet: {wallet_address}\n"
+        f"Nonce: {nonce}"
+    )
 
 
 def authenticate_wallet(wallet_address: str, signature: Optional[str] = None, nonce: Optional[str] = None) -> User:
-    """Web3ウォレットアドレスによるログイン・自動アカウント作成"""
+    """Web3ウォレットアドレスによるログイン・自動アカウント作成（SIWE署名検証必須）"""
+    if not signature or not nonce:
+        raise ValueError("署名（signature）とNonce（nonce）が必要です")
+
+    if not _consume_nonce(nonce):
+        raise ValueError("Nonceが無効か、有効期限（5分）が切れています。もう一度お試しください")
+
+    message = build_siwe_message(wallet_address, nonce)
+    try:
+        recovered_address = Account.recover_message(
+            encode_defunct(text=message), signature=signature
+        )
+    except Exception:
+        raise ValueError("署名の検証に失敗しました")
+
+    if recovered_address.lower() != wallet_address.strip().lower():
+        raise ValueError("署名がウォレットアドレスと一致しません")
+
     users = _load_users()
     clean_wallet = wallet_address.strip().lower()
 

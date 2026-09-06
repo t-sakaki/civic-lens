@@ -72,13 +72,14 @@ def _parse_route(data: Dict, to_name: str) -> Dict:
             "summary": " → ".join(
                 [line["Name"] for line in route.get("Line", [])]
             ),
+            "is_mock": False,
         }
     except (KeyError, IndexError):
-        return _mock_route(to_name)
+        return _mock_route(to_name, note="駅すぱあとAPIのレスポンス形式が想定と異なるためサンプルデータを表示しています")
 
 
-def _mock_route(to_name: str) -> Dict:
-    """APIキーがない場合のモック"""
+def _mock_route(to_name: str, note: str = "駅すぱあとAPIキー未設定のためサンプルデータを表示しています") -> Dict:
+    """APIキーがない場合、またはAPI呼び出し失敗時のモック"""
     return {
         "from": "現在地",
         "to": to_name,
@@ -86,7 +87,8 @@ def _mock_route(to_name: str) -> Dict:
         "transfer_count": 1,
         "fare_yen": 280,
         "summary": f"現在地 → 最寄り駅 → {to_name}",
-        "note": "駅すぱあとAPIキー未設定のためモック",
+        "is_mock": True,
+        "note": note,
     }
 
 

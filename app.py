@@ -138,6 +138,7 @@ async def analyze_anger(
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
+    emotion_is_mock = None
     if image_data:
         try:
             # base64デコード
@@ -148,6 +149,7 @@ async def analyze_anger(
             if analysis:
                 anger_level = analysis.anger_level
                 emotion_data = anger_to_text_prompt(analysis)
+                emotion_is_mock = analysis.is_mock
         except Exception as e:
             print(f"画像処理エラー: {e}")
 
@@ -174,11 +176,13 @@ async def analyze_anger(
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",
+            is_mock=True,
         )
 
     return {
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
+        "emotion_is_mock": emotion_is_mock,
     }
 
 
@@ -208,10 +212,11 @@ async def generate_disclosure_request(
 
     agent = get_agent()
     try:
-        request_text = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
+        request_text, is_mock = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
     except Exception as e:
         print(f"Gemini エラー: {e}")
         request_text = _mock_disclosure_request(user_input, ordinance)
+        is_mock = True
 
     # 期限情報
     today = datetime.now()
@@ -240,6 +245,7 @@ async def generate_disclosure_request(
         "authority": ordinance.authority,
         "contact": ordinance.contact,
         "request_text": request_text,
+        "is_mock": is_mock,
         "deadline": {
             "decision_days": ordinance.request_deadline_days,
             "decision_deadline": deadline.isoformat(),
@@ -685,14 +691,17 @@ async def api_get_nonce():
 async def api_login_wallet(
     response: Response,
     wallet_address: str = Form(...),
-    signature: Optional[str] = Form(None),
-    nonce: Optional[str] = Form(None),
+    signature: str = Form(...),
+    nonce: str = Form(...),
 ):
-    """Web3 ウォレット（MetaMask等）によるワンクリックログイン"""
+    """Web3 ウォレット（MetaMask等）によるSIWE署名ログイン"""
     if not wallet_address.startswith("0x") or len(wallet_address) != 42:
         raise HTTPException(400, "無効なEthereum/EVMウォレットアドレスです")
 
-    user = authenticate_wallet(wallet_address=wallet_address, signature=signature, nonce=nonce)
+    try:
+        user = authenticate_wallet(wallet_address=wallet_address, signature=signature, nonce=nonce)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
     token = create_session_token(user.user_id)
     response.set_cookie(
         key="auth_token",

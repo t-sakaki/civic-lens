@@ -81,6 +81,7 @@ class AngerAnalysis(BaseModel):
     task_dag: Optional[TaskDAG] = Field(default=None, description="タスクDAG")
     critique: Optional[MetaCognitiveCritique] = Field(default=None, description="メタ認知批評結果")
     safeguard_options: Optional[List[Dict[str, str]]] = Field(default=None, description="Human-in-the-loop選択肢")
+    is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるルールベースのフォールバック結果")
 
 
 class CounterArgument(BaseModel):
@@ -90,6 +91,7 @@ class CounterArgument(BaseModel):
     counter_arguments: List[str]
     precedent_cases: List[str]
     winning_probability: float
+    is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるテンプレートのフォールバック結果")
 
 
 class AgentResponse(BaseModel):
@@ -342,7 +344,8 @@ def analyze_user_anger(user_input: str) -> Dict:
         "recommended_response_time": response_time,
         "task_dag": dag_result,
         "critique": critique_result,
-        "safeguard_options": critique_result.get("safeguard_options", [])
+        "safeguard_options": critique_result.get("safeguard_options", []),
+        "is_mock": True,
     }
 
 
@@ -645,13 +648,14 @@ JSONのみを出力してください。
 
         tool_result = get_counter_argument(alleged_ground)
         if "error" not in tool_result:
-            return CounterArgument(**tool_result)
+            return CounterArgument(**tool_result, is_mock=True)
         return CounterArgument(
             ground_number=alleged_ground,
             ground_name="不開示事由",
             counter_arguments=["反論ロジックを構築中"],
             precedent_cases=[],
             winning_probability=0.5,
+            is_mock=True,
         )
 
     def generate_disclosure_request(
@@ -659,7 +663,8 @@ JSONのみを出力してください。
         user_input: str,
         ordinance,
         strategy_option: str = "option-fast",
-    ) -> str:
+    ) -> tuple[str, bool]:
+        """戻り値: (請求書テキスト, is_mock)。is_mock=True はGemini未使用のテンプレート生成を示す"""
         """開示請求書・司法行政文書開示申出書を生成（Gemini優先・Human-in-the-loop戦略反映）"""
         current_date = __import__('datetime').datetime.now().strftime("%Y年%m月%d日")
         is_court = getattr(ordinance, "category", "") == "裁判所"
@@ -725,7 +730,7 @@ JSONのみを出力してください。
                 if text.startswith("```"):
                     lines = text.split("\n")
                     text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
-                return text.strip()
+                return text.strip(), False
             except Exception as e:
                 print(f"Gemini generate_disclosure_request error: {e}, using template")
 
@@ -782,7 +787,7 @@ JSONのみを出力してください。
 {strategy_clause}
 
 ※ 本{"申出" if is_court else "請求"}は {ordinance.ordinance_name} に基づく正式な開示{"申出" if is_court else "請求"}です。
-"""
+""", True
 
 
 # シングルトン

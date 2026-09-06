@@ -691,11 +691,19 @@
             }
         });
 
+        // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
+        function mockBadge(isMock, label) {
+            if (!isMock) return '';
+            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ APIキー未設定のためサンプルデータです（${label}）</div>`;
+        }
+
         function displayAnalysis(data) {
             const analysis = data.anger_analysis;
 
             const angerPercent = (analysis.anger_level / 10) * 100;
             document.getElementById('angerDisplay').innerHTML = `
+                ${mockBadge(analysis.is_mock, 'AI怒り分析')}
+                ${mockBadge(data.emotion_is_mock, '表情感情解析')}
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
                         <div class="anger-meter h-4 rounded-full"></div>
@@ -833,6 +841,7 @@
                 </div>
                 <div class="bg-white border p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">📄 開示請求書</h3>
+                    ${mockBadge(data.is_mock, 'AI文書生成')}
                     <pre class="whitespace-pre-wrap text-sm font-mono">${data.request_text}</pre>
                 </div>
                 <div class="bg-green-50 p-4 rounded-md">
@@ -1232,16 +1241,31 @@
                 }
                 const walletAddress = accounts[0];
 
-                // Nonce取得
+                // Nonce取得（サーバー側で発行・記録され、1回限り使用可能）
                 const nonceRes = await fetch('/api/auth/nonce');
                 const { nonce } = await nonceRes.json();
 
+                statusMsg.textContent = '署名を確認してください（ウォレットに署名リクエストが表示されます）...';
+
+                // SIWEメッセージに署名（このメッセージは auth.build_siwe_message() と完全一致させる必要がある）
+                const message =
+                    'Civic Lens にサインインします。\n' +
+                    'このリクエストは送金やトランザクションの承認ではありません。\n\n' +
+                    `Wallet: ${walletAddress}\n` +
+                    `Nonce: ${nonce}`;
+
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, walletAddress],
+                });
+
                 statusMsg.textContent = '署名認証中...';
 
-                // サーバーへウォレットログインリクエスト
+                // サーバーへウォレットログインリクエスト（署名を検証してもらう）
                 const formData = new FormData();
                 formData.append('wallet_address', walletAddress);
                 formData.append('nonce', nonce);
+                formData.append('signature', signature);
 
                 const res = await fetch('/api/auth/login-wallet', { method: 'POST', body: formData });
                 const data = await res.json();
