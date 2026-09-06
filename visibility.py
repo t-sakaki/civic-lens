@@ -35,6 +35,7 @@ class DisclosureRequestRecord(BaseModel):
     category: str = "自治体"  # "自治体" / "警察"
     tags: List[str] = []
     anonymous_user_id: Optional[str] = None  # "市民#0001" のような形式
+    user_id: Optional[str] = None  # 認証ユーザーID (usr-...)
 
 
 # ローカル開発用の簡易ストレージ
@@ -108,6 +109,7 @@ def create_record(
     tags: Optional[List[str]] = None,
     session_id: Optional[str] = None,
     ip: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> DisclosureRequestRecord:
     """新規開示請求記録を作成"""
     if visibility not in ("private", "public"):
@@ -132,6 +134,7 @@ def create_record(
         category=category,
         tags=tags or [],
         anonymous_user_id=anonymous_id,
+        user_id=user_id,
     )
 
     records = _load_all()
@@ -246,3 +249,14 @@ def get_public_stats() -> Dict:
             stats["by_situation"][sit] = stats["by_situation"].get(sit, 0) + 1
 
     return stats
+
+
+def get_records_by_user(user_id: str) -> List[DisclosureRequestRecord]:
+    """特定ユーザーが作成した請求記録一覧（Private/Public問わず）を取得"""
+    records = _load_all()
+    user_records = [
+        DisclosureRequestRecord(**r)
+        for r in records
+        if r.get("user_id") == user_id
+    ]
+    return sorted(user_records, key=lambda x: x.created_at, reverse=True)

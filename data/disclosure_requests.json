@@ -196,5 +196,24 @@
     "category": "自治体",
     "tags": [],
     "anonymous_user_id": "市民#98123"
+  },
+  {
+    "id": "429bd5c1-44ed-4216-bc78-868cefa5d131",
+    "user_hash": "52ec3b31b2efdb8c",
+    "target_authority": "nagoya-city",
+    "target_authority_name": "名古屋市",
+    "situation_key": null,
+    "user_input": "名古屋市役所の公用車運行記録",
+    "request_text": "名古屋市役所の公用車に関する過去1年間の運行記録票一式",
+    "visibility": "private",
+    "status": "draft",
+    "result_excerpt": null,
+    "created_at": "2026-09-06T04:09:24.232272Z",
+    "updated_at": "2026-09-06T04:09:24.232272Z",
+    "summary_public": null,
+    "category": "自治体",
+    "tags": [],
+    "anonymous_user_id": null,
+    "user_id": "usr-617de456819a"
   }
 ]
