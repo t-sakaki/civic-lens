@@ -78,28 +78,36 @@ def _load_authorities() -> Dict[str, AuthorityInfo]:
 
 AUTHORITIES: Dict[str, AuthorityInfo] = _load_authorities()
 
-# 後方互換: 自治体 / 警察 で分けた辞書ビュー（既存コードが参照している）
+# 後方互換: 自治体 / 警察 / 裁判所 で分けた辞書ビュー（既存コードが参照している）
 ORDINANCES: Dict[str, AuthorityInfo] = {
-    k: v for k, v in AUTHORITIES.items() if v.category != "警察"
+    k: v for k, v in AUTHORITIES.items() if v.category == "自治体"
 }
 POLICE_AUTHORITIES: Dict[str, AuthorityInfo] = {
     k: v for k, v in AUTHORITIES.items() if v.category == "警察"
 }
+COURT_AUTHORITIES: Dict[str, AuthorityInfo] = {
+    k: v for k, v in AUTHORITIES.items() if v.category == "裁判所"
+}
 
 
 def get_ordinance(authority_key: str) -> Optional[AuthorityInfo]:
-    """条例を取得（自治体・警察両方）"""
+    """条例・取扱要綱を取得（自治体・警察・裁判所すべて）"""
     return AUTHORITIES.get(authority_key)
 
 
 def list_authorities() -> List[str]:
-    """対応自治体一覧（自治体・警察両方）"""
+    """対応機関一覧（自治体・警察・裁判所すべて）"""
     return list(AUTHORITIES.keys())
 
 
 def is_police_authority(authority_key: str) -> bool:
     """警察機関かどうか"""
     return authority_key in POLICE_AUTHORITIES
+
+
+def is_court_authority(authority_key: str) -> bool:
+    """裁判所機関かどうか"""
+    return authority_key in COURT_AUTHORITIES
 
 
 def get_office_info(authority_key: str) -> Dict:
@@ -176,3 +184,36 @@ COMMON_COUNTER_ARGUMENTS = {
         "本件情報は統計的・客観的数値であり、事務執行に影響する性質のものではない。",
     ],
 }
+
+
+# ======================================================================
+# 裁判所（司法行政文書取扱要綱）特有・反論ロジック
+# ======================================================================
+COURT_COUNTER_ARGUMENTS = {
+    "第4条第1号": [
+        "公務員の職務遂行に係る情報（氏名・役職・職務内容等）は個人のプライバシー侵害にあたらず開示すべき。",
+        "特定の個人を識別できる部分がある場合でも、黒塗り（マスキング）による部分開示を行うべきである。",
+        "裁判所職員・裁判官の公務遂行の透明性を確保するため、公益性に基づく開示が相当である。",
+    ],
+    "第4条第2号": [
+        "「法人等の正当な利益を害するおそれ」は抽象的な理由では足りず、具体的・客観的な支障の立証が必要である。",
+        "契約金額、入札結果、仕様書等は公金支出の適正性を担保する基礎情報であり、正当な利益を害しない。",
+        "既に公にされている情報と同内容の情報は法人情報に該当しない。",
+    ],
+    "第4条第3号": [
+        "意思決定が終了した事案に係る審議・検討文書は、事後的に検証を可能とするため原則開示すべきである。",
+        "「率直な意見の交換が損なわれるおそれ」は単なる主観的懸念ではなく、将来の審議への具体的支障を要する。",
+        "検討過程における客観的事実の記録や基礎データは、意見・判断そのものと分離して開示可能である。",
+    ],
+    "第4条第4号": [
+        "本件請求文書は個別事件の訴訟記録ではなく、司法行政上の制度運用基準・統計・会計文書であり、裁判の公正・独立に影響を及ぼすものではない。",
+        "「事務の適正な遂行に著しい支障を及ぼすおそれ」は具体的かつ実質的な支障を要し、事務負担の増大のみを理由とする不開示は違法・不当である。",
+        "同種の司法行政文書（事務処理要領や通達等）は他庁・他裁判所でも開示実績があり、支障は認められない。",
+        "裁判所の組織運営および公費執行の透明性を高めることは、司法に対する国民の信頼向上に資する。",
+    ],
+    "第4条第5号": [
+        "庁舎の一般的な案内図面や過去の警備実績・契約内容は、直ちに警備上の重大な支障を招くものではない。",
+        "公共の安全に対する具体的危険が生じる部分に限り部分マスキングを行い、その他は開示すべきである。",
+    ],
+}
+
