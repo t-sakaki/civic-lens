@@ -1,0 +1,43 @@
+{
+  "key": "toyota-city",
+  "category": "自治体",
+  "authority": "豊田市",
+  "authority_type": "市長",
+  "ordinance_name": "豊田市情報公開条例",
+  "ordinance_id": "平成13年豊田市条例第1号",
+  "enacted": "平成13年3月26日",
+  "request_form": "豊田市情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第7条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報で特定の個人を識別できるもの",
+      "exception": ""
+    },
+    {
+      "number": "第7条第2号",
+      "name": "法人情報",
+      "description": "法人等に関する情報で、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第7条第3号",
+      "name": "事務執行影響",
+      "description": "市の機関が行う事務又は事業に関する情報のうち、その性質上、公にすることにより当該事務の適正な執行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "豊田市情報公開審査会",
+  "contact": "豊田市役所 総務部 情報システム課 情報公開室",
+  "office": {
+    "name": "豊田市役所",
+    "address": "〒471-8501 愛知県豊田市西町3丁目60番地",
+    "lat": 35.0837,
+    "lon": 137.1561,
+    "nearest_station": "豊田市駅（名鉄三河線）"
+  },
+  "aliases": ["豊田"]
+}

@@ -122,19 +122,7 @@
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">🏛️ 対象機関</h2>
             <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
-                <optgroup label="─── 自治体 ───">
-                    <option value="anjo-city">安城市（市長）</option>
-                    <option value="nagoya-city">名古屋市（市長）</option>
-                    <option value="okazaki-city">岡崎市（市長）</option>
-                    <option value="aichi-pref">愛知県（知事）</option>
-                    <option value="aichi-assembly">愛知県議会</option>
-                </optgroup>
-                <optgroup label="─── 警察 ───">
-                    <option value="metropolitan-police">🚔 警視庁（東京）</option>
-                    <option value="aichi-police">🚔 愛知県警察本部</option>
-                    <option value="kanagawa-police">🚔 神奈川県警察本部</option>
-                    <option value="osaka-police">🚔 大阪府警察本部</option>
-                </optgroup>
+                <option value="">読み込み中...</option>
             </select>
         </section>
 
@@ -574,6 +562,33 @@
                 `;
                 card.addEventListener('click', () => selectSituation(s));
                 grid.appendChild(card);
+            });
+        }
+
+        // 対象機関一覧を取得し、カテゴリ別にグループ化して <select> を組み立てる
+        async function loadAuthorities() {
+            const res = await fetch('/authorities');
+            const data = await res.json();
+            const select = document.getElementById('targetAuthority');
+            select.innerHTML = '';
+
+            const groups = {};
+            data.authorities.forEach(a => {
+                if (!groups[a.category]) groups[a.category] = [];
+                groups[a.category].push(a);
+            });
+
+            Object.keys(groups).forEach(category => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = `─── ${category} ───`;
+                groups[category].forEach(a => {
+                    const option = document.createElement('option');
+                    option.value = a.key;
+                    const icon = category === '警察' ? '🚔 ' : '';
+                    option.textContent = `${icon}${a.name}（${a.type}）`;
+                    optgroup.appendChild(option);
+                });
+                select.appendChild(optgroup);
             });
         }
 
@@ -1297,6 +1312,7 @@
         // 起動
         checkAuthStatus();
         loadSituations();
+        loadAuthorities();
         loadPublicFeed();
     </script>
 </body>

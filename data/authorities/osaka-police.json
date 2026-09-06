@@ -1,0 +1,49 @@
+{
+  "key": "osaka-police",
+  "category": "警察",
+  "authority": "大阪府警察本部",
+  "authority_type": "警察本部",
+  "ordinance_name": "大阪府警察本部情報公開規程",
+  "ordinance_id": "大阪府公安委員会規則",
+  "enacted": "平成13年4月1日",
+  "request_form": "大阪府警察本部情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第5条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報",
+      "exception": ""
+    },
+    {
+      "number": "第5条第2号",
+      "name": "法人情報",
+      "description": "法人等の正当利益を害するおそれ",
+      "exception": ""
+    },
+    {
+      "number": "第5条第3号",
+      "name": "捜査情報",
+      "description": "捜査・公判に支障を及ぼすおそれ",
+      "exception": ""
+    },
+    {
+      "number": "第5条第4号",
+      "name": "公共安全情報",
+      "description": "公共の安全と秩序維持に支障",
+      "exception": ""
+    }
+  ],
+  "review_authority": "大阪府警察本部情報公開審査会",
+  "contact": "大阪府警察本部 総務課",
+  "office": {
+    "name": "大阪府警察本部",
+    "address": "〒540-8540 大阪市中央区大手前三丁目1番41号",
+    "lat": 34.6863,
+    "lon": 135.5201,
+    "nearest_station": "谷町四丁目駅（Osaka Metro）"
+  },
+  "aliases": ["大阪府警", "大阪府警察"]
+}
