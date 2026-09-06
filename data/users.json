@@ -1,0 +1,22 @@
+{
+  "usr-617de456819a": {
+    "user_id": "usr-617de456819a",
+    "username": "test_citizen",
+    "email": "citizen@example.com",
+    "password_hash": "7e0a7576120ac750cb36357a7834181c:95b6fd5a3d2de098251495a5e80fd70fae893013cb0d5a7f8399fcbce966a01c",
+    "wallet_address": null,
+    "civic_id": "市民#33578",
+    "created_at": "2026-09-06T04:08:57.516620Z",
+    "last_login": "2026-09-06T04:08:57.516620Z"
+  },
+  "usr-w3-ecf49bd880d1": {
+    "user_id": "usr-w3-ecf49bd880d1",
+    "username": "Wallet 0x71c8...847a",
+    "email": null,
+    "password_hash": null,
+    "wallet_address": "0x71c836643f37740ab5635112437172771413847a",
+    "civic_id": "市民#37111",
+    "created_at": "2026-09-06T04:09:05.150301Z",
+    "last_login": "2026-09-06T04:09:05.150301Z"
+  }
+}

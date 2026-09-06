@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -26,12 +26,17 @@ from gmi_client import search_ordinances, search_precedents
 from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
-    get_public_records, get_my_records, get_public_stats,
+    get_public_records, get_my_records, get_public_stats, get_records_by_user,
     DisclosureRequestRecord,
 )
 from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
+)
+from auth import (
+    User, register_user, authenticate_password, authenticate_wallet,
+    create_session_token, verify_session_token, get_user_by_id,
+    generate_siwe_nonce
 )
 
 
@@ -46,8 +51,28 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
 )
+
+
+def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    auth_token: Optional[str] = Cookie(None),
+) -> Optional[User]:
+    """リクエストから認証トークンを検証し、ログイン中のユーザーを取得（未ログイン時はNone）"""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif auth_token:
+        token = auth_token
+
+    if not token:
+        return None
+
+    user_id = verify_session_token(token)
+    if not user_id:
+        return None
+    return get_user_by_id(user_id)
+
 
 from pathlib import Path
 
@@ -311,12 +336,16 @@ async def visibility_create(
     situation_key: Optional[str] = Form(None),
     category: str = Form("自治体"),
     session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """新規開示請求を保存（Private/Public 選択）"""
+    """新規開示請求を保存（Private/Public 選択、ログインユーザー自動紐付け）"""
     try:
         ordinance = ORDINANCES.get(target_authority) or POLICE_AUTHORITIES.get(target_authority)
         if not ordinance:
             raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+
+        assigned_user_id = (current_user.user_id if current_user else None) or user_id
 
         record = create_record(
             user_input=user_input,
@@ -327,6 +356,7 @@ async def visibility_create(
             situation_key=situation_key,
             category=category if category != "自治体" else ("警察" if target_authority in POLICE_AUTHORITIES else "自治体"),
             session_id=session_id,
+            user_id=assigned_user_id,
         )
 
         return {
@@ -334,6 +364,7 @@ async def visibility_create(
             "visibility": record.visibility,
             "anonymous_user_id": record.anonymous_user_id,
             "created_at": record.created_at,
+            "user_id": record.user_id,
         }
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -549,6 +580,124 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         ],
         "winning_probability": 0.72,
     }
+
+
+# ---------------------------------------------------------------------------
+# ユーザー認証 API（メール/パスワード ＆ Web3ウォレットハイブリッド）
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/register")
+async def api_register(
+    response: Response,
+    username: str = Form(...),
+    password: str = Form(...),
+    email: Optional[str] = Form(None),
+):
+    """新規ユーザー登録（メール/パスワード）"""
+    try:
+        user = register_user(username=username, password=password, email=email)
+        token = create_session_token(user.user_id)
+        response.set_cookie(
+            key="auth_token",
+            value=token,
+            max_age=7 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
+        return {
+            "success": True,
+            "user": user.model_dump(exclude={"password_hash"}),
+            "token": token,
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/auth/login")
+async def api_login(
+    response: Response,
+    username_or_email: str = Form(...),
+    password: str = Form(...),
+):
+    """ログイン（メールまたはユーザー名 ＋ パスワード）"""
+    user = authenticate_password(username_or_email=username_or_email, password=password)
+    if not user:
+        raise HTTPException(401, "ユーザー名・メールアドレスまたはパスワードが正しくありません")
+
+    token = create_session_token(user.user_id)
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "success": True,
+        "user": user.model_dump(exclude={"password_hash"}),
+        "token": token,
+    }
+
+
+@app.get("/api/auth/nonce")
+async def api_get_nonce():
+    """Web3 SIWE (Sign-In with Ethereum) 用のワンタイム Nonce を取得"""
+    nonce = generate_siwe_nonce()
+    return {"nonce": nonce}
+
+
+@app.post("/api/auth/login-wallet")
+async def api_login_wallet(
+    response: Response,
+    wallet_address: str = Form(...),
+    signature: Optional[str] = Form(None),
+    nonce: Optional[str] = Form(None),
+):
+    """Web3 ウォレット（MetaMask等）によるワンクリックログイン"""
+    if not wallet_address.startswith("0x") or len(wallet_address) != 42:
+        raise HTTPException(400, "無効なEthereum/EVMウォレットアドレスです")
+
+    user = authenticate_wallet(wallet_address=wallet_address, signature=signature, nonce=nonce)
+    token = create_session_token(user.user_id)
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "success": True,
+        "user": user.model_dump(exclude={"password_hash"}),
+        "token": token,
+    }
+
+
+@app.get("/api/auth/me")
+async def api_get_me(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """現在ログイン中のユーザー情報"""
+    if not current_user:
+        return {"authenticated": False, "user": None}
+    return {
+        "authenticated": True,
+        "user": current_user.model_dump(exclude={"password_hash"}),
+    }
+
+
+@app.post("/api/auth/logout")
+async def api_logout(response: Response):
+    """ログアウト（Cookieクリア）"""
+    response.delete_cookie(key="auth_token")
+    return {"success": True, "message": "ログアウトしました"}
+
+
+@app.get("/api/auth/my-records")
+async def api_get_my_records(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """ログインユーザーの保存した開示請求履歴一覧を取得"""
+    if not current_user:
+        raise HTTPException(401, "ログインが必要です")
+    records = get_records_by_user(current_user.user_id)
+    return {"records": [r.model_dump() for r in records]}
 
 
 if __name__ == "__main__":
