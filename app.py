@@ -55,8 +55,13 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # 静的ファイル（CSS, JS）
 STATIC_DIR = BASE_DIR / "static"
-STATIC_DIR.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+try:
+    STATIC_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
+
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class DisclosureRequest(BaseModel):
