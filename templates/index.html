@@ -278,6 +278,53 @@
 
                 <div id="saveStatus" class="mt-2 text-sm"></div>
             </div>
+
+            <!-- Web3: IPFS 分散永久アーカイブ (Proof of Request) -->
+            <div class="mt-6 bg-gradient-to-r from-purple-50 to-indigo-50 p-5 rounded-lg border-2 border-indigo-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-indigo-900 flex items-center gap-2">
+                        <span>🪐 Web3 分散永久アーカイブ (IPFS)</span>
+                        <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full border border-indigo-300 font-mono">Proof of Request</span>
+                    </h3>
+                    <span class="text-xs text-indigo-600 bg-white px-2 py-1 rounded shadow-sm font-medium">改ざん防止・原本証明</span>
+                </div>
+                <p class="text-xs text-indigo-800 mb-3 leading-relaxed">
+                    行政や特定サーバーによる請求書の隠蔽・改ざん・データ消失を防ぐため、P2P分散ストレージ <strong>IPFS</strong> に暗号ハッシュとともに永久刻印します。数学的ハッシュにより世界中から原本性が検証可能です。
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-3 items-center">
+                    <button id="ipfsPinBtn" class="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-2.5 rounded-md hover:from-indigo-700 hover:to-purple-700 font-semibold shadow flex items-center justify-center gap-2 transition">
+                        <span>🪐</span> IPFSに永久刻印する (CID発行)
+                    </button>
+                    <span id="ipfsPinStatus" class="text-xs text-gray-500"></span>
+                </div>
+
+                <!-- ピン結果表示エリア -->
+                <div id="ipfsResultCard" class="hidden mt-4 bg-white p-4 rounded-md border border-indigo-200 text-sm shadow-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-gray-800 flex items-center gap-1.5">
+                            <span class="text-green-500 font-bold">●</span> IPFS 分散ノード永久保存完了
+                        </span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">
+                            ✅ 原本性暗号検証済 (Tamper-Proof)
+                        </span>
+                    </div>
+                    <div class="text-xs font-mono bg-gray-100 p-2.5 rounded break-all select-all flex items-center justify-between border border-gray-200">
+                        <div>
+                            <span class="text-gray-500 select-none">CID: </span>
+                            <span id="ipfsCidText" class="font-bold text-indigo-700">bafkreib...</span>
+                        </div>
+                        <button type="button" id="copyCidBtn" class="text-indigo-600 hover:text-indigo-800 ml-2 whitespace-nowrap text-xs font-medium px-2 py-1 bg-white rounded border border-indigo-200 shadow-sm">コピー</button>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-4 text-xs text-gray-600 pt-1">
+                        <span>📁 容量: <span id="ipfsFileSize">-</span> bytes</span>
+                        <span>⏱️ 刻印日時: <span id="ipfsPinnedAt">-</span></span>
+                        <a id="ipfsGatewayLink" href="#" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline font-semibold flex items-center gap-1 ml-auto">
+                            🌐 IPFS Gatewayで原本を検証 ↗
+                        </a>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- STEP 6: 経路案内 -->
@@ -786,12 +833,73 @@
         });
 
         // displayDisclosureの中でcurrentDisclosureTextを保存
+        let currentRecordTitle = '開示請求書';
         const originalDisplayDisclosure = displayDisclosure;
         displayDisclosure = function(data) {
             currentDisclosureText = data.request_text;
             currentTargetAuthority = data.authority;
+            currentRecordTitle = data.ordinance_name ? `${data.ordinance_name}に基づく開示請求` : '開示請求書';
+            // IPFS状態をリセット
+            document.getElementById('ipfsResultCard').classList.add('hidden');
+            document.getElementById('ipfsPinStatus').textContent = '';
             originalDisplayDisclosure(data);
         };
+
+        // IPFS 永久刻印ボタンのハンドラ
+        document.getElementById('ipfsPinBtn').addEventListener('click', async () => {
+            if (!currentDisclosureText) {
+                alert('先に開示請求書を生成してください。');
+                return;
+            }
+
+            const btn = document.getElementById('ipfsPinBtn');
+            const statusEl = document.getElementById('ipfsPinStatus');
+            const resultCard = document.getElementById('ipfsResultCard');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> 暗号ハッシュ計算・IPFS分散保存中...';
+            statusEl.textContent = 'P2Pネットワークへブロードキャスト中...';
+
+            try {
+                const formData = new FormData();
+                formData.append('title', currentRecordTitle);
+                formData.append('content', currentDisclosureText);
+                formData.append('target_authority', currentTargetAuthority || '自治体');
+                if (selectedSituation) formData.append('situation_key', selectedSituation.key);
+
+                const res = await fetch('/api/web3/ipfs/pin', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) throw new Error('IPFS刻印に失敗しました');
+
+                const data = await res.json();
+
+                // UI更新
+                document.getElementById('ipfsCidText').textContent = data.cid;
+                document.getElementById('ipfsFileSize').textContent = data.file_size;
+                document.getElementById('ipfsPinnedAt').textContent = new Date(data.pinned_at).toLocaleString('ja-JP');
+                
+                const gwLink = document.getElementById('ipfsGatewayLink');
+                gwLink.href = data.gateway_url;
+
+                resultCard.classList.remove('hidden');
+                statusEl.textContent = '✨ IPFSへの永久刻印が完了しました！';
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🪐</span> IPFSに永久刻印する (CID発行)';
+            }
+        });
+
+        // CIDコピー
+        document.getElementById('copyCidBtn').addEventListener('click', () => {
+            const cid = document.getElementById('ipfsCidText').textContent;
+            navigator.clipboard.writeText(cid).then(() => {
+                alert('IPFS CIDをクリップボードにコピーしました:\n' + cid);
+            });
+        });
 
         // =====================================================
         // Public ダッシュボード（みんなの請求）
@@ -863,8 +971,8 @@
                                 <div class="mt-2 p-2 bg-green-50 rounded">${r.result_excerpt}</div>
                             </details>
                         ` : ''}
-                        <!-- GitHub風: スター & フォーク (NEW!) -->
-                        <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
+                        <!-- GitHub風: スター & フォーク & Web3 IPFS (NEW!) -->
+                        <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
                             <button class="star-btn text-sm text-gray-600 hover:text-yellow-500 flex items-center gap-1" data-record-id="${r.id}">
                                 <span class="star-icon">☆</span>
                                 <span class="star-count">0</span>
@@ -875,7 +983,11 @@
                                 <span class="fork-count">0</span>
                                 <span class="text-xs">フォーク</span>
                             </button>
-                            <span class="text-xs text-gray-400 ml-auto">GitHub化機能</span>
+
+                            <!-- Web3 IPFS バッジ -->
+                            <div class="ipfs-badge-container ml-auto text-xs" data-record-id="${r.id}">
+                                <span class="text-gray-400 text-xs">🪐 IPFS未確認</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -883,8 +995,42 @@
 
             document.getElementById('publicFeed').innerHTML = html;
 
-            // 各レコードのスター・フォーク統計を取得
-            filtered.forEach(r => loadRecordGitHubStats(r.id));
+            // 各レコードのスター・フォーク統計とIPFS記録を取得
+            filtered.forEach(r => {
+                loadRecordGitHubStats(r.id);
+                loadRecordIpfsStats(r.id, r.user_input, r.target_authority);
+            });
+        }
+
+        async function loadRecordIpfsStats(recordId, fallbackContent, fallbackAuthority) {
+            try {
+                const res = await fetch(`/api/web3/ipfs/record/${recordId}`);
+                const container = document.querySelector(`.ipfs-badge-container[data-record-id="${recordId}"]`);
+                if (!container) return;
+
+                if (res.ok) {
+                    const data = await res.json();
+                    container.innerHTML = `
+                        <a href="${data.gateway_url}" target="_blank" rel="noopener noreferrer" 
+                           class="inline-flex items-center gap-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-mono text-xs transition" 
+                           title="CID: ${data.cid} (原本性検証済み)">
+                            <span>🪐</span> CID: ${data.cid.substring(0, 10)}... ↗
+                        </a>
+                    `;
+                } else {
+                    // 未保存の場合、IPFS刻印ボタンを表示
+                    container.innerHTML = `
+                        <button class="ipfs-feed-pin-btn text-xs bg-gray-50 hover:bg-purple-50 text-gray-600 hover:text-purple-700 border border-gray-200 hover:border-purple-300 px-2 py-0.5 rounded flex items-center gap-1 transition"
+                                data-record-id="${recordId}"
+                                data-content="${encodeURIComponent(fallbackContent || '開示請求')}"
+                                data-authority="${encodeURIComponent(fallbackAuthority || '自治体')}">
+                            <span>🪐</span> IPFS保存
+                        </button>
+                    `;
+                }
+            } catch (err) {
+                console.error('Failed to load IPFS stats:', err);
+            }
         }
 
         async function loadRecordGitHubStats(recordId) {
@@ -932,6 +1078,33 @@
                 await fetch(`/api/github/fork/${recordId}`, { method: 'POST' });
                 alert('✅ フォークしました！\n\nこの請求書を参考にした、新たな開示請求を作成できます。');
                 await loadRecordGitHubStats(recordId);
+            }
+
+            const ipfsPinBtn = e.target.closest('.ipfs-feed-pin-btn');
+            if (ipfsPinBtn) {
+                const recordId = ipfsPinBtn.dataset.recordId;
+                const content = decodeURIComponent(ipfsPinBtn.dataset.content || '');
+                const authority = decodeURIComponent(ipfsPinBtn.dataset.authority || '');
+
+                ipfsPinBtn.disabled = true;
+                ipfsPinBtn.innerHTML = '<span>⏳</span> 刻印中...';
+
+                try {
+                    const formData = new FormData();
+                    formData.append('record_id', recordId);
+                    formData.append('title', `市民請求-${recordId}`);
+                    formData.append('content', content);
+                    formData.append('target_authority', authority);
+
+                    const res = await fetch('/api/web3/ipfs/pin', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error('IPFS保存に失敗しました');
+                    
+                    await loadRecordIpfsStats(recordId);
+                } catch (err) {
+                    alert('IPFSエラー: ' + err.message);
+                    ipfsPinBtn.disabled = false;
+                    ipfsPinBtn.innerHTML = '<span>🪐</span> IPFS保存';
+                }
             }
         });
 
