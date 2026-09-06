@@ -49,7 +49,25 @@ def test_toyota_and_gamagori_are_registered():
 def test_authority_keys_match_filenames_and_categories():
     for key, info in AUTHORITIES.items():
         assert info.key == key
-        assert info.category in ("自治体", "警察")
+        assert info.category in ("自治体", "警察", "裁判所")
+
+
+def test_court_authorities():
+    from ordinance_data import COURT_AUTHORITIES, is_court_authority, COURT_COUNTER_ARGUMENTS
+    court = COURT_AUTHORITIES.get("supreme-court")
+    assert court is not None
+    assert court.authority_type == "最高裁判所"
+    assert is_court_authority("supreme-court") is True
+    assert is_court_authority("anjo-city") is False
+    assert "第4条第4号" in COURT_COUNTER_ARGUMENTS
+
+
+def test_match_authority_by_text_courts():
+    """裁判所キーワードからの推定テスト"""
+    assert match_authority_by_text("最高裁判所の議事録を見たい") == "supreme-court"
+    assert match_authority_by_text("最高裁の判断資料を請求したい") == "supreme-court"
+    assert match_authority_by_text("東京地裁の修繕費の内訳が知りたい") == "tokyo-district-court"
+    assert match_authority_by_text("名古屋高裁の通達を確認したい") == "nagoya-high-court"
 
 
 def test_match_authority_by_text_prefers_longer_alias():

@@ -19,7 +19,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from agent import get_agent, AngerAnalysis, AgentResponse
-from ordinance_data import list_authorities, ORDINANCES, POLICE_AUTHORITIES
+from ordinance_data import (
+    list_authorities,
+    AUTHORITIES,
+    ORDINANCES,
+    POLICE_AUTHORITIES,
+    COURT_AUTHORITIES,
+    get_ordinance,
+    is_court_authority,
+    is_police_authority,
+)
 from station_guide import find_nearest_government_office, get_office_info
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
@@ -106,24 +115,17 @@ async def index():
 
 @app.get("/authorities")
 async def get_authorities():
-    """対応自治体一覧"""
-    authorities = []
-    for key, info in ORDINANCES.items():
-        authorities.append({
-            "key": key,
-            "name": info.authority,
-            "type": info.authority_type,
-            "category": "自治体"
-        })
-    for key, info in POLICE_AUTHORITIES.items():
-        authorities.append({
-            "key": key,
-            "name": info.authority,
-            "type": info.authority_type,
-            "category": "警察"
-        })
+    """対応機関一覧（自治体・警察・裁判所すべて）"""
     return {
-        "authorities": authorities
+        "authorities": [
+            {
+                "key": key,
+                "name": info.authority,
+                "type": info.authority_type,
+                "category": info.category,
+            }
+            for key, info in AUTHORITIES.items()
+        ]
     }
 
 
@@ -187,10 +189,10 @@ async def generate_disclosure_request(
     situation_key: Optional[str] = Form(None),
     strategy_option: Optional[str] = Form("option-fast"),
 ):
-    """開示請求書を生成（Human-in-the-loop戦略選択対応）"""
-    ordinance = ORDINANCES.get(target_authority)
+    """開示請求書・司法行政文書開示申出書を生成（Human-in-the-loop戦略選択対応）"""
+    ordinance = get_ordinance(target_authority)
     if not ordinance:
-        raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
     # シチュエーションが指定されていれば、必要文書をマージ
     documents_to_request = None
@@ -217,6 +219,22 @@ async def generate_disclosure_request(
     extended_deadline = today + timedelta(days=ordinance.request_deadline_days + ordinance.extension_days)
     review_deadline = today + timedelta(days=ordinance.review_period_days)
 
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    if is_court:
+        next_steps = [
+            f"1. 司法行政文書開示申出書に必要事項を記入（生成された申出書を確認・編集）",
+            f"2. {ordinance.contact} に提出（窓口持参または郵送等）",
+            f"3. 受付から約 {ordinance.request_deadline_days}日以内に開示決定または延長通知",
+            f"4. 不開示・一部不開示決定の場合は取扱要綱に基づく苦情の申出等を検討",
+        ]
+    else:
+        next_steps = [
+            f"1. 開示請求書に必要事項を記入（生成された請求書を編集）",
+            f"2. {ordinance.contact} に提出（持参・郵送・メール等）",
+            f"3. 受付から約 {ordinance.request_deadline_days}日以内に決定がない場合は問い合わせ",
+            f"4. 不開示決定の場合は {ordinance.review_period_days}日以内に審査請求を検討",
+        ]
+
     return {
         "ordinance_name": ordinance.ordinance_name,
         "authority": ordinance.authority,
@@ -229,12 +247,7 @@ async def generate_disclosure_request(
             "review_period_days": ordinance.review_period_days,
             "review_deadline": review_deadline.isoformat(),
         },
-        "next_steps": [
-            f"1. 開示請求書に必要事項を記入（生成された請求書を編集）",
-            f"2. {ordinance.contact} に提出（持参・郵送・メール等）",
-            f"3. 受付から約 {ordinance.request_deadline_days}日以内に決定がない場合は問い合わせ",
-            f"4. 不開示決定の場合は {ordinance.review_period_days}日以内に審査請求を検討",
-        ],
+        "next_steps": next_steps,
     }
 
 
@@ -245,9 +258,9 @@ async def generate_review_request(
     alleged_ground: str = Form(...),
 ):
     """審査請求書 + 反論ロジックを生成"""
-    ordinance = ORDINANCES.get(target_authority)
+    ordinance = get_ordinance(target_authority)
     if not ordinance:
-        raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
     agent = get_agent()
     try:
@@ -260,7 +273,7 @@ async def generate_review_request(
     precedents = search_precedents(non_disclosure_decision, top_k=5)
 
     return {
-        "counter_argument": counter.model_dump(),
+        "counter_argument": counter.model_dump() if hasattr(counter, "model_dump") else counter,
         "precedents": [p.model_dump() for p in precedents],
         "review_authority": ordinance.review_authority,
     }
@@ -318,7 +331,7 @@ async def get_ordinances():
                     for g in info.non_disclosure_grounds
                 ],
             }
-            for key, info in ORDINANCES.items()
+            for key, info in AUTHORITIES.items()
         ]
     }
 
@@ -341,9 +354,9 @@ async def visibility_create(
 ):
     """新規開示請求を保存（Private/Public 選択、ログインユーザー自動紐付け）"""
     try:
-        ordinance = ORDINANCES.get(target_authority) or POLICE_AUTHORITIES.get(target_authority)
+        ordinance = get_ordinance(target_authority)
         if not ordinance:
-            raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+            raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
         assigned_user_id = (current_user.user_id if current_user else None) or user_id
 
@@ -354,7 +367,7 @@ async def visibility_create(
             target_authority_name=ordinance.authority,
             visibility=visibility,
             situation_key=situation_key,
-            category=category if category != "自治体" else ("警察" if target_authority in POLICE_AUTHORITIES else "自治体"),
+            category=ordinance.category,
             session_id=session_id,
             user_id=assigned_user_id,
         )
@@ -531,22 +544,31 @@ async def github_contributor(session_id: Optional[str] = None):
 
 
 def _mock_disclosure_request(user_input: str, ordinance) -> str:
-    """モック開示請求書"""
-    return f"""# 情報公開請求書
+    """モック開示請求書・司法行政文書開示申出書"""
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    doc_label = "司法行政文書" if is_court else "行政文書"
+    action_verb = "申し出ます" if is_court else "請求します"
+    form_title = getattr(ordinance, "request_form", "司法行政文書開示申出書" if is_court else "情報公開請求書")
+
+    court_notice = ""
+    if is_court:
+        court_notice = "\n※ 個別の訴訟記録（裁判記録）ではなく、組織的運用基準・通達・公金支出等の司法行政文書を対象とします。\n"
+
+    return f"""# {form_title}
 
 ## {ordinance.authority} {ordinance.contact} 御中
 
-{ordinance.ordinance_name}に基づき、以下のとおり行政文書の開示を請求します。
+{ordinance.ordinance_name}に基づき、以下のとおり{doc_label}の開示を{action_verb}。
 
-### 1. 請求日
+### 1. 請求日（申出日）
 {datetime.now().strftime("%Y年%m月%d日")}
 
-### 2. 請求人の住所・氏名
+### 2. 請求人（申出人）の住所・氏名
 〒000-0000 〇〇市〇〇町〇丁目〇番〇号
 市民 太郎
 
-### 3. 開示請求する行政文書の名称又は内容
-{user_input[:200]}に関する一切の行政文書
+### 3. 開示を求める{doc_label}の名称又は内容
+{user_input[:200]}に関する一切の{doc_label}
 
 ### 4. 開示の方法（希望）
 - [x] 写しの交付（郵送希望）
@@ -556,29 +578,42 @@ def _mock_disclosure_request(user_input: str, ordinance) -> str:
 電話：000-0000-0000
 メール：example@example.com
 
-### 6. 請求の理由・背景
-行政の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
-
-※ 本請求は {ordinance.ordinance_name} に基づく正式な開示請求です。
+### 6. 請求（申出）の理由・背景
+{"司法行政" if is_court else "行政"}の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
+{court_notice}
+※ 本{"申出" if is_court else "請求"}は {ordinance.ordinance_name} に基づく正式な開示{"申出" if is_court else "請求"}です。
 """
 
 
 def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
     """モック反論ロジック"""
+    from ordinance_data import COURT_COUNTER_ARGUMENTS, COMMON_COUNTER_ARGUMENTS, POLICE_COUNTER_ARGUMENTS
+    all_counters = {**COMMON_COUNTER_ARGUMENTS, **POLICE_COUNTER_ARGUMENTS, **COURT_COUNTER_ARGUMENTS}
+
+    if alleged_ground in all_counters:
+        counter_args = all_counters[alleged_ground]
+    else:
+        counter_args = [
+            "不開示事由の該当性については、具体的・実質的な支障の存在を行政・裁判所側が立証する責任がある",
+            "意思決定後の情報については開示すべき時期に来ている",
+            "部分開示（黒塗り処理）の努力義務を怠った全面不開示決定は不当",
+        ]
+
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    precedents = [
+        "最高裁判所 司法行政文書開示例（裁判官会議議事録等）",
+        "最判平成11年12月16日（公文書開示・意思決定後情報）",
+    ] if is_court else [
+        "名古屋市 海外視察費開示事例（2023）",
+        "岡崎市 契約金額開示事例（2024）",
+    ]
+
     return {
         "ground_number": alleged_ground,
-        "ground_name": "法人情報",
-        "counter_arguments": [
-            "「法人等の正当な利益を害するおそれ」は、抽象的可能性では足りず、具体的・実質的危険性の存在が必要（最判平14.2.8）",
-            "意思決定後の情報については開示すべき時期に来ている",
-            "部分開示の努力义务規定（条例第11条）を懈怠した不開示決定は違法",
-            "類似の開示事例が他自治体で複数あり、本件でも開示が相当",
-        ],
-        "precedent_cases": [
-            "名古屋市 海外視察費開示事例（2023）",
-            "岡崎市 契約金額開示事例（2024）",
-        ],
-        "winning_probability": 0.72,
+        "ground_name": "不開示事由",
+        "counter_arguments": counter_args,
+        "precedent_cases": precedents,
+        "winning_probability": 0.74,
     }
 
 

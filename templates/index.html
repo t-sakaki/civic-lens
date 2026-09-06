@@ -328,6 +328,9 @@
                 <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="警察">
                     🚔 警察
                 </button>
+                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="裁判所">
+                    ⚖️ 裁判所
+                </button>
             </div>
 
             <!-- Public フィード -->
@@ -578,13 +581,19 @@
                 groups[a.category].push(a);
             });
 
-            Object.keys(groups).forEach(category => {
+            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const allCategories = [
+                ...categoryOrder.filter(c => groups[c]),
+                ...Object.keys(groups).filter(c => !categoryOrder.includes(c)),
+            ];
+
+            allCategories.forEach(category => {
                 const optgroup = document.createElement('optgroup');
                 optgroup.label = `─── ${category} ───`;
                 groups[category].forEach(a => {
                     const option = document.createElement('option');
                     option.value = a.key;
-                    const icon = category === '警察' ? '🚔 ' : '';
+                    const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
                     option.textContent = `${icon}${a.name}（${a.type}）`;
                     optgroup.appendChild(option);
                 });
@@ -951,7 +960,9 @@
                 const date = new Date(r.created_at).toLocaleDateString('ja-JP');
                 const categoryBadge = r.category === '警察'
                     ? '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">🚔 警察</span>'
-                    : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>';
+                    : (r.category === '裁判所'
+                        ? '<span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">⚖️ 裁判所</span>'
+                        : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>');
                 const statusBadge = r.status === 'responded'
                     ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">✅ 開示あり</span>'
                     : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">⏳ 申請中</span>';
