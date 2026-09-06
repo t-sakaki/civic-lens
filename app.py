@@ -33,6 +33,9 @@ from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
 )
+from web3_bounty import (
+    create_bounty, pledge_bounty, claim_bounty, get_bounty, list_all_bounties
+)
 
 
 app = FastAPI(
@@ -549,6 +552,84 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         ],
         "winning_probability": 0.72,
     }
+
+
+# ---------------------------------------------------------------------------
+# Web3 / Civic Bounty（開示請求コピー代・調査費分散型ファンディング）
+# ---------------------------------------------------------------------------
+
+@app.post("/api/web3/bounty/create")
+async def api_create_bounty(
+    record_id: str = Form(...),
+    title: str = Form("開示請求コピー代・郵送料プール"),
+    authority: str = Form("自治体"),
+    target_pages: int = Form(50),
+    cost_per_page_jpy: int = Form(20),
+    requester_wallet: Optional[str] = Form(None),
+):
+    """開示請求に対するバウンティプールを作成"""
+    campaign = create_bounty(
+        record_id=record_id,
+        title=title,
+        authority=authority,
+        target_pages=target_pages,
+        cost_per_page_jpy=cost_per_page_jpy,
+        requester_wallet=requester_wallet,
+    )
+    return campaign.model_dump()
+
+
+@app.post("/api/web3/bounty/pledge")
+async def api_pledge_bounty(
+    bounty_id_or_record_id: str = Form(...),
+    amount_jpy: int = Form(500),
+    backer_id: str = Form("市民"),
+    wallet_address: Optional[str] = Form(None),
+    message: str = Form("応援しています！"),
+):
+    """バウンティプールにコピー代・調査費を出資（マイクロプレッジ）"""
+    campaign = pledge_bounty(
+        bounty_id_or_record_id=bounty_id_or_record_id,
+        amount_jpy=amount_jpy,
+        backer_id=backer_id,
+        wallet_address=wallet_address,
+        message=message,
+    )
+    return campaign.model_dump()
+
+
+@app.post("/api/web3/bounty/claim")
+async def api_claim_bounty(
+    bounty_id_or_record_id: str = Form(...),
+    proof_document_cid: str = Form(...),
+    requester_wallet: Optional[str] = Form(None),
+):
+    """開示原本を提示し、プール資金をアンロック（精算・受領）"""
+    try:
+        campaign = claim_bounty(
+            bounty_id_or_record_id=bounty_id_or_record_id,
+            proof_document_cid=proof_document_cid,
+            requester_wallet=requester_wallet,
+        )
+        return campaign.model_dump()
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/web3/bounty/all")
+async def api_list_bounties():
+    """すべてのバウンティキャンペーン一覧を取得"""
+    campaigns = list_all_bounties()
+    return {"bounties": [c.model_dump() for c in campaigns]}
+
+
+@app.get("/api/web3/bounty/{bounty_id_or_record_id}")
+async def api_get_bounty(bounty_id_or_record_id: str):
+    """特定のバウンティプール情報を取得"""
+    campaign = get_bounty(bounty_id_or_record_id)
+    if not campaign:
+        raise HTTPException(404, "Bounty campaign not found")
+    return campaign.model_dump()
 
 
 if __name__ == "__main__":

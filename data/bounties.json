@@ -1,0 +1,74 @@
+{
+  "bnt-req-samp": {
+    "bounty_id": "bnt-req-samp",
+    "record_id": "req-sample-001",
+    "title": "渋谷区道路台帳 コピー代50枚支援プール",
+    "authority": "東京都渋谷区",
+    "target_amount_usdc": 10.0,
+    "target_amount_jpy": 1500,
+    "current_amount_usdc": 10.0,
+    "current_amount_jpy": 1500,
+    "status": "claimed",
+    "requester_wallet": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "pledges": [
+      {
+        "backer_id": "市民#4092",
+        "wallet_address": "0xdd61a393afe1646e8c469a6474790a887ca0831c",
+        "amount_usdc": 3.33,
+        "amount_jpy": 500,
+        "tx_hash": "0x839bb70ff9cceadf3009848ab9de1dd09e64f79a8c841706795f7057d530437f",
+        "timestamp": "2026-09-06T03:45:27.514593Z",
+        "message": "歩道の安全点検は重要です！"
+      },
+      {
+        "backer_id": "市民#8812",
+        "wallet_address": "0xfeb7cdc863e5285c56733cbe6ef2721e49880e77",
+        "amount_usdc": 6.67,
+        "amount_jpy": 1000,
+        "tx_hash": "0x0c43052f6cc7724847881e3963a9b644e67c2160043ea33baffe0b6865314169",
+        "timestamp": "2026-09-06T03:45:30.225413Z",
+        "message": "開示楽しみにしています"
+      }
+    ],
+    "created_at": "2026-09-06T03:45:25.027948Z",
+    "claimed_at": "2026-09-06T03:45:32.906880Z",
+    "proof_document_cid": "bafkreiba4sudaxqjfmkgnvqeolpywlpjcpoiztjkd4fnqrwhncwil5n54",
+    "escrow_address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"
+  },
+  "by_record:req-sample-001": {
+    "bounty_id": "bnt-req-samp",
+    "record_id": "req-sample-001",
+    "title": "渋谷区道路台帳 コピー代50枚支援プール",
+    "authority": "東京都渋谷区",
+    "target_amount_usdc": 10.0,
+    "target_amount_jpy": 1500,
+    "current_amount_usdc": 10.0,
+    "current_amount_jpy": 1500,
+    "status": "claimed",
+    "requester_wallet": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "pledges": [
+      {
+        "backer_id": "市民#4092",
+        "wallet_address": "0xdd61a393afe1646e8c469a6474790a887ca0831c",
+        "amount_usdc": 3.33,
+        "amount_jpy": 500,
+        "tx_hash": "0x839bb70ff9cceadf3009848ab9de1dd09e64f79a8c841706795f7057d530437f",
+        "timestamp": "2026-09-06T03:45:27.514593Z",
+        "message": "歩道の安全点検は重要です！"
+      },
+      {
+        "backer_id": "市民#8812",
+        "wallet_address": "0xfeb7cdc863e5285c56733cbe6ef2721e49880e77",
+        "amount_usdc": 6.67,
+        "amount_jpy": 1000,
+        "tx_hash": "0x0c43052f6cc7724847881e3963a9b644e67c2160043ea33baffe0b6865314169",
+        "timestamp": "2026-09-06T03:45:30.225413Z",
+        "message": "開示楽しみにしています"
+      }
+    ],
+    "created_at": "2026-09-06T03:45:25.027948Z",
+    "claimed_at": "2026-09-06T03:45:32.906880Z",
+    "proof_document_cid": "bafkreiba4sudaxqjfmkgnvqeolpywlpjcpoiztjkd4fnqrwhncwil5n54",
+    "escrow_address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"
+  }
+}
