@@ -441,7 +441,7 @@ def create_adk_agent():
     # 怒り分析 & メタ認知批評エージェント
     anger_agent = LlmAgent(
         name="anger_analyzer",
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         description="市民の怒り・不満を構造化データに変換し、メタ認知批評とタスクDAGを構築する",
         instruction="""
 あなたは情報公開請求の専門家AIエージェントです。
@@ -472,7 +472,7 @@ def create_adk_agent():
     # 反論構築エージェント
     counter_agent = LlmAgent(
         name="counter_argument_builder",
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         description="不開示決定への反論ロジックを構築する",
         instruction="""
 あなたは情報公開・審査請求の実務に精通したAIです。
@@ -557,7 +557,7 @@ class CivicLensAgent:
 JSONのみを返してください。
 """
                 response = self.genai_client.models.generate_content(
-                    model="gemini-2.5-pro",
+                    model="gemini-3.1-pro-preview",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -620,7 +620,7 @@ JSONのみを返してください。
 JSONのみを出力してください。
 """
                 response = self.genai_client.models.generate_content(
-                    model="gemini-2.5-pro",
+                    model="gemini-3.1-pro-preview",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -723,7 +723,7 @@ JSONのみを出力してください。
 ### 7. 特記事項
 """
                 response = self.genai_client.models.generate_content(
-                    model="gemini-2.5-pro",
+                    model="gemini-3.1-pro-preview",
                     contents=prompt,
                 )
                 text = response.text.strip()
