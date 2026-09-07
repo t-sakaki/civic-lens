@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
+    <meta name="description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+
+    <!-- OGP (Facebook, LINE, Slack など) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Civic Lens">
+    <meta property="og:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
+    <meta property="og:description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+    <meta property="og:url" content="https://civic-lens-jp.vercel.app/">
+    <meta property="og:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="ja_JP">
+
+    <!-- Twitter Card (X) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
+    <meta name="twitter:description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+    <meta name="twitter:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -30,6 +49,139 @@
         .situation-card.selected {
             background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
+        }
+
+        /* --- 思考中インジケーター (Thinking Indicator) --- */
+        .thinking-box {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            margin-top: 0.75rem;
+            border-radius: 0.5rem;
+            background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+            border: 1px solid #e0e7ff;
+            animation: fadeIn 0.3s ease-out;
+            overflow: hidden;
+            position: relative;
+        }
+        .thinking-dots {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .thinking-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #6366f1;
+            animation: thinkingBounce 1.1s ease-in-out infinite;
+        }
+        .thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes thinkingBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+            30% { transform: translateY(-4px); opacity: 1; }
+        }
+        .thinking-text {
+            flex: 1;
+            font-size: 0.8rem;
+            color: #4338ca;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .thinking-timer {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            color: #6366f1;
+            background: rgba(99, 102, 241, 0.1);
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+        }
+        .thinking-box::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            width: 40%;
+            background: linear-gradient(90deg, transparent, #6366f1, transparent);
+            animation: thinkingSweep 1.4s linear infinite;
+        }
+        @keyframes thinkingSweep {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(350%); }
+        }
+
+        /* --- スターのふわふわアニメーション --- */
+        @keyframes starFly {
+            0% {
+                transform: translate(0, 0) scale(1) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--dx), var(--dy)) scale(0.3) rotate(var(--rot));
+                opacity: 0;
+            }
+        }
+        .star-particle {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            font-size: 1.1rem;
+            animation: starFly 0.9s cubic-bezier(0.15, 0.6, 0.4, 1) forwards;
+        }
+        @keyframes starPop {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.35); }
+            60% { transform: scale(0.9); }
+            100% { transform: scale(1); }
+        }
+        .star-pop {
+            animation: starPop 0.4s ease-out;
+        }
+        @keyframes floatUpFade {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-18px); opacity: 0; }
+        }
+        .star-plus-one {
+            position: absolute;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #eab308;
+            pointer-events: none;
+            animation: floatUpFade 0.7s ease-out forwards;
+        }
+
+        /* --- トースト通知 --- */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .toast {
+            background: #1f2937;
+            color: white;
+            padding: 0.65rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: toastIn 0.25s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+            max-width: 300px;
+        }
+        @keyframes toastIn {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes toastOut {
+            to { transform: translateY(-6px); opacity: 0; }
         }
     </style>
 </head>
@@ -127,9 +279,10 @@
         </section>
 
         <!-- 解析ボタン -->
-        <button id="analyzeBtn" class="mb-6 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-md font-semibold hover:from-blue-600 hover:to-purple-700">
+        <button id="analyzeBtn" class="mb-0 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-md font-semibold hover:from-blue-600 hover:to-purple-700">
             🚀 怒りを分析する
         </button>
+        <div id="analyzeThinking" class="mb-6"></div>
 
         <!-- STEP 2: 結果表示 -->
         <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
@@ -249,6 +402,7 @@
                     <div class="text-sm mt-1 opacity-90">不開示決定への反論</div>
                 </button>
             </div>
+            <div id="actionThinking"></div>
         </section>
 
         <!-- STEP 5: 生成結果 -->
@@ -685,9 +839,89 @@
         </div>
     </div>
 
+    <div id="toastContainer"></div>
+
     <script>
         let currentUser = null;
         let selectedSituation = null;
+
+        // --- トースト通知 ---
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // --- 「思考中」インジケーター (Claude Code風: 経過秒数 + 現在のステップ表示) ---
+        function startThinking(containerId, steps) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+
+            container.innerHTML = `
+                <div class="thinking-box">
+                    <div class="thinking-dots"><span></span><span></span><span></span></div>
+                    <div class="thinking-text" id="${containerId}-text">${steps[0]}</div>
+                    <div class="thinking-timer" id="${containerId}-timer">0.0s</div>
+                </div>
+            `;
+
+            const startTime = performance.now();
+            const textEl = document.getElementById(`${containerId}-text`);
+            const timerEl = document.getElementById(`${containerId}-timer`);
+
+            let stepIndex = 0;
+            const stepInterval = setInterval(() => {
+                stepIndex = (stepIndex + 1) % steps.length;
+                if (textEl) textEl.textContent = steps[stepIndex];
+            }, 1600);
+
+            const timerInterval = setInterval(() => {
+                const elapsed = (performance.now() - startTime) / 1000;
+                if (timerEl) timerEl.textContent = `${elapsed.toFixed(1)}s`;
+            }, 100);
+
+            return { containerId, stepInterval, timerInterval };
+        }
+
+        function stopThinking(handle) {
+            if (!handle) return;
+            clearInterval(handle.stepInterval);
+            clearInterval(handle.timerInterval);
+            const container = document.getElementById(handle.containerId);
+            if (container) container.innerHTML = '';
+        }
+
+        // --- スターのふわふわ飛んでいくアニメーション ---
+        function flyStars(originEl) {
+            const rect = originEl.getBoundingClientRect();
+            const originX = rect.left + rect.width / 2;
+            const originY = rect.top + rect.height / 2;
+            const count = 5 + Math.floor(Math.random() * 3);
+
+            for (let i = 0; i < count; i++) {
+                const particle = document.createElement('span');
+                particle.className = 'star-particle';
+                particle.textContent = '⭐';
+                particle.style.left = `${originX}px`;
+                particle.style.top = `${originY}px`;
+
+                const angle = (Math.random() * Math.PI) + Math.PI; // 上半分方向へ散らす
+                const distance = 60 + Math.random() * 70;
+                const dx = Math.cos(angle) * distance;
+                const dy = Math.sin(angle) * distance - 30;
+                const rot = (Math.random() - 0.5) * 360;
+
+                particle.style.setProperty('--dx', `${dx}px`);
+                particle.style.setProperty('--dy', `${dy}px`);
+                particle.style.setProperty('--rot', `${rot}deg`);
+
+                document.body.appendChild(particle);
+                particle.addEventListener('animationend', () => particle.remove());
+            }
+        }
         let cameraStream = null;
         let capturedImageData = null;
 
@@ -925,6 +1159,12 @@
 
             document.getElementById('analyzeBtn').textContent = '🔄 分析中...';
             document.getElementById('analyzeBtn').disabled = true;
+            const thinkingHandle = startThinking('analyzeThinking', [
+                '🧠 怒りのレベルを分析中…',
+                '🏛️ 対象機関を照合中…',
+                '📜 法的根拠を検索中…',
+                '📄 開示請求すべき文書を洗い出し中…',
+            ]);
 
             try {
                 const res = await fetch('/api/analyze', { method: 'POST', body: formData });
@@ -940,6 +1180,7 @@
             } catch (err) {
                 alert('エラー: ' + err.message);
             } finally {
+                stopThinking(thinkingHandle);
                 document.getElementById('analyzeBtn').textContent = '🚀 怒りを分析する';
                 document.getElementById('analyzeBtn').disabled = false;
             }
@@ -1057,6 +1298,11 @@
 
             document.getElementById('disclosureBtn').disabled = true;
             document.getElementById('disclosureBtn').textContent = '📝 生成中...';
+            const thinkingHandle = startThinking('actionThinking', [
+                '📝 開示請求書の文面を組み立て中…',
+                '⚖️ 適用条文を照合中…',
+                '🚉 提出先窓口までのルートを計算中…',
+            ]);
 
             try {
                 const res = await fetch('/api/disclosure-request', { method: 'POST', body: formData });
@@ -1074,6 +1320,7 @@
             } catch (err) {
                 alert('エラー: ' + err.message);
             } finally {
+                stopThinking(thinkingHandle);
                 document.getElementById('disclosureBtn').disabled = false;
                 document.getElementById('disclosureBtn').innerHTML = '<div class="text-3xl mb-2">📝</div><div class="font-bold">開示請求書を作成</div><div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>';
             }
@@ -1688,14 +1935,27 @@
                     await fetch(`/api/github/unstar/${recordId}`, { method: 'POST' });
                 } else {
                     await fetch(`/api/github/star/${recordId}`, { method: 'POST' });
+                    flyStars(starBtn);
+
+                    const plusOne = document.createElement('span');
+                    plusOne.className = 'star-plus-one';
+                    plusOne.textContent = '+1';
+                    starBtn.style.position = 'relative';
+                    starBtn.appendChild(plusOne);
+                    plusOne.addEventListener('animationend', () => plusOne.remove());
                 }
+
+                starBtn.classList.remove('star-pop');
+                void starBtn.offsetWidth; // reflow でアニメーションを再トリガー
+                starBtn.classList.add('star-pop');
+
                 await loadRecordGitHubStats(recordId);
             }
 
             if (forkBtn) {
                 const recordId = forkBtn.dataset.recordId;
                 await fetch(`/api/github/fork/${recordId}`, { method: 'POST' });
-                alert('✅ フォークしました！\n\nこの請求書を参考にした、新たな開示請求を作成できます。');
+                showToast('✅ フォークしました！この請求書を参考に新たな開示請求を作成できます。');
                 await loadRecordGitHubStats(recordId);
             }
 
