@@ -2,7 +2,7 @@
 
 [![CI Pipeline](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?logo=vercel)](https://civic-lens-jp.vercel.app)
-[![Hackathon](https://img.shields.io/badge/Zenn_Agentic_AI_ミニハッカソン-優勝🏆-gold)](https://github.com/t-sakaki/civic-lens)
+[![Hackathon](https://img.shields.io/badge/Zenn_Agentic_AI_ミニハッカソン-優勝🏆-gold)](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5)
 
 > 🏆 **2026年9月5日、「Zenn Agentic AI ミニハッカソン with Google Cloud」（東京・渋谷 Google拠点、参加者約200名）にて優勝しました。** コーディング時間約2時間という短時間実装での受賞です。詳細は[🏆 受賞歴](#-受賞歴)をご覧ください。
 
@@ -169,7 +169,7 @@ gcloud run deploy civic-lens \
 
 - **開催日**: 2026年9月5日
 - **会場**: 東京・渋谷 Google拠点
-- **規模**: 参加者約200名、2部屋に分かれての開催（第5回 Agentic AI Hackathon with Google Cloud のスピンオフ企画）
+- **規模**: 参加者約200名、2部屋に分かれての開催（[第5回 Agentic AI Hackathon with Google Cloud](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5) のスピンオフ企画）
 - **結果**: 単独参加で**優勝**
 - **実装時間**: コーディング時間は約2時間のみという、ハッカソンとしては異例の短時間実装
 
