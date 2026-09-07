@@ -1,0 +1,37 @@
+{
+  "key": "gamagori-city",
+  "category": "自治体",
+  "authority": "蒲郡市",
+  "authority_type": "市長",
+  "ordinance_name": "蒲郡市情報公開条例",
+  "ordinance_id": "平成12年蒲郡市条例第25号",
+  "enacted": "平成12年12月22日",
+  "request_form": "蒲郡市情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第6条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報で特定の個人を識別できるもの",
+      "exception": ""
+    },
+    {
+      "number": "第6条第2号",
+      "name": "法人情報",
+      "description": "法人等に関する情報で、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "蒲郡市情報公開審査会",
+  "contact": "蒲郡市役所 企画部 秘書広報課",
+  "office": {
+    "name": "蒲郡市役所",
+    "address": "〒443-8601 愛知県蒲郡市旭町17番1号",
+    "lat": 34.8276,
+    "lon": 137.2215,
+    "nearest_station": "蒲郡駅（JR東海道本線）"
+  },
+  "aliases": ["蒲郡"]
+}

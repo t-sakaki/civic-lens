@@ -5,14 +5,21 @@ Private / Public 公開設定:
 - Public: 他の市民と共有し、集合知として活用
 
 Publicデータは匿名化され、地域の行政問題を可視化する。
+
+保存先はFirestore（`disclosure_requests`コレクション）。Cloud Runのコンテナは
+リクエスト間でファイルシステムを保持しないため、以前のJSONファイル保存方式は
+デプロイ・スケールのたびにデータが失われていた。
 """
 import os
-import json
 import hashlib
 import uuid
 from typing import Optional, List, Dict
 from datetime import datetime
 from pydantic import BaseModel
+
+from firebase_client import get_firestore_client
+
+COLLECTION = "disclosure_requests"
 
 
 class DisclosureRequestRecord(BaseModel):
@@ -35,52 +42,21 @@ class DisclosureRequestRecord(BaseModel):
     category: str = "自治体"  # "自治体" / "警察"
     tags: List[str] = []
     anonymous_user_id: Optional[str] = None  # "市民#0001" のような形式
+    user_id: Optional[str] = None  # 認証ユーザーID (usr-...)
 
 
-# ローカル開発用の簡易ストレージ
-# 本番ではFirestore / Cloud SQL を使用
-DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
-if os.getenv("VERCEL"):
-    STORAGE_DIR = "/tmp/civic_lens_data"
-    os.makedirs(STORAGE_DIR, exist_ok=True)
-    STORAGE_PATH = os.path.join(STORAGE_DIR, "disclosure_requests.json")
-    default_file = os.path.join(DEFAULT_STORAGE_DIR, "disclosure_requests.json")
-    if os.path.exists(default_file) and not os.path.exists(STORAGE_PATH):
-        import shutil
-        try:
-            shutil.copyfile(default_file, STORAGE_PATH)
-        except Exception:
-            pass
-else:
-    STORAGE_PATH = os.getenv(
-        "CIVIC_LENS_STORAGE",
-        os.path.join(DEFAULT_STORAGE_DIR, "disclosure_requests.json")
-    )
-
-
-def _ensure_storage():
-    """ストレージディレクトリの確保"""
-    os.makedirs(os.path.dirname(STORAGE_PATH), exist_ok=True)
-    if not os.path.exists(STORAGE_PATH):
-        with open(STORAGE_PATH, "w", encoding="utf-8") as f:
-            json.dump([], f)
+def _collection():
+    return get_firestore_client().collection(COLLECTION)
 
 
 def _load_all() -> List[dict]:
     """全レコードを読み込み"""
-    _ensure_storage()
-    try:
-        with open(STORAGE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, FileNotFoundError):
-        return []
+    return [doc.to_dict() for doc in _collection().stream()]
 
 
-def _save_all(records: List[dict]):
-    """全レコードを保存"""
-    _ensure_storage()
-    with open(STORAGE_PATH, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
+def _save_one(record: dict):
+    """1レコードを保存（作成・更新共通）"""
+    _collection().document(record["id"]).set(record)
 
 
 def _generate_user_hash(session_id: Optional[str] = None, ip: Optional[str] = None) -> str:
@@ -108,6 +84,7 @@ def create_record(
     tags: Optional[List[str]] = None,
     session_id: Optional[str] = None,
     ip: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> DisclosureRequestRecord:
     """新規開示請求記録を作成"""
     if visibility not in ("private", "public"):
@@ -132,11 +109,10 @@ def create_record(
         category=category,
         tags=tags or [],
         anonymous_user_id=anonymous_id,
+        user_id=user_id,
     )
 
-    records = _load_all()
-    records.append(record.model_dump())
-    _save_all(records)
+    _save_one(record.model_dump())
 
     return record
 
@@ -146,37 +122,39 @@ def update_visibility(record_id: str, new_visibility: str, session_id: Optional[
     if new_visibility not in ("private", "public"):
         raise ValueError(f"visibility must be 'private' or 'public', got '{new_visibility}'")
 
-    records = _load_all()
     user_hash = _generate_user_hash(session_id)
+    doc_ref = _collection().document(record_id)
+    snap = doc_ref.get()
 
-    for i, r in enumerate(records):
-        if r["id"] == record_id and r["user_hash"] == user_hash:
-            records[i]["visibility"] = new_visibility
-            if new_visibility == "public" and not records[i].get("anonymous_user_id"):
-                records[i]["anonymous_user_id"] = _generate_anonymous_user_id(user_hash)
-            if new_visibility == "private":
-                records[i]["anonymous_user_id"] = None
-            records[i]["updated_at"] = datetime.utcnow().isoformat() + "Z"
-            _save_all(records)
-            return DisclosureRequestRecord(**records[i])
+    if not snap.exists or snap.to_dict().get("user_hash") != user_hash:
+        return None
 
-    return None
+    data = snap.to_dict()
+    data["visibility"] = new_visibility
+    if new_visibility == "public" and not data.get("anonymous_user_id"):
+        data["anonymous_user_id"] = _generate_anonymous_user_id(user_hash)
+    if new_visibility == "private":
+        data["anonymous_user_id"] = None
+    data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    doc_ref.set(data)
+    return DisclosureRequestRecord(**data)
 
 
 def add_result(record_id: str, result_excerpt: str, session_id: Optional[str] = None) -> Optional[DisclosureRequestRecord]:
     """開示結果を追加"""
-    records = _load_all()
     user_hash = _generate_user_hash(session_id)
+    doc_ref = _collection().document(record_id)
+    snap = doc_ref.get()
 
-    for i, r in enumerate(records):
-        if r["id"] == record_id and r["user_hash"] == user_hash:
-            records[i]["result_excerpt"] = result_excerpt
-            records[i]["status"] = "responded"
-            records[i]["updated_at"] = datetime.utcnow().isoformat() + "Z"
-            _save_all(records)
-            return DisclosureRequestRecord(**records[i])
+    if not snap.exists or snap.to_dict().get("user_hash") != user_hash:
+        return None
 
-    return None
+    data = snap.to_dict()
+    data["result_excerpt"] = result_excerpt
+    data["status"] = "responded"
+    data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    doc_ref.set(data)
+    return DisclosureRequestRecord(**data)
 
 
 def get_public_records(
@@ -246,3 +224,14 @@ def get_public_stats() -> Dict:
             stats["by_situation"][sit] = stats["by_situation"].get(sit, 0) + 1
 
     return stats
+
+
+def get_records_by_user(user_id: str) -> List[DisclosureRequestRecord]:
+    """特定ユーザーが作成した請求記録一覧（Private/Public問わず）を取得"""
+    records = _load_all()
+    user_records = [
+        DisclosureRequestRecord(**r)
+        for r in records
+        if r.get("user_id") == user_id
+    ]
+    return sorted(user_records, key=lambda x: x.created_at, reverse=True)

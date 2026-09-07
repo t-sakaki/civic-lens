@@ -1,0 +1,46 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Tests & Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Set up Java (Firestore/Auth Emulator用)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Syntax check
+        run: |
+          python -m py_compile app.py auth.py visibility.py fork_star.py
+
+      - name: Run Pytest suite (Firestore/Auth Emulator上で実行)
+        env:
+          GOOGLE_CLOUD_PROJECT: demo-civic-lens
+        run: |
+          npx firebase-tools@latest emulators:exec --project demo-civic-lens --only firestore,auth "pytest -v"

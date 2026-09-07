@@ -1,0 +1,42 @@
+{
+  "0x923d96f76449c742097119b49c2be6c0e76bfce3e38c43608b256bec589c0d96": {
+    "uid": "0x923d96f76449c742097119b49c2be6c0e76bfce3e38c43608b256bec589c0d96",
+    "schema_uid": "0xf154664fcc1ca28c58782284ad8514ca9ef025f9d7d2a163bedb3762f004af5e",
+    "record_id": "req-6baf8436",
+    "title": "渋谷区道路台帳等の開示請求",
+    "authority": "東京都渋谷区",
+    "document_hash": "0xc51b5a9a9c6ea9f942f108eca999368f84c5283d608671d830661a5512369141",
+    "attester": "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
+    "recipient": "0x71C836643F37740aB5635112437172771413847a",
+    "timestamp": 1788666239,
+    "formatted_date": "2026-09-06 03:43:59 UTC",
+    "legal_basis": "情報公開法・各自治体情報公開条例",
+    "revocable": false,
+    "network": "Base Mainnet (EVM L2)",
+    "chain_id": 8453,
+    "tx_hash": "0xe0838659601d4c2141a814389a5d941f4c40b16b510dd505a1c6983ef68b868d",
+    "block_number": 18486239,
+    "explorer_url": "https://base.easscan.org/attestation/view/0x923d96f76449c742097119b49c2be6c0e76bfce3e38c43608b256bec589c0d96",
+    "is_valid": true
+  },
+  "by_record:req-6baf8436": {
+    "uid": "0x923d96f76449c742097119b49c2be6c0e76bfce3e38c43608b256bec589c0d96",
+    "schema_uid": "0xf154664fcc1ca28c58782284ad8514ca9ef025f9d7d2a163bedb3762f004af5e",
+    "record_id": "req-6baf8436",
+    "title": "渋谷区道路台帳等の開示請求",
+    "authority": "東京都渋谷区",
+    "document_hash": "0xc51b5a9a9c6ea9f942f108eca999368f84c5283d608671d830661a5512369141",
+    "attester": "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
+    "recipient": "0x71C836643F37740aB5635112437172771413847a",
+    "timestamp": 1788666239,
+    "formatted_date": "2026-09-06 03:43:59 UTC",
+    "legal_basis": "情報公開法・各自治体情報公開条例",
+    "revocable": false,
+    "network": "Base Mainnet (EVM L2)",
+    "chain_id": 8453,
+    "tx_hash": "0xe0838659601d4c2141a814389a5d941f4c40b16b510dd505a1c6983ef68b868d",
+    "block_number": 18486239,
+    "explorer_url": "https://base.easscan.org/attestation/view/0x923d96f76449c742097119b49c2be6c0e76bfce3e38c43608b256bec589c0d96",
+    "is_valid": true
+  }
+}
