@@ -2,6 +2,11 @@
 
 [![CI Pipeline](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?logo=vercel)](https://civic-lens-jp.vercel.app)
+[![Hackathon](https://img.shields.io/badge/Zenn_Agentic_AI_ミニハッカソン-優勝🏆-gold)](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5)
+
+![Civic Lens](static/og-image.png)
+
+> 🏆 **2026年9月5日、「Zenn Agentic AI ミニハッカソン with Google Cloud」（東京・渋谷 Google拠点、参加者約200名）にて優勝しました。** コーディング時間約2時間という短時間実装での受賞です。詳細は[🏆 受賞歴](#-受賞歴)をご覧ください。
 
 ## 🎯 概要
 
@@ -160,13 +165,29 @@ gcloud run deploy civic-lens \
 5. **経路案内**: 駅すぱあとAPIで安城市役所までのアクセスを表示
 6. **審査請求対応**: 不開示決定時の反論ロジック生成
 
+## 🏆 受賞歴
+
+### Zenn Agentic AI ミニハッカソン with Google Cloud（優勝）
+
+- **開催日**: 2026年9月5日
+- **会場**: 東京・渋谷 Google拠点
+- **規模**: 参加者約200名、2部屋に分かれての開催（[第5回 Agentic AI Hackathon with Google Cloud](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5) のスピンオフ企画）
+- **結果**: 単独参加で**優勝**
+- **実装時間**: コーディング時間は約2時間のみという、ハッカソンとしては異例の短時間実装
+
+**評価されたポイント**
+
+- 4社API（Gemini + GMI Cloud + 駅すぱあと + YouCam）を統合し、市民の「怒り・不信・諦め」を情報公開請求という具体的な法的アクションへ自動変換する一気通貫の実装
+- Google AntiGravityなどAIエージェントを活用した超短時間でのフルスタック実装
+- 「情報公開請求のGitHub」というコンセプトのもと、開示請求のPublic/Private共有・フォーク・スター機能を実装し、共有された請求を集合知として地域の行政問題の可視化につなげるアイデア
+
 ## 📜 ライセンス
 
 MIT License
 
 ## 👥 作者
 
-Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加
+Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加・**優勝**
 
 ## 🙏 謝辞
 
