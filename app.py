@@ -652,6 +652,9 @@ async def api_register(
         }
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（register）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
 
 
 @app.post("/api/auth/login")
@@ -661,7 +664,11 @@ async def api_login(
     password: str = Form(...),
 ):
     """ログイン（メールまたはユーザー名 ＋ パスワード）"""
-    user = authenticate_password(username_or_email=username_or_email, password=password)
+    try:
+        user = authenticate_password(username_or_email=username_or_email, password=password)
+    except Exception as e:
+        print(f"認証バックエンドエラー（login）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
     if not user:
         raise HTTPException(401, "ユーザー名・メールアドレスまたはパスワードが正しくありません")
 
@@ -683,7 +690,11 @@ async def api_login(
 @app.get("/api/auth/nonce")
 async def api_get_nonce():
     """Web3 SIWE (Sign-In with Ethereum) 用のワンタイム Nonce を取得"""
-    nonce = generate_siwe_nonce()
+    try:
+        nonce = generate_siwe_nonce()
+    except Exception as e:
+        print(f"認証バックエンドエラー（nonce）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
     return {"nonce": nonce}
 
 
@@ -702,6 +713,9 @@ async def api_login_wallet(
         user = authenticate_wallet(wallet_address=wallet_address, signature=signature, nonce=nonce)
     except ValueError as e:
         raise HTTPException(401, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（login-wallet）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
     token = create_session_token(user.user_id)
     response.set_cookie(
         key="auth_token",
