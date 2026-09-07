@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
-    <meta name="description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+    <meta name="description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
 
     <!-- OGP (Facebook, LINE, Slack など) -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Civic Lens">
     <meta property="og:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
-    <meta property="og:description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+    <meta property="og:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
     <meta property="og:url" content="https://civic-lens-jp.vercel.app/">
     <meta property="og:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
     <meta property="og:image:width" content="1200">
@@ -20,13 +20,52 @@
     <!-- Twitter Card (X) -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
-    <meta name="twitter:description" content="市民の怒りを情報公開に変換するAIエージェント。Gemini × GMI Cloud × 駅すぱあと × YouCam APIで、情報公開請求をサポートします（5自治体 + 4警察本部対応）。">
+    <meta name="twitter:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う。">
     <meta name="twitter:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        :root {
+            --cl-bg: #0b1120;
+            --cl-bg2: #141d33;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+        }
         body {
             font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+            background-color: var(--cl-bg);
+            background-image:
+                linear-gradient(180deg, rgba(11,17,32,0.72) 0%, rgba(11,17,32,0.94) 620px, var(--cl-bg) 900px),
+                url('/static/brand/civic_lens_bg.png');
+            background-repeat: no-repeat;
+            background-position: top center;
+            background-size: 100% auto;
+        }
+        .cl-hero {
+            background: radial-gradient(120% 160% at 50% 0%, var(--cl-bg2) 0%, var(--cl-bg) 70%);
+            border: 1px solid rgba(242, 169, 59, 0.18);
+        }
+        .cl-navbar {
+            background: rgba(11, 17, 32, 0.55);
+            border-color: rgba(242, 169, 59, 0.22) !important;
+            backdrop-filter: blur(6px);
+        }
+        .cl-badge {
+            background: rgba(242, 169, 59, 0.12);
+            color: var(--cl-amber);
+            border-color: rgba(242, 169, 59, 0.35);
+        }
+        .cl-auth-btn {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.16);
+            color: #EDEDF2;
+        }
+        .cl-auth-btn:hover { background: rgba(255,255,255,0.12); }
+        .cl-cta {
+            background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%);
+        }
+        .cl-cta:hover {
+            background: linear-gradient(90deg, #ffbb55 0%, #f2924c 100%);
         }
         .anger-meter {
             background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
@@ -185,27 +224,32 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="min-h-screen">
     <div class="container mx-auto px-4 py-6 max-w-4xl">
         <!-- ナビゲーション & 認証ステータスバー (NEW!) -->
-        <div class="flex items-center justify-between mb-8 pb-3 border-b border-gray-200">
+        <div class="cl-navbar flex items-center justify-between mb-8 pb-3 px-4 pt-3 rounded-xl border">
             <div class="flex items-center gap-2">
-                <span class="font-bold text-gray-800 text-sm tracking-wide">🔍 Civic Lens</span>
-                <span class="text-xs bg-indigo-50 text-indigo-700 font-mono px-2 py-0.5 rounded border border-indigo-200">Web & Web3 Auth</span>
+                <a href="/" class="font-bold text-white text-sm tracking-wide hover:text-amber-300 transition">🔍 Civic Lens</a>
+                <span class="cl-badge text-xs font-mono px-2 py-0.5 rounded border">Web & Web3 Auth</span>
             </div>
             <div id="authNavArea" class="flex items-center gap-2">
-                <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 px-3.5 py-1.5 rounded-full hover:bg-gray-100 shadow-sm transition">
+                <button id="openAuthModalBtn" type="button" class="cl-auth-btn inline-flex items-center gap-1.5 text-xs font-semibold border px-3.5 py-1.5 rounded-full shadow-sm transition">
                     <span>👤</span> ログイン / 新規登録
                 </button>
             </div>
         </div>
 
         <!-- ヘッダー -->
-        <header class="text-center mb-12">
-            <h1 class="text-5xl font-bold text-gray-900 mb-4">🔍 Civic Lens</h1>
-            <p class="text-xl text-gray-600">市民の怒りを情報公開に変換するAIエージェント</p>
-            <p class="text-sm text-gray-500 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
-            <p class="text-xs text-gray-400 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+        <header class="cl-hero text-center mb-12 rounded-2xl overflow-hidden">
+            <a href="/" aria-label="Civic Lens トップページへ" class="block">
+                <video class="w-full h-auto block" style="aspect-ratio: 1600 / 360;" autoplay loop muted playsinline poster="/static/brand/civic_lens_banner_poster.png">
+                    <source src="/static/brand/civic_lens_banner.mp4" type="video/mp4">
+                </video>
+            </a>
+            <div class="px-6 pb-8 pt-2 -mt-1">
+                <p class="text-sm text-gray-400 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
+                <p class="text-xs text-gray-500 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+            </div>
         </header>
 
         <!-- STEP 0: シチュエーション選択（NEW!） -->
@@ -279,7 +323,7 @@
         </section>
 
         <!-- 解析ボタン -->
-        <button id="analyzeBtn" class="mb-0 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-md font-semibold hover:from-blue-600 hover:to-purple-700">
+        <button id="analyzeBtn" class="cl-cta mb-0 w-full text-white px-6 py-3 rounded-md font-semibold shadow-md transition">
             🚀 怒りを分析する
         </button>
         <div id="analyzeThinking" class="mb-6"></div>
