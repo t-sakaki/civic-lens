@@ -191,8 +191,8 @@ Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加・**
 
 ## 🙏 謝辞
 
-- Google Cloud Japan
-- GMI Cloud
-- ヴァル研究所（駅すぱあとAPI）
-- YouCam API
+- [Google Cloud Japan](https://cloud.google.com/?hl=ja)
+- [GMI Cloud](https://www.gmicloud.ai/ja)
+- [ヴァル研究所（駅すぱあとAPI）](https://ekispert.jp/products/api)
+- [YouCam API（Perfect Corp.）](https://docs.perfectcorp.com/develop/introduction)
 - 安城市の実際の運用知見（実案件ベース）
