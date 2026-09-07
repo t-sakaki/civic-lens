@@ -2,6 +2,9 @@
 
 [![CI Pipeline](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?logo=vercel)](https://civic-lens-jp.vercel.app)
+[![Hackathon](https://img.shields.io/badge/Zenn_Agentic_AI_ミニハッカソン-優勝🏆-gold)](https://github.com/t-sakaki/civic-lens)
+
+> 🏆 **2026年9月5日、「Zenn Agentic AI ミニハッカソン with Google Cloud」（東京・渋谷 Google拠点、参加者約200名）にて優勝しました。** コーディング時間約2時間という短時間実装での受賞です。
 
 ## 🎯 概要
 
@@ -166,7 +169,7 @@ MIT License
 
 ## 👥 作者
 
-Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加
+Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加・**優勝**
 
 ## 🙏 謝辞
 
