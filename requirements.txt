@@ -9,8 +9,18 @@ jinja2>=3.1.4
 google-adk>=2.8.0
 google-genai>=2.22.0
 
+# Firebase (Authentication & Firestore)
+firebase-admin>=6.5.0
+# google-api-core 2.36.0以降はopentelemetry-api>=1.44.0を要求するが、
+# google-adkはopentelemetry-api<=1.42.1を要求するため両立しない。
+# 2.35.0以下（opentelemetryを必須化する前）に固定して競合を回避する。
+google-api-core<2.36.0
+
 # Utilities
 requests>=2.32.0
 pydantic>=2.10.0
 python-dotenv>=1.0.0
 httpx>=0.28.0
+
+# Web3 (SIWE署名検証)
+eth-account>=0.13.0

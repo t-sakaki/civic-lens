@@ -12,21 +12,30 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from agent import get_agent, AngerAnalysis, AgentResponse
-from ordinance_data import list_authorities, ORDINANCES, POLICE_AUTHORITIES
+from ordinance_data import (
+    list_authorities,
+    AUTHORITIES,
+    ORDINANCES,
+    POLICE_AUTHORITIES,
+    COURT_AUTHORITIES,
+    get_ordinance,
+    is_court_authority,
+    is_police_authority,
+)
 from station_guide import find_nearest_government_office, get_office_info
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
 from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
-    get_public_records, get_my_records, get_public_stats,
+    get_public_records, get_my_records, get_public_stats, get_records_by_user,
     DisclosureRequestRecord,
 )
 from fork_star import (
@@ -35,6 +44,11 @@ from fork_star import (
 )
 from web3_sbt import (
     mint_sbt, get_sbt_metadata, get_user_passport, list_available_badges
+)
+from auth import (
+    User, register_user, authenticate_password, authenticate_wallet,
+    create_session_token, verify_session_token, get_user_by_id,
+    generate_siwe_nonce
 )
 
 
@@ -49,8 +63,28 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
 )
+
+
+def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    auth_token: Optional[str] = Cookie(None),
+) -> Optional[User]:
+    """リクエストから認証トークンを検証し、ログイン中のユーザーを取得（未ログイン時はNone）"""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif auth_token:
+        token = auth_token
+
+    if not token:
+        return None
+
+    user_id = verify_session_token(token)
+    if not user_id:
+        return None
+    return get_user_by_id(user_id)
+
 
 from pathlib import Path
 
@@ -84,24 +118,17 @@ async def index():
 
 @app.get("/authorities")
 async def get_authorities():
-    """対応自治体一覧"""
-    authorities = []
-    for key, info in ORDINANCES.items():
-        authorities.append({
-            "key": key,
-            "name": info.authority,
-            "type": info.authority_type,
-            "category": "自治体"
-        })
-    for key, info in POLICE_AUTHORITIES.items():
-        authorities.append({
-            "key": key,
-            "name": info.authority,
-            "type": info.authority_type,
-            "category": "警察"
-        })
+    """対応機関一覧（自治体・警察・裁判所すべて）"""
     return {
-        "authorities": authorities
+        "authorities": [
+            {
+                "key": key,
+                "name": info.authority,
+                "type": info.authority_type,
+                "category": info.category,
+            }
+            for key, info in AUTHORITIES.items()
+        ]
     }
 
 
@@ -114,6 +141,7 @@ async def analyze_anger(
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
+    emotion_is_mock = None
     if image_data:
         try:
             # base64デコード
@@ -124,6 +152,7 @@ async def analyze_anger(
             if analysis:
                 anger_level = analysis.anger_level
                 emotion_data = anger_to_text_prompt(analysis)
+                emotion_is_mock = analysis.is_mock
         except Exception as e:
             print(f"画像処理エラー: {e}")
 
@@ -150,11 +179,13 @@ async def analyze_anger(
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",
+            is_mock=True,
         )
 
     return {
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
+        "emotion_is_mock": emotion_is_mock,
     }
 
 
@@ -165,10 +196,10 @@ async def generate_disclosure_request(
     situation_key: Optional[str] = Form(None),
     strategy_option: Optional[str] = Form("option-fast"),
 ):
-    """開示請求書を生成（Human-in-the-loop戦略選択対応）"""
-    ordinance = ORDINANCES.get(target_authority)
+    """開示請求書・司法行政文書開示申出書を生成（Human-in-the-loop戦略選択対応）"""
+    ordinance = get_ordinance(target_authority)
     if not ordinance:
-        raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
     # シチュエーションが指定されていれば、必要文書をマージ
     documents_to_request = None
@@ -184,10 +215,11 @@ async def generate_disclosure_request(
 
     agent = get_agent()
     try:
-        request_text = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
+        request_text, is_mock = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
     except Exception as e:
         print(f"Gemini エラー: {e}")
         request_text = _mock_disclosure_request(user_input, ordinance)
+        is_mock = True
 
     # 期限情報
     today = datetime.now()
@@ -195,11 +227,28 @@ async def generate_disclosure_request(
     extended_deadline = today + timedelta(days=ordinance.request_deadline_days + ordinance.extension_days)
     review_deadline = today + timedelta(days=ordinance.review_period_days)
 
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    if is_court:
+        next_steps = [
+            f"1. 司法行政文書開示申出書に必要事項を記入（生成された申出書を確認・編集）",
+            f"2. {ordinance.contact} に提出（窓口持参または郵送等）",
+            f"3. 受付から約 {ordinance.request_deadline_days}日以内に開示決定または延長通知",
+            f"4. 不開示・一部不開示決定の場合は取扱要綱に基づく苦情の申出等を検討",
+        ]
+    else:
+        next_steps = [
+            f"1. 開示請求書に必要事項を記入（生成された請求書を編集）",
+            f"2. {ordinance.contact} に提出（持参・郵送・メール等）",
+            f"3. 受付から約 {ordinance.request_deadline_days}日以内に決定がない場合は問い合わせ",
+            f"4. 不開示決定の場合は {ordinance.review_period_days}日以内に審査請求を検討",
+        ]
+
     return {
         "ordinance_name": ordinance.ordinance_name,
         "authority": ordinance.authority,
         "contact": ordinance.contact,
         "request_text": request_text,
+        "is_mock": is_mock,
         "deadline": {
             "decision_days": ordinance.request_deadline_days,
             "decision_deadline": deadline.isoformat(),
@@ -207,12 +256,7 @@ async def generate_disclosure_request(
             "review_period_days": ordinance.review_period_days,
             "review_deadline": review_deadline.isoformat(),
         },
-        "next_steps": [
-            f"1. 開示請求書に必要事項を記入（生成された請求書を編集）",
-            f"2. {ordinance.contact} に提出（持参・郵送・メール等）",
-            f"3. 受付から約 {ordinance.request_deadline_days}日以内に決定がない場合は問い合わせ",
-            f"4. 不開示決定の場合は {ordinance.review_period_days}日以内に審査請求を検討",
-        ],
+        "next_steps": next_steps,
     }
 
 
@@ -223,9 +267,9 @@ async def generate_review_request(
     alleged_ground: str = Form(...),
 ):
     """審査請求書 + 反論ロジックを生成"""
-    ordinance = ORDINANCES.get(target_authority)
+    ordinance = get_ordinance(target_authority)
     if not ordinance:
-        raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
     agent = get_agent()
     try:
@@ -238,7 +282,7 @@ async def generate_review_request(
     precedents = search_precedents(non_disclosure_decision, top_k=5)
 
     return {
-        "counter_argument": counter.model_dump(),
+        "counter_argument": counter.model_dump() if hasattr(counter, "model_dump") else counter,
         "precedents": [p.model_dump() for p in precedents],
         "review_authority": ordinance.review_authority,
     }
@@ -296,7 +340,7 @@ async def get_ordinances():
                     for g in info.non_disclosure_grounds
                 ],
             }
-            for key, info in ORDINANCES.items()
+            for key, info in AUTHORITIES.items()
         ]
     }
 
@@ -314,12 +358,16 @@ async def visibility_create(
     situation_key: Optional[str] = Form(None),
     category: str = Form("自治体"),
     session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """新規開示請求を保存（Private/Public 選択）"""
+    """新規開示請求を保存（Private/Public 選択、ログインユーザー自動紐付け）"""
     try:
-        ordinance = ORDINANCES.get(target_authority) or POLICE_AUTHORITIES.get(target_authority)
+        ordinance = get_ordinance(target_authority)
         if not ordinance:
-            raise HTTPException(404, f"自治体が見つかりません: {target_authority}")
+            raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
+
+        assigned_user_id = (current_user.user_id if current_user else None) or user_id
 
         record = create_record(
             user_input=user_input,
@@ -328,8 +376,9 @@ async def visibility_create(
             target_authority_name=ordinance.authority,
             visibility=visibility,
             situation_key=situation_key,
-            category=category if category != "自治体" else ("警察" if target_authority in POLICE_AUTHORITIES else "自治体"),
+            category=ordinance.category,
             session_id=session_id,
+            user_id=assigned_user_id,
         )
 
         return {
@@ -337,6 +386,7 @@ async def visibility_create(
             "visibility": record.visibility,
             "anonymous_user_id": record.anonymous_user_id,
             "created_at": record.created_at,
+            "user_id": record.user_id,
         }
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -503,22 +553,31 @@ async def github_contributor(session_id: Optional[str] = None):
 
 
 def _mock_disclosure_request(user_input: str, ordinance) -> str:
-    """モック開示請求書"""
-    return f"""# 情報公開請求書
+    """モック開示請求書・司法行政文書開示申出書"""
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    doc_label = "司法行政文書" if is_court else "行政文書"
+    action_verb = "申し出ます" if is_court else "請求します"
+    form_title = getattr(ordinance, "request_form", "司法行政文書開示申出書" if is_court else "情報公開請求書")
+
+    court_notice = ""
+    if is_court:
+        court_notice = "\n※ 個別の訴訟記録（裁判記録）ではなく、組織的運用基準・通達・公金支出等の司法行政文書を対象とします。\n"
+
+    return f"""# {form_title}
 
 ## {ordinance.authority} {ordinance.contact} 御中
 
-{ordinance.ordinance_name}に基づき、以下のとおり行政文書の開示を請求します。
+{ordinance.ordinance_name}に基づき、以下のとおり{doc_label}の開示を{action_verb}。
 
-### 1. 請求日
+### 1. 請求日（申出日）
 {datetime.now().strftime("%Y年%m月%d日")}
 
-### 2. 請求人の住所・氏名
+### 2. 請求人（申出人）の住所・氏名
 〒000-0000 〇〇市〇〇町〇丁目〇番〇号
 市民 太郎
 
-### 3. 開示請求する行政文書の名称又は内容
-{user_input[:200]}に関する一切の行政文書
+### 3. 開示を求める{doc_label}の名称又は内容
+{user_input[:200]}に関する一切の{doc_label}
 
 ### 4. 開示の方法（希望）
 - [x] 写しの交付（郵送希望）
@@ -528,29 +587,42 @@ def _mock_disclosure_request(user_input: str, ordinance) -> str:
 電話：000-0000-0000
 メール：example@example.com
 
-### 6. 請求の理由・背景
-行政の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
-
-※ 本請求は {ordinance.ordinance_name} に基づく正式な開示請求です。
+### 6. 請求（申出）の理由・背景
+{"司法行政" if is_court else "行政"}の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
+{court_notice}
+※ 本{"申出" if is_court else "請求"}は {ordinance.ordinance_name} に基づく正式な開示{"申出" if is_court else "請求"}です。
 """
 
 
 def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
     """モック反論ロジック"""
+    from ordinance_data import COURT_COUNTER_ARGUMENTS, COMMON_COUNTER_ARGUMENTS, POLICE_COUNTER_ARGUMENTS
+    all_counters = {**COMMON_COUNTER_ARGUMENTS, **POLICE_COUNTER_ARGUMENTS, **COURT_COUNTER_ARGUMENTS}
+
+    if alleged_ground in all_counters:
+        counter_args = all_counters[alleged_ground]
+    else:
+        counter_args = [
+            "不開示事由の該当性については、具体的・実質的な支障の存在を行政・裁判所側が立証する責任がある",
+            "意思決定後の情報については開示すべき時期に来ている",
+            "部分開示（黒塗り処理）の努力義務を怠った全面不開示決定は不当",
+        ]
+
+    is_court = getattr(ordinance, "category", "") == "裁判所"
+    precedents = [
+        "最高裁判所 司法行政文書開示例（裁判官会議議事録等）",
+        "最判平成11年12月16日（公文書開示・意思決定後情報）",
+    ] if is_court else [
+        "名古屋市 海外視察費開示事例（2023）",
+        "岡崎市 契約金額開示事例（2024）",
+    ]
+
     return {
         "ground_number": alleged_ground,
-        "ground_name": "法人情報",
-        "counter_arguments": [
-            "「法人等の正当な利益を害するおそれ」は、抽象的可能性では足りず、具体的・実質的危険性の存在が必要（最判平14.2.8）",
-            "意思決定後の情報については開示すべき時期に来ている",
-            "部分開示の努力义务規定（条例第11条）を懈怠した不開示決定は違法",
-            "類似の開示事例が他自治体で複数あり、本件でも開示が相当",
-        ],
-        "precedent_cases": [
-            "名古屋市 海外視察費開示事例（2023）",
-            "岡崎市 契約金額開示事例（2024）",
-        ],
-        "winning_probability": 0.72,
+        "ground_name": "不開示事由",
+        "counter_arguments": counter_args,
+        "precedent_cases": precedents,
+        "winning_probability": 0.74,
     }
 
 
@@ -594,6 +666,141 @@ async def api_get_user_passport(recipient_id_or_wallet: str):
     """特定ユーザーまたはウォレットが保有するSBT一覧（シビック・パスポート）を取得"""
     records = get_user_passport(recipient_id_or_wallet)
     return {"passport": [r.model_dump() for r in records]}
+
+
+# ---------------------------------------------------------------------------
+# ユーザー認証 API（メール/パスワード ＆ Web3ウォレットハイブリッド）
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/register")
+async def api_register(
+    response: Response,
+    username: str = Form(...),
+    password: str = Form(...),
+    email: Optional[str] = Form(None),
+):
+    """新規ユーザー登録（メール/パスワード）"""
+    try:
+        user = register_user(username=username, password=password, email=email)
+        token = create_session_token(user.user_id)
+        response.set_cookie(
+            key="auth_token",
+            value=token,
+            max_age=7 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
+        return {
+            "success": True,
+            "user": user.model_dump(exclude={"password_hash"}),
+            "token": token,
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（register）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+
+
+@app.post("/api/auth/login")
+async def api_login(
+    response: Response,
+    username_or_email: str = Form(...),
+    password: str = Form(...),
+):
+    """ログイン（メールまたはユーザー名 ＋ パスワード）"""
+    try:
+        user = authenticate_password(username_or_email=username_or_email, password=password)
+    except Exception as e:
+        print(f"認証バックエンドエラー（login）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+    if not user:
+        raise HTTPException(401, "ユーザー名・メールアドレスまたはパスワードが正しくありません")
+
+    token = create_session_token(user.user_id)
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "success": True,
+        "user": user.model_dump(exclude={"password_hash"}),
+        "token": token,
+    }
+
+
+@app.get("/api/auth/nonce")
+async def api_get_nonce():
+    """Web3 SIWE (Sign-In with Ethereum) 用のワンタイム Nonce を取得"""
+    try:
+        nonce = generate_siwe_nonce()
+    except Exception as e:
+        print(f"認証バックエンドエラー（nonce）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+    return {"nonce": nonce}
+
+
+@app.post("/api/auth/login-wallet")
+async def api_login_wallet(
+    response: Response,
+    wallet_address: str = Form(...),
+    signature: str = Form(...),
+    nonce: str = Form(...),
+):
+    """Web3 ウォレット（MetaMask等）によるSIWE署名ログイン"""
+    if not wallet_address.startswith("0x") or len(wallet_address) != 42:
+        raise HTTPException(400, "無効なEthereum/EVMウォレットアドレスです")
+
+    try:
+        user = authenticate_wallet(wallet_address=wallet_address, signature=signature, nonce=nonce)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（login-wallet）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+    token = create_session_token(user.user_id)
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "success": True,
+        "user": user.model_dump(exclude={"password_hash"}),
+        "token": token,
+    }
+
+
+@app.get("/api/auth/me")
+async def api_get_me(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """現在ログイン中のユーザー情報"""
+    if not current_user:
+        return {"authenticated": False, "user": None}
+    return {
+        "authenticated": True,
+        "user": current_user.model_dump(exclude={"password_hash"}),
+    }
+
+
+@app.post("/api/auth/logout")
+async def api_logout(response: Response):
+    """ログアウト（Cookieクリア）"""
+    response.delete_cookie(key="auth_token")
+    return {"success": True, "message": "ログアウトしました"}
+
+
+@app.get("/api/auth/my-records")
+async def api_get_my_records(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """ログインユーザーの保存した開示請求履歴一覧を取得"""
+    if not current_user:
+        raise HTTPException(401, "ログインが必要です")
+    records = get_records_by_user(current_user.user_id)
+    return {"records": [r.model_dump() for r in records]}
 
 
 if __name__ == "__main__":

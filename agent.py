@@ -81,6 +81,7 @@ class AngerAnalysis(BaseModel):
     task_dag: Optional[TaskDAG] = Field(default=None, description="タスクDAG")
     critique: Optional[MetaCognitiveCritique] = Field(default=None, description="メタ認知批評結果")
     safeguard_options: Optional[List[Dict[str, str]]] = Field(default=None, description="Human-in-the-loop選択肢")
+    is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるルールベースのフォールバック結果")
 
 
 class CounterArgument(BaseModel):
@@ -90,6 +91,7 @@ class CounterArgument(BaseModel):
     counter_arguments: List[str]
     precedent_cases: List[str]
     winning_probability: float
+    is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるテンプレートのフォールバック結果")
 
 
 class AgentResponse(BaseModel):
@@ -210,6 +212,17 @@ def perform_meta_cognitive_critique(
             "【リスク予測】90日以内の審査請求（国家公安委員会/県公安委員会宛）への移行を前提とした書式準備が必要です。"
         )
         improvements.append("不開示前提の審査請求事前ドラフトを同時スタンバイ")
+    elif any(k in combined for k in ["裁判所", "最高裁", "高裁", "地裁", "司法行政", "裁判官"]):
+        vulnerability = (
+            "【弱点検知】裁判所に対する請求において最も多い却下理由は『個別訴訟記録の請求（訴訟記録閲覧制度の対象であり司法行政文書開示の対象外）』です。"
+            "また『裁判の公正・独立に支障』『率直な意見交換に支障』という取扱要綱第4条各号の包括的不開示リスクがあります。"
+        )
+        improvements.append("請求対象を個別事件記録ではなく『司法行政文書（事務処理要領・通達・会議要旨・公費契約書等）』であることを明確に限定")
+        risk_prediction = (
+            "【リスク予測】裁判官会議議事録や運用文書について一部不開示（マスキング）または取扱要綱に基づく苦情申出への移行リスク（約50%）。"
+            "代案Bとして、確定済みの執務要領・統計データ先行開示の分割請求を推奨します。"
+        )
+        improvements.append("代案B: 確定済み執務要領・統計データ先行開示オプションを準備")
     else:
         vulnerability = (
             f"【弱点検知】『{user_input[:40]}...』のような包括的表現では、窓口から『文書の特定が不十分』として"
@@ -264,46 +277,12 @@ def analyze_user_anger(user_input: str) -> Dict:
             level += 1
     level = min(level, 10)
 
-    # 対象機関の推定
-    authority_map = {
-        "市長": "anjo-city",
-        "安城市": "anjo-city",
-        "名古屋": "nagoya-city",
-        "岡崎": "okazaki-city",
-        "豊田": "toyota-city",
-        "蒲郡": "gamagori-city",
-        "愛知県": "aichi-pref",
-        "県": "aichi-pref",
-        "議会": "aichi-assembly",
-        "愛知県警": "aichi-police",
-        "警察": "aichi-police",
-        "警視庁": "metropolitan-police",
-    }
-    auth_key = "anjo-city"  # default
-    auth_name = "安城市"
-    for k, v in authority_map.items():
-        if k in user_input:
-            auth_key = v
-            break
+    # 対象機関の推定（data/authorities/*.json の aliases を長い順にマッチ）
+    from ordinance_data import match_authority_by_text, get_ordinance
 
-    if auth_key == "anjo-city":
-        auth_name = "安城市"
-    elif auth_key == "nagoya-city":
-        auth_name = "名古屋市"
-    elif auth_key == "okazaki-city":
-        auth_name = "岡崎市"
-    elif auth_key == "toyota-city":
-        auth_name = "豊田市"
-    elif auth_key == "gamagori-city":
-        auth_name = "蒲郡市"
-    elif auth_key == "aichi-pref":
-        auth_name = "愛知県"
-    elif auth_key == "aichi-assembly":
-        auth_name = "愛知県議会"
-    elif auth_key == "aichi-police":
-        auth_name = "愛知県警察本部"
-    elif auth_key == "metropolitan-police":
-        auth_name = "警視庁"
+    auth_key = match_authority_by_text(user_input, default="anjo-city")
+    ordinance = get_ordinance(auth_key)
+    auth_name = ordinance.authority if ordinance else "安城市"
 
     # 文書の特定
     documents = ["行政文書一式"]
@@ -326,10 +305,31 @@ def analyze_user_anger(user_input: str) -> Dict:
             "交付決定通知書および決裁伺書",
             "実績報告書および精算書"
         ]
+    elif any(k in user_input for k in ["裁判所", "最高裁", "高裁", "地裁", "司法行政", "裁判官"]):
+        documents = [
+            "事務処理要領・執務提要（司法行政文書）",
+            "最高裁判所通達および執務連絡文書",
+            "裁判官会議の議事録・要旨",
+            "庁舎管理・調度品・公金支出に関する決裁伺書一式"
+        ]
 
     # メタ認知批評とDAG構築の実施
     critique_result = perform_meta_cognitive_critique(user_input, auth_key, auth_name, documents)
     dag_result = build_task_dag(user_input, auth_name, documents)
+
+    # 根拠規程・期限の決定
+    if ordinance and ordinance.category == "裁判所":
+        legal_basis = ordinance.ordinance_name
+        response_time = f"{ordinance.request_deadline_days}日以内（原則30日）"
+    elif ordinance and ordinance.category == "警察":
+        legal_basis = ordinance.ordinance_name
+        response_time = f"{ordinance.request_deadline_days}日以内"
+    elif ordinance:
+        legal_basis = f"{auth_name}情報公開条例"
+        response_time = f"{ordinance.request_deadline_days}日以内"
+    else:
+        legal_basis = "情報公開条例"
+        response_time = "14日以内"
 
     return {
         "anger_level": level,
@@ -338,13 +338,14 @@ def analyze_user_anger(user_input: str) -> Dict:
         "target_authority_key": auth_key,
         "pain_summary": user_input[:100],
         "specific_documents_requested": documents,
-        "legal_basis": f"{auth_name}情報公開条例",
+        "legal_basis": legal_basis,
         "next_action": "disclosure_request",
         "urgency": "normal",
-        "recommended_response_time": "14日以内",
+        "recommended_response_time": response_time,
         "task_dag": dag_result,
         "critique": critique_result,
-        "safeguard_options": critique_result.get("safeguard_options", [])
+        "safeguard_options": critique_result.get("safeguard_options", []),
+        "is_mock": True,
     }
 
 
@@ -372,20 +373,43 @@ def get_ordinance_info(authority_key: str) -> Dict:
 
 def get_counter_argument(ground_number: str) -> Dict:
     """不開示事由に対する反論ロジックを取得（ADK Function Tool）"""
-    from ordinance_data import COMMON_COUNTER_ARGUMENTS, POLICE_COUNTER_ARGUMENTS
+    from ordinance_data import COMMON_COUNTER_ARGUMENTS, POLICE_COUNTER_ARGUMENTS, COURT_COUNTER_ARGUMENTS
 
-    all_args = {**COMMON_COUNTER_ARGUMENTS, **POLICE_COUNTER_ARGUMENTS}
+    all_args = {**COMMON_COUNTER_ARGUMENTS, **POLICE_COUNTER_ARGUMENTS, **COURT_COUNTER_ARGUMENTS}
 
     if ground_number in all_args:
+        precedents = [
+            "最判平成14年2月8日（在外日本人選挙権）",
+            "名古屋市 海外視察費開示事例（2023）",
+            "岡崎市 契約金額開示事例（2024）",
+        ]
+        if ground_number.startswith("第4条"):
+            precedents = [
+                "最高裁判所 司法行政文書開示例（裁判官会議議事要旨・事務処理要領）",
+                "最判平成11年12月16日（公文書開示・意思決定後情報の原則開示）",
+                "東京高判平成20年（司法行政文書開示苦情処理・裁量の統制）",
+            ]
+        ground_names = {
+            "第4条第1号": "個人情報",
+            "第4条第2号": "法人情報",
+            "第4条第3号": "審議・検討・協議情報",
+            "第4条第4号": "裁判所の事務処理影響情報",
+            "第4条第5号": "公共安全等情報",
+            "第5条第1号": "個人情報",
+            "第5条第2号": "法人情報",
+            "第5条第3号": "捜査情報",
+            "第5条第4号": "公共安全情報",
+            "第5条第5号": "事務執行影響",
+            "第7条第2号": "法人情報",
+            "第7条第3号": "審議検討情報",
+            "第7条第4号": "事務執行影響",
+        }
         return {
             "ground_number": ground_number,
+            "ground_name": ground_names.get(ground_number, "不開示事由"),
             "counter_arguments": all_args[ground_number],
-            "precedent_cases": [
-                "最判平成14年2月8日（在外日本人選挙権）",
-                "名古屋市 海外視察費開示事例（2023）",
-                "岡崎市 契約金額開示事例（2024）",
-            ],
-            "winning_probability": 0.72,
+            "precedent_cases": precedents,
+            "winning_probability": 0.75,
         }
     return {"error": f"Ground not found: {ground_number}"}
 
@@ -624,13 +648,14 @@ JSONのみを出力してください。
 
         tool_result = get_counter_argument(alleged_ground)
         if "error" not in tool_result:
-            return CounterArgument(**tool_result)
+            return CounterArgument(**tool_result, is_mock=True)
         return CounterArgument(
             ground_number=alleged_ground,
             ground_name="不開示事由",
             counter_arguments=["反論ロジックを構築中"],
             precedent_cases=[],
             winning_probability=0.5,
+            is_mock=True,
         )
 
     def generate_disclosure_request(
@@ -638,22 +663,40 @@ JSONのみを出力してください。
         user_input: str,
         ordinance,
         strategy_option: str = "option-fast",
-    ) -> str:
-        """開示請求書を生成（Gemini優先・Human-in-the-loop戦略反映）"""
+    ) -> tuple[str, bool]:
+        """戻り値: (請求書テキスト, is_mock)。is_mock=True はGemini未使用のテンプレート生成を示す"""
+        """開示請求書・司法行政文書開示申出書を生成（Gemini優先・Human-in-the-loop戦略反映）"""
         current_date = __import__('datetime').datetime.now().strftime("%Y年%m月%d日")
+        is_court = getattr(ordinance, "category", "") == "裁判所"
+        doc_label = "司法行政文書" if is_court else "行政文書"
+        action_verb = "申し出ます" if is_court else "請求します"
+        form_title = getattr(ordinance, "request_form", "司法行政文書開示申出書" if is_court else "情報公開請求書")
+
+        deadline_days_text = f"{ordinance.request_deadline_days}日以内"
+
         strategy_note = (
-            "【選択された方針: プランA（迅速開示重視）】\n"
-            "※ 決定期限（原則14日以内）の遵守を最優先とし、復命書・決裁書など確定済み公文書から先行交付を希望する旨を記載してください。"
+            f"【選択された方針: プランA（迅速開示重視）】\n"
+            f"※ 決定期限（原則{deadline_days_text}）の遵守を最優先とし、確定済み公文書・簿冊から先行交付を希望する旨を記載してください。"
             if strategy_option == "option-fast" else
-            "【選択された方針: プランB（網羅的徹底追及）】\n"
-            "※ 関連するメール、打ち合わせメモ、精算内訳、付属伝票を含む一切の関係簿冊の完全開示を求める旨を記載してください。"
+            f"【選択された方針: プランB（網羅的徹底追及）】\n"
+            f"※ 関連するメール、打ち合わせメモ、精算内訳、付属伝票を含む一切の関係簿冊の完全開示を求める旨を記載してください。"
         )
+
+        court_guidance = ""
+        if is_court:
+            court_guidance = (
+                "\n【重要: 裁判所特有の注意事項】\n"
+                "- 個別の裁判記録（民事・刑事の訴訟記録）は訴訟記録閲覧制度の管轄となるため、"
+                "本申出書は『司法行政文書（事務処理要領、通達、会議要旨、公費契約書、統計等）』を請求対象とする旨を明記してください。\n"
+                "- 表題は『司法行政文書開示申出書』としてください。\n"
+            )
+
         if self.genai_client:
             try:
                 prompt = f"""
-あなたは情報公開制度に精通した専門家AIです。
-市民の相談内容をもとに、自治体（{ordinance.authority}）の{ordinance.ordinance_name}に適合する正式な「情報公開請求書」のMarkdownドラフトを作成してください。
-
+あなたは情報公開制度および司法行政文書開示制度に精通した専門家AIです。
+市民の相談内容をもとに、提出先（{ordinance.authority}）の{ordinance.ordinance_name}に適合する正式な「{form_title}」のMarkdownドラフトを作成してください。
+{court_guidance}
 【市民の要望・怒り】:
 {user_input}
 
@@ -661,22 +704,23 @@ JSONのみを出力してください。
 {strategy_note}
 
 【提出先情報】:
-- 自治体/機関: {ordinance.authority}
+- 機関名: {ordinance.authority}
 - 担当窓口: {ordinance.contact}
-- 条例名: {ordinance.ordinance_name}
-- 請求日: {current_date}
+- 根拠規定: {ordinance.ordinance_name}
+- 請求日/申出日: {current_date}
 
 以下の構成でMarkdownテキストを作成してください（不要な前置きや説明は含めず、請求書面の内容のみを出力してください）：
-# 情報公開請求書
+# {form_title}
 
 ## {ordinance.authority} {ordinance.contact} 御中
-...
-### 1. 請求日
-### 2. 請求人の住所・氏名
-### 3. 開示請求する行政文書の名称又は内容（市民の要望を法的に特定しやすい公文書名・内訳書類にブレイクダウンして箇条書き）
+
+### 1. 申出日（請求日）
+### 2. 申出人（請求人）の住所・氏名
+### 3. 開示を求める{doc_label}の名称又は内容（法的に特定しやすい公文書名・内訳書類にブレイクダウンして箇条書き）
 ### 4. 開示の方法（希望）
 ### 5. 連絡先
-### 6. 請求の目的・理由
+### 6. 申出（請求）の目的・理由
+### 7. 特記事項
 """
                 response = self.genai_client.models.generate_content(
                     model="gemini-2.5-pro",
@@ -686,7 +730,7 @@ JSONのみを出力してください。
                 if text.startswith("```"):
                     lines = text.split("\n")
                     text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
-                return text.strip()
+                return text.strip(), False
             except Exception as e:
                 print(f"Gemini generate_disclosure_request error: {e}, using template")
 
@@ -694,29 +738,40 @@ JSONのみを出力してください。
         if user_input:
             documents.append(user_input[:200])
 
-        strategy_clause = (
-            "### 7. 特記事項（迅速開示オプション）\n"
-            "本件は市民の知る権利に基づく請求であり、法定決定期限（14日以内）の遵守を求めます。対象文書のうち確定済み簿冊（決裁・報告書）から先行交付されることを希望します。"
-            if strategy_option == "option-fast" else
-            "### 7. 特記事項（網羅的開示オプション）\n"
-            "本件に関する関連起案・決裁・打合せ記録・電子メール等を含め、漏れのない完全な行政文書の開示を請求します。"
-        )
+        if is_court:
+            strategy_clause = (
+                f"### 7. 特記事項（迅速開示オプション）\n"
+                f"本件は司法行政の透明性確保に基づく申出であり、取扱要綱上の決定期限（原則{ordinance.request_deadline_days}日以内）の遵守を求めます。対象司法行政文書のうち確定済み簿冊（通達・要領・会議要旨・契約書等）から先行交付されることを希望します。\n"
+                f"※ 個別の訴訟記録ではなく、司法行政文書を対象とすることを確認します。"
+                if strategy_option == "option-fast" else
+                f"### 7. 特記事項（網羅的開示オプション）\n"
+                f"本件に関する関連起案・決裁・打合せ記録・通達・電子メール等を含め、漏れのない完全な司法行政文書の開示を申し出ます。\n"
+                f"※ 個別の訴訟記録ではなく、司法行政文書を対象とすることを確認します。"
+            )
+        else:
+            strategy_clause = (
+                f"### 7. 特記事項（迅速開示オプション）\n"
+                f"本件は市民の知る権利に基づく請求であり、法定決定期限（{ordinance.request_deadline_days}日以内）の遵守を求めます。対象文書のうち確定済み簿冊（決裁・報告書）から先行交付されることを希望します。"
+                if strategy_option == "option-fast" else
+                f"### 7. 特記事項（網羅的開示オプション）\n"
+                f"本件に関する関連起案・決裁・打合せ記録・電子メール等を含め、漏れのない完全な行政文書の開示を請求します。"
+            )
 
-        return f"""# 情報公開請求書
+        return f"""# {form_title}
 
 ## {ordinance.authority} {ordinance.contact} 御中
 
-{ordinance.ordinance_name}に基づき、以下のとおり行政文書の開示を請求します。
+{ordinance.ordinance_name}に基づき、以下のとおり{doc_label}の開示を{action_verb}。
 
-### 1. 請求日
+### 1. 請求日（申出日）
 {current_date}
 
-### 2. 請求人の住所・氏名
+### 2. 請求人（申出人）の住所・氏名
 〒000-0000 〇〇市〇〇町〇丁目〇番〇号
 市民 太郎
 
-### 3. 開示請求する行政文書の名称又は内容
-{chr(10).join(['- ' + d for d in documents]) if documents else '- 関連する一切の行政文書'}
+### 3. 開示を求める{doc_label}の名称又は内容
+{chr(10).join(['- ' + d for d in documents]) if documents else f'- 関連する一切の{doc_label}'}
 
 ### 4. 開示の方法（希望）
 - [x] 写しの交付（郵送希望）
@@ -726,13 +781,13 @@ JSONのみを出力してください。
 電話：000-0000-0000
 メール：example@example.com
 
-### 6. 請求の理由・背景
-行政の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
+### 6. 請求（申出）の理由・背景
+{"司法行政" if is_court else "行政"}の透明性確保のため、市民として適切に情報を把握する必要があると考えるため。
 
 {strategy_clause}
 
-※ 本請求は {ordinance.ordinance_name} に基づく正式な開示請求です。
-"""
+※ 本{"申出" if is_court else "請求"}は {ordinance.ordinance_name} に基づく正式な開示{"申出" if is_court else "請求"}です。
+""", True
 
 
 # シングルトン

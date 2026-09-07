@@ -39,3 +39,8 @@ yarn-debug.log*
 .vercel/
 
 .vercel
+
+# Backup files
+.env.bak
+.cache/
+.claude/
