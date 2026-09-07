@@ -22,6 +22,7 @@ class EmotionAnalysis(BaseModel):
     confidence: float
     facial_landmarks_detected: bool
     emotions_breakdown: Dict[str, float]
+    is_mock: bool = False  # True の場合、YOUCAM_API_KEY未設定/API失敗によるサンプルデータ
 
 
 def analyze_anger_from_image(image_data: bytes) -> Optional[EmotionAnalysis]:
@@ -83,6 +84,7 @@ def _mock_emotion_analysis() -> EmotionAnalysis:
             "happy": 0.02,
             "surprise": 0.02,
         },
+        is_mock=True,
     )
 
 

@@ -7,6 +7,7 @@ GMI Cloudは NVIDIA-backed GPU クラウドで、
 OpenAI互換のAPIインターフェースを提供。
 """
 import os
+import json
 import requests
 from typing import List, Dict, Optional
 from pydantic import BaseModel
@@ -23,6 +24,7 @@ class OrdinanceMatch(BaseModel):
     relevance_score: float
     matched_articles: List[str]
     summary: str
+    is_mock: bool = False  # True の場合、GMI_API_KEY未設定/API失敗によるサンプルデータ
 
 
 class PrecedentMatch(BaseModel):
@@ -33,84 +35,82 @@ class PrecedentMatch(BaseModel):
     relevance_score: float
     summary: str
     url: Optional[str] = None
+    is_mock: bool = False  # True の場合、GMI_API_KEY未設定/API失敗によるサンプルデータ
+
+
+_ORDINANCE_SYSTEM_PROMPT = """あなたは情報公開条例のRAG検索システムです。
+クエリに関連する条例条文を検索し、必ず次のJSON形式のみで回答してください（前置き・説明文は一切不要）:
+
+{"results": [{"ordinance_id": "string", "authority": "string", "relevance_score": 0.0〜1.0, "matched_articles": ["string"], "summary": "string"}]}
+"""
+
+_PRECEDENT_SYSTEM_PROMPT = """あなたは情報公開・行政事件判例の検索システムです。
+クエリに関連する判例・開示事例を検索し、必ず次のJSON形式のみで回答してください（前置き・説明文は一切不要）:
+
+{"results": [{"title": "string", "source": "string", "date": "YYYY-MM-DD", "relevance_score": 0.0〜1.0, "summary": "string", "url": "string または null"}]}
+"""
+
+
+def _call_gmi(system_prompt: str, query: str) -> str:
+    """GMI Cloud (OpenAI互換 Chat Completions) を呼び出し、応答テキストを返す"""
+    response = requests.post(
+        f"{GMI_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GMI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "deepseek-v4-pro",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            "temperature": 0.0,
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _extract_json(content: str) -> dict:
+    """```json ... ``` 等のコードフェンスを剥がしてJSONとしてパースする"""
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
+    return json.loads(text.strip())
 
 
 def search_ordinances(query: str, top_k: int = 3) -> List[OrdinanceMatch]:
-    """条例RAG検索"""
+    """条例RAG検索（GMI_API_KEY未設定・API失敗時はサンプルデータに is_mock=True でフォールバック）"""
     if not GMI_API_KEY:
         return _mock_ordinance_search(query, top_k)
 
     try:
-        response = requests.post(
-            f"{GMI_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GMI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-v4-pro",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "あなたは情報公開条例のRAG検索システムです。クエリに関連する条例条文を返してください。",
-                    },
-                    {"role": "user", "content": query},
-                ],
-                "temperature": 0.0,
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        return _parse_ordinance_results(content, query, top_k)
+        content = _call_gmi(_ORDINANCE_SYSTEM_PROMPT, query)
+        parsed = _extract_json(content)
+        results = [OrdinanceMatch(**item, is_mock=False) for item in parsed["results"][:top_k]]
+        return results if results else _mock_ordinance_search(query, top_k)
     except Exception as e:
-        print(f"GMI Cloud エラー: {e}")
+        print(f"GMI Cloud エラー（条例検索）: {e}")
         return _mock_ordinance_search(query, top_k)
 
 
 def search_precedents(query: str, top_k: int = 5) -> List[PrecedentMatch]:
-    """判例・開示例のセマンティック検索"""
+    """判例・開示例のセマンティック検索（GMI_API_KEY未設定・API失敗時はサンプルデータに is_mock=True でフォールバック）"""
     if not GMI_API_KEY:
         return _mock_precedent_search(query, top_k)
 
     try:
-        response = requests.post(
-            f"{GMI_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GMI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-v4-pro",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "あなたは情報公開・行政事件判例の検索システムです。クエリに関連する判例・開示事例を返してください。",
-                    },
-                    {"role": "user", "content": query},
-                ],
-                "temperature": 0.0,
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        return _parse_precedent_results(content, top_k)
+        content = _call_gmi(_PRECEDENT_SYSTEM_PROMPT, query)
+        parsed = _extract_json(content)
+        results = [PrecedentMatch(**item, is_mock=False) for item in parsed["results"][:top_k]]
+        return results if results else _mock_precedent_search(query, top_k)
     except Exception as e:
-        print(f"GMI Cloud エラー: {e}")
+        print(f"GMI Cloud エラー（判例検索）: {e}")
         return _mock_precedent_search(query, top_k)
-
-
-def _parse_ordinance_results(content: str, query: str, top_k: int) -> List[OrdinanceMatch]:
-    """パース"""
-    return _mock_ordinance_search(query, top_k)
-
-
-def _parse_precedent_results(content: str, top_k: int) -> List[PrecedentMatch]:
-    """パース"""
-    return _mock_precedent_search("", top_k)
 
 
 def _mock_ordinance_search(query: str, top_k: int) -> List[OrdinanceMatch]:
@@ -138,7 +138,7 @@ def _mock_ordinance_search(query: str, top_k: int) -> List[OrdinanceMatch]:
             summary="部分開示の努力義務規定。黒塗り処理で対応可能な情報は開示すべき",
         ),
     ]
-    return mock_results[:top_k]
+    return [m.model_copy(update={"is_mock": True}) for m in mock_results[:top_k]]
 
 
 def _mock_precedent_search(query: str, top_k: int) -> List[PrecedentMatch]:
@@ -185,4 +185,4 @@ def _mock_precedent_search(query: str, top_k: int) -> List[PrecedentMatch]:
             url="https://www.courts.go.jp/",
         ),
     ]
-    return mock_results[:top_k]
+    return [m.model_copy(update={"is_mock": True}) for m in mock_results[:top_k]]

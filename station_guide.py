@@ -32,19 +32,14 @@ def find_nearest_government_office(
         return _mock_route(office_name)
 
     try:
-        # 駅すぱあとAPI: 経路探索
+        # 駅すぱあとAPI: 経路探索（v1.27 - /search/course は from/to を受け入れ）
         params = {
             "key": EKISPERT_API_KEY,
             "from": f"{current_lat},{current_lon}",
             "to": office_name,
-            "plane": "false",
-            "shinkansen": "false",
-            "limitedExpress": "false",
-            "bus": "false",
-            "ferry": "false",
         }
         response = requests.get(
-            f"{EKISPERT_BASE_URL}/search/course/extreme",
+            f"{EKISPERT_BASE_URL}/search/course",
             params=params,
             timeout=10,
         )
@@ -57,28 +52,39 @@ def find_nearest_government_office(
 
 
 def _parse_route(data: Dict, to_name: str) -> Dict:
-    """APIレスポンスをパース"""
+    """APIレスポンスをパース（v1.27対応）"""
     try:
         result = data["ResultSet"]["Course"][0]
         route = result["Route"]
+        # v1.27: Price は Course レベルに移動
+        price_list = result.get("Price", [])
+        fare = 0
+        for p in price_list:
+            if p.get("Type") == "Fare":
+                fare = int(p.get("Oneway", 0))
+                break
+        points = route.get("Point", [])
         return {
-            "from": route["Line"][0]["StartStation"]["Name"],
-            "to": route["Line"][-1]["EndStation"]["Name"],
-            "duration_minutes": route.get("TimeOnBoard", 0)
-            + route.get("TimeWalk", 0)
-            + route.get("TimeOther", 0),
-            "transfer_count": route.get("TransferCount", 0),
-            "fare_yen": route.get("Fare", {}).get("Oneway", 0),
-            "summary": " → ".join(
-                [line["Name"] for line in route.get("Line", [])]
+            "from": points[0].get("Station", {}).get("Name", "現在地"),
+            "to": points[-1].get("Station", {}).get("Name", to_name),
+            "duration_minutes": (
+                int(route.get("timeOnBoard", 0))
+                + int(route.get("timeWalk", 0))
+                + int(route.get("timeOther", 0))
             ),
+            "transfer_count": int(route.get("transferCount", 0)),
+            "fare_yen": fare,
+            "summary": " → ".join(
+                [line.get("Name", "") for line in route.get("Line", [])]
+            ),
+            "is_mock": False,
         }
-    except (KeyError, IndexError):
-        return _mock_route(to_name)
+    except (KeyError, IndexError, TypeError) as e:
+        return _mock_route(to_name, note=f"駅すぱあとAPIのレスポンスパースエラー: {e}")
 
 
-def _mock_route(to_name: str) -> Dict:
-    """APIキーがない場合のモック"""
+def _mock_route(to_name: str, note: str = "駅すぱあとAPIキー未設定のためサンプルデータを表示しています") -> Dict:
+    """APIキーがない場合、またはAPI呼び出し失敗時のモック"""
     return {
         "from": "現在地",
         "to": to_name,
@@ -86,89 +92,12 @@ def _mock_route(to_name: str) -> Dict:
         "transfer_count": 1,
         "fare_yen": 280,
         "summary": f"現在地 → 最寄り駅 → {to_name}",
-        "note": "駅すぱあとAPIキー未設定のためモック",
+        "is_mock": True,
+        "note": note,
     }
 
 
 def get_office_info(authority_key: str) -> Dict:
-    """対象自治体の窓口情報"""
-    offices = {
-        "anjo-city": {
-            "name": "安城市役所",
-            "address": "〒446-8501 愛知県安城市桜町18番23号",
-            "lat": 34.9587,
-            "lon": 137.0809,
-            "nearest_station": "新安城駅（名鉄西尾線）",
-        },
-        "nagoya-city": {
-            "name": "名古屋市役所",
-            "address": "〒460-8508 名古屋市中区三の丸三丁目1番2号",
-            "lat": 35.1815,
-            "lon": 136.9066,
-            "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
-        },
-        "okazaki-city": {
-            "name": "岡崎市役所",
-            "address": "〒444-8601 愛知県岡崎市十王町2丁目9番地",
-            "lat": 34.9554,
-            "lon": 137.1737,
-            "nearest_station": "東岡崎駅（名鉄名古屋本線）",
-        },
-        "aichi-pref": {
-            "name": "愛知県庁",
-            "address": "〒460-8501 名古屋市中区三の丸三丁目1番2号",
-            "lat": 35.1803,
-            "lon": 136.9067,
-            "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
-        },
-        "aichi-assembly": {
-            "name": "愛知県議会",
-            "address": "〒460-8501 名古屋市中区三の丸三丁目1番2号",
-            "lat": 35.1803,
-            "lon": 136.9067,
-            "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
-        },
-        "toyota-city": {
-            "name": "豊田市役所",
-            "address": "〒471-8501 愛知県豊田市西町3丁目60番地",
-            "lat": 35.0837,
-            "lon": 137.1561,
-            "nearest_station": "豊田市駅（名鉄三河線）",
-        },
-        "gamagori-city": {
-            "name": "蒲郡市役所",
-            "address": "〒443-8601 愛知県蒲郡市旭町17番1号",
-            "lat": 34.8276,
-            "lon": 137.2215,
-            "nearest_station": "蒲郡駅（JR東海道本線）",
-        },
-        "metropolitan-police": {
-            "name": "警視庁本部庁舎",
-            "address": "〒100-8929 東京都千代田区霞が関二丁目1番1号",
-            "lat": 35.6762,
-            "lon": 139.7528,
-            "nearest_station": "桜田門駅（東京メトロ有楽町線）",
-        },
-        "aichi-police": {
-            "name": "愛知県警察本部",
-            "address": "〒460-8502 名古屋市中区三の丸二丁目1番1号",
-            "lat": 35.1810,
-            "lon": 136.9042,
-            "nearest_station": "市役所駅（名古屋市営地下鉄名城線）",
-        },
-        "kanagawa-police": {
-            "name": "神奈川県警察本部",
-            "address": "〒231-8403 横浜市中区海岸通2丁目4番地",
-            "lat": 35.4491,
-            "lon": 139.6425,
-            "nearest_station": "日本大通り駅（みなとみらい線）",
-        },
-        "osaka-police": {
-            "name": "大阪府警察本部",
-            "address": "〒540-8540 大阪市中央区大手前三丁目1番41号",
-            "lat": 34.6863,
-            "lon": 135.5201,
-            "nearest_station": "谷町四丁目駅（Osaka Metro）",
-        },
-    }
-    return offices.get(authority_key, offices["anjo-city"])
+    """対象機関の窓口情報（data/authorities/*.json を単一の情報源として参照）"""
+    from ordinance_data import get_office_info as _get_office_info
+    return _get_office_info(authority_key)

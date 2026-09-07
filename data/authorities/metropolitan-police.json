@@ -1,0 +1,55 @@
+{
+  "key": "metropolitan-police",
+  "category": "警察",
+  "authority": "警視庁",
+  "authority_type": "警察本部",
+  "ordinance_name": "警視庁情報公開規程",
+  "ordinance_id": "平成13年警察庁訓令第9号（警視庁）",
+  "enacted": "平成13年4月1日",
+  "request_form": "警視庁情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第5条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報で、特定の個人を識別できるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第2号",
+      "name": "法人情報",
+      "description": "法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第3号",
+      "name": "捜査情報",
+      "description": "捜査の着手・手法・関係者の特定・犯人識別情報等で、開示により捜査・公判・法執行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第4号",
+      "name": "公共安全情報",
+      "description": "テロ対策・警備情報・要人警護情報等で、開示により公共の安全と秩序の維持に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第5号",
+      "name": "事務執行影響",
+      "description": "警察の事務事業の性質上、公にすることにより当該事務の適正な遂行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "警視庁情報公開審査会",
+  "contact": "警視庁総務部 情報公開センター",
+  "office": {
+    "name": "警視庁本部庁舎",
+    "address": "〒100-8929 東京都千代田区霞が関二丁目1番1号",
+    "lat": 35.6762,
+    "lon": 139.7528,
+    "nearest_station": "桜田門駅（東京メトロ有楽町線）"
+  },
+  "aliases": ["警視庁"]
+}

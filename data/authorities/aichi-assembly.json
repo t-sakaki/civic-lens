@@ -1,0 +1,43 @@
+{
+  "key": "aichi-assembly",
+  "category": "自治体",
+  "authority": "愛知県議会",
+  "authority_type": "議会",
+  "ordinance_name": "愛知県議会情報公開条例",
+  "ordinance_id": "平成12年愛知県条例第38号",
+  "enacted": "平成12年10月13日",
+  "request_form": "愛知県議会情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第7条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報",
+      "exception": ""
+    },
+    {
+      "number": "第7条第2号",
+      "name": "議会活動情報",
+      "description": "議員の政治活動に関する情報",
+      "exception": ""
+    },
+    {
+      "number": "第7条第3号",
+      "name": "議会運営情報",
+      "description": "議会の運営に関する情報で、公にすることにより議会運営に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "愛知県議会情報公開審査会",
+  "contact": "愛知県議会 事務局 議事課",
+  "office": {
+    "name": "愛知県議会",
+    "address": "〒460-8501 名古屋市中区三の丸三丁目1番2号",
+    "lat": 35.1803,
+    "lon": 136.9067,
+    "nearest_station": "市役所駅（名古屋市営地下鉄名城線）"
+  },
+  "aliases": ["愛知県議会", "議会"]
+}
