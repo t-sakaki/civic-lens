@@ -8,6 +8,7 @@ import base64
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -41,6 +42,9 @@ from visibility import (
 from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
+)
+from web3_ipfs import (
+    pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
 from web3_sbt import (
     mint_sbt, get_sbt_metadata, get_user_passport, list_available_badges
@@ -624,6 +628,46 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         "precedent_cases": precedents,
         "winning_probability": 0.74,
     }
+
+
+# ---------------------------------------------------------------------------
+# Web3 / IPFS 永久アーカイブ & 原本証明エンドポイント
+# ---------------------------------------------------------------------------
+
+@app.post("/api/web3/ipfs/pin")
+async def api_pin_to_ipfs(
+    record_id: Optional[str] = Form(None),
+    title: str = Form("開示請求書"),
+    content: str = Form(...),
+    target_authority: str = Form("自治体"),
+    situation_key: Optional[str] = Form(None),
+):
+    """開示請求書を IPFS に刻んで永久保存し、CIDを発行"""
+    rec_id = record_id or f"req-{uuid.uuid4().hex[:8]}"
+    record = await pin_to_ipfs(
+        record_id=rec_id,
+        title=title,
+        content=content,
+        target_authority=target_authority,
+        situation_key=situation_key,
+    )
+    return record.model_dump()
+
+
+@app.get("/api/web3/ipfs/record/{record_id}")
+async def api_get_ipfs_record(record_id: str):
+    """特定の開示請求書の IPFS アーカイブ情報を取得"""
+    record = get_ipfs_record(record_id)
+    if not record:
+        raise HTTPException(404, "IPFS record not found")
+    return record.model_dump()
+
+
+@app.get("/api/web3/ipfs/records")
+async def api_list_ipfs_records():
+    """すべての IPFS アーカイブを取得"""
+    records = list_all_ipfs_records()
+    return {"records": [r.model_dump() for r in records]}
 
 
 # ---------------------------------------------------------------------------
