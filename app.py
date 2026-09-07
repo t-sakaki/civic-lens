@@ -76,6 +76,16 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    """未捕捉の例外でもJSONを返す（フロントエンドの `Unexpected token ... is not valid JSON` を防止）"""
+    print(f"Unhandled exception on {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "message": str(exc)},
+    )
+
+
 def get_current_user_optional(
     authorization: Optional[str] = Header(None),
     auth_token: Optional[str] = Cookie(None),
