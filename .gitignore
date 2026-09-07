@@ -42,5 +42,12 @@ yarn-debug.log*
 
 # Backup files
 .env.bak
+.env.bak.*
 .cache/
 .claude/
+
+# Firebase Emulator Suite
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+.firebase/
