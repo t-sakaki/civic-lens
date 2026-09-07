@@ -43,6 +43,9 @@ from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
 )
+from web3_attestation import (
+    issue_attestation, get_attestation, verify_attestation, list_all_attestations
+)
 from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
@@ -628,6 +631,58 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         "precedent_cases": precedents,
         "winning_probability": 0.74,
     }
+
+
+# ---------------------------------------------------------------------------
+# Web3 / EAS (Ethereum Attestation Service) 確定日付・オンチェーン存在証明
+# ---------------------------------------------------------------------------
+
+@app.post("/api/web3/attestation/issue")
+async def api_issue_attestation(
+    record_id: Optional[str] = Form(None),
+    title: str = Form("開示請求書"),
+    content: str = Form(...),
+    authority: str = Form("自治体"),
+    legal_basis: str = Form("情報公開法・各自治体情報公開条例"),
+    user_wallet_address: Optional[str] = Form(None),
+):
+    """開示請求書に対する EAS オンチェーン存在証明（確定日付）を発行"""
+    rec_id = record_id or f"req-{uuid.uuid4().hex[:8]}"
+    attestation = issue_attestation(
+        record_id=rec_id,
+        title=title,
+        content=content,
+        authority=authority,
+        legal_basis=legal_basis,
+        user_wallet_address=user_wallet_address,
+    )
+    return attestation.model_dump()
+
+
+@app.get("/api/web3/attestation/records")
+async def api_list_attestations():
+    """発行されたすべてのアテステーション一覧を取得"""
+    records = list_all_attestations()
+    return {"attestations": [r.model_dump() for r in records]}
+
+
+@app.get("/api/web3/attestation/{uid_or_record_id}")
+async def api_get_attestation(uid_or_record_id: str):
+    """UID または record_id からアテステーション証明書を取得"""
+    record = get_attestation(uid_or_record_id)
+    if not record:
+        raise HTTPException(404, "Attestation record not found")
+    return record.model_dump()
+
+
+@app.post("/api/web3/attestation/verify")
+async def api_verify_attestation(
+    uid_or_record_id: str = Form(...),
+    content: str = Form(...),
+):
+    """現在の請求文書が発行済みアテステーションと改ざんなく一致するかオンチェーン検証"""
+    res = verify_attestation(uid_or_record_id, content)
+    return res
 
 
 # ---------------------------------------------------------------------------
