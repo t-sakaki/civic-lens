@@ -31,7 +31,17 @@ from firebase_admin import auth as firebase_auth
 from firebase_client import get_firestore_client
 
 FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "")
-SIGN_IN_WITH_PASSWORD_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+
+# ローカル/CIでFirebase Auth Emulatorが起動している場合はそちらにリクエストする
+# （FIREBASE_AUTH_EMULATOR_HOST は firebase_admin.auth も自動的に見に行く標準の環境変数）。
+# エミュレータはAPIキーの値を検証しないため、未設定でもダミー値で動作する。
+_AUTH_EMULATOR_HOST = os.getenv("FIREBASE_AUTH_EMULATOR_HOST", "")
+if _AUTH_EMULATOR_HOST:
+    SIGN_IN_WITH_PASSWORD_URL = (
+        f"http://{_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+    )
+else:
+    SIGN_IN_WITH_PASSWORD_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 
 SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "civic-lens-super-secret-key-2026")
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7日間有効
@@ -173,7 +183,8 @@ def register_user(username: str, password: str, email: Optional[str] = None) -> 
 
 def authenticate_password(username_or_email: str, password: str) -> Optional[User]:
     """ユーザー名/メールとパスワードで認証（Identity Toolkit REST APIでFirebase側の検証を実施）"""
-    if not FIREBASE_WEB_API_KEY:
+    api_key = FIREBASE_WEB_API_KEY or ("emulator-dummy-key" if _AUTH_EMULATOR_HOST else "")
+    if not api_key:
         raise RuntimeError("FIREBASE_WEB_API_KEY が設定されていません")
 
     query = username_or_email.strip().lower()
@@ -198,7 +209,7 @@ def authenticate_password(username_or_email: str, password: str) -> Optional[Use
 
     resp = requests.post(
         SIGN_IN_WITH_PASSWORD_URL,
-        params={"key": FIREBASE_WEB_API_KEY},
+        params={"key": api_key},
         json={"email": auth_email, "password": password, "returnSecureToken": False},
         timeout=10,
     )
