@@ -316,7 +316,8 @@
 
         <!-- 自治体選択 -->
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🏛️ 対象機関</h2>
+            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🏛️ 対象機関</h2>
+            <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium mb-2"></p>
             <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
                 <option value="">読み込み中...</option>
             </select>
@@ -1100,15 +1101,27 @@
             });
         }
 
-        // 対象機関一覧を取得し、カテゴリ別にグループ化して <select> を組み立てる
+        // 対象機関一覧を取得しておき、必要に応じてカテゴリで絞り込んで <select> を組み立てる
+        let allAuthorities = [];
+
         async function loadAuthorities() {
             const res = await fetch('/authorities');
             const data = await res.json();
+            allAuthorities = data.authorities;
+            renderAuthorityOptions(null);
+        }
+
+        function renderAuthorityOptions(filterCategory) {
             const select = document.getElementById('targetAuthority');
+            const previousValue = select.value;
             select.innerHTML = '';
 
+            const authorities = filterCategory
+                ? allAuthorities.filter(a => a.category === filterCategory)
+                : allAuthorities;
+
             const groups = {};
-            data.authorities.forEach(a => {
+            authorities.forEach(a => {
                 if (!groups[a.category]) groups[a.category] = [];
                 groups[a.category].push(a);
             });
@@ -1131,6 +1144,19 @@
                 });
                 select.appendChild(optgroup);
             });
+
+            // 直前の選択がまだ選択肢に残っていれば維持する
+            if ([...select.options].some(o => o.value === previousValue)) {
+                select.value = previousValue;
+            }
+
+            const hint = document.getElementById('authorityFilterHint');
+            if (hint) {
+                hint.textContent = filterCategory
+                    ? `「${filterCategory}」のみ表示中（STEP 0の選択に基づく絞り込み）`
+                    : '';
+                hint.classList.toggle('hidden', !filterCategory);
+            }
         }
 
         function selectSituation(s) {
@@ -1139,6 +1165,8 @@
                 c.classList.remove('selected');
                 if (c.dataset.key === s.key) c.classList.add('selected');
             });
+
+            renderAuthorityOptions(s.category);
 
             // シチュエーションに応じたサンプルテキストを自動入力
             fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
@@ -1149,11 +1177,13 @@
         document.getElementById('useFreeInputBtn').addEventListener('click', () => {
             document.getElementById('freeInputSection').classList.remove('hidden');
             selectedSituation = null;
+            renderAuthorityOptions(null);
         });
 
         document.getElementById('backToSituationsBtn').addEventListener('click', () => {
             document.getElementById('freeInputSection').classList.add('hidden');
             selectedSituation = null;
+            renderAuthorityOptions(null);
         });
 
         // カメラ起動
