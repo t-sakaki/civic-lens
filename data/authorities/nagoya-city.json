@@ -1,0 +1,43 @@
+{
+  "key": "nagoya-city",
+  "category": "自治体",
+  "authority": "名古屋市",
+  "authority_type": "市長",
+  "ordinance_name": "名古屋市情報公開条例",
+  "ordinance_id": "平成12年名古屋市条例第12号",
+  "enacted": "平成12年3月27日",
+  "request_form": "名古屋市情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第7条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報（事業を営む個人の当該事業に関する情報を除く）で、特定の個人を識別できるもの",
+      "exception": ""
+    },
+    {
+      "number": "第7条第2号",
+      "name": "法人情報",
+      "description": "法人その他の団体に関する情報で、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第7条第3号",
+      "name": "審議検討情報",
+      "description": "審議・検討・協議に関する情報で、公にすることで率直な意見交換等が不当に損なわれるおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "名古屋市情報公開審査会",
+  "contact": "名古屋市役所 総務局 市政情報室",
+  "office": {
+    "name": "名古屋市役所",
+    "address": "〒460-8508 名古屋市中区三の丸三丁目1番2号",
+    "lat": 35.1815,
+    "lon": 136.9066,
+    "nearest_station": "市役所駅（名古屋市営地下鉄名城線）"
+  },
+  "aliases": ["名古屋"]
+}

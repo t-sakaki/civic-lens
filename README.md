@@ -1,5 +1,8 @@
 # Civic Lens — 市民の怒りを情報公開に変換するAIエージェント
 
+[![CI Pipeline](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?logo=vercel)](https://civic-lens-jp.vercel.app)
+
 ## 🎯 概要
 
 **Civic Lens**は、市民が行政に対して抱く「怒り・不信・諦め」を、**情報公開請求・審査請求**という法的アクションに自動変換するAIエージェントです。
@@ -34,11 +37,11 @@ Civic Lens は、市民の「怒り・不信・諦め」を入力すると、AI�
 
 1. **感情解析（YouCam API）** — 市民の怒り表情を検知し、エージェントへの入力に変換
 2. **条例自動マッチング（Vertex AI + GMI Cloud）** — 市民の怒り内容から適用条例を自動特定
-3. **開示請求書自動生成** — 9機関（5自治体 + 4警察本部）対応
-4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例を交えて構築
+3. **開示請求書・司法行政文書開示申出書の自動生成** — 17機関（7自治体・議会 + 4警察本部 + 6裁判所）対応。行政文書だけでなく裁判所の「司法行政文書の開示に関する事務の取扱要綱」に基づく開示請求にも完全対応
+4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例（自治体条例、警察情報公開規程、裁判所取扱要綱）を交えて構築
 5. **期限管理（60日ルール等）** — Cloud Scheduler で自動通知
-6. **市役所までの経路案内（駅すぱあとAPI）** — 市民が実際に行動する後押し
-7. **シチュエーション別テンプレート** — 8種類（海外視察、公共事業、補助金、人事、環境、委託、条例、災害）から選ぶだけ
+6. **窓口までの経路案内（駅すぱあとAPI）** — 市民が実際に行動する後押し
+7. **シチュエーション別テンプレート** — 13種類（海外視察、公共事業、補助金、警察事案、裁判所司法行政・予算執行等）から選ぶだけ
 
 ## 🛠️ 技術スタック
 
@@ -67,6 +70,7 @@ SequentialAgent (civic_lens_integrated)
 - **Tailwind CSS** — UI
 - **Cloud Run** — デプロイ
 - **Cloud Scheduler** — 期限通知cron
+- **Firebase Authentication + Firestore** — ユーザー認証（メール/パスワード・Web3ウォレット）、開示請求記録・フォーク・スターの永続化。Cloud Runのステートレスなコンテナ間でもデータを保持するために使用
 
 ## 📁 ファイル構成
 
@@ -98,8 +102,12 @@ export GEMINI_API_KEY="your-gemini-api-key"
 export GMI_API_KEY="your-gmi-api-key"
 export EKISPERT_API_KEY="your-ekispert-key"
 export YOUCAM_API_KEY="your-youcam-key"
+export FIREBASE_WEB_API_KEY="your-firebase-web-api-key"
 
-# 3. 起動
+# 3. Firestoreへのアクセス権を設定（ローカル開発時のみ）
+gcloud auth application-default login
+
+# 4. 起動
 uvicorn app:app --host 0.0.0.0 --port 8080
 ```
 

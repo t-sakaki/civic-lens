@@ -34,7 +34,20 @@
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
+    <div class="container mx-auto px-4 py-6 max-w-4xl">
+        <!-- ナビゲーション & 認証ステータスバー (NEW!) -->
+        <div class="flex items-center justify-between mb-8 pb-3 border-b border-gray-200">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-gray-800 text-sm tracking-wide">🔍 Civic Lens</span>
+                <span class="text-xs bg-indigo-50 text-indigo-700 font-mono px-2 py-0.5 rounded border border-indigo-200">Web & Web3 Auth</span>
+            </div>
+            <div id="authNavArea" class="flex items-center gap-2">
+                <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 px-3.5 py-1.5 rounded-full hover:bg-gray-100 shadow-sm transition">
+                    <span>👤</span> ログイン / 新規登録
+                </button>
+            </div>
+        </div>
+
         <!-- ヘッダー -->
         <header class="text-center mb-12">
             <h1 class="text-5xl font-bold text-gray-900 mb-4">🔍 Civic Lens</h1>
@@ -109,19 +122,7 @@
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">🏛️ 対象機関</h2>
             <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
-                <optgroup label="─── 自治体 ───">
-                    <option value="anjo-city">安城市（市長）</option>
-                    <option value="nagoya-city">名古屋市（市長）</option>
-                    <option value="okazaki-city">岡崎市（市長）</option>
-                    <option value="aichi-pref">愛知県（知事）</option>
-                    <option value="aichi-assembly">愛知県議会</option>
-                </optgroup>
-                <optgroup label="─── 警察 ───">
-                    <option value="metropolitan-police">🚔 警視庁（東京）</option>
-                    <option value="aichi-police">🚔 愛知県警察本部</option>
-                    <option value="kanagawa-police">🚔 神奈川県警察本部</option>
-                    <option value="osaka-police">🚔 大阪府警察本部</option>
-                </optgroup>
+                <option value="">読み込み中...</option>
             </select>
         </section>
 
@@ -325,6 +326,73 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Web3: Civic Reputation SBT（市民名誉バッジNFT） -->
+            <div class="mt-6 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 rounded-lg border-2 border-fuchsia-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-purple-900 flex items-center gap-2">
+                        <span>🏅 Web3 Civic Reputation SBT (Soulbound Token)</span>
+                        <span class="text-xs bg-fuchsia-100 text-fuchsia-800 px-2 py-0.5 rounded-full border border-fuchsia-300 font-mono">ERC-5192</span>
+                    </h3>
+                    <span class="text-xs text-fuchsia-700 bg-white px-2 py-1 rounded shadow-sm font-medium">譲渡不能・市民実績証明</span>
+                </div>
+                <p class="text-xs text-purple-800 mb-3 leading-relaxed">
+                    行政への開示請求や集合知への還元は、社会を良くする確固たる市民の功績です。第三者への転売・譲渡ができない <strong>Soulbound Token (SBT)</strong> として、あなたの市民実績をウォレット／Civic IDに刻みます。
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-3 items-center">
+                    <button id="mintSbtBtn" class="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-md hover:from-purple-700 hover:to-fuchsia-700 font-semibold shadow flex items-center justify-center gap-2 transition">
+                        <span>🏅</span> 市民実績 SBT をミントする (First Disclosure)
+                    </button>
+                    <span id="sbtMintStatus" class="text-xs text-gray-500"></span>
+                </div>
+
+                <!-- SBTバッジ獲得結果カード -->
+                <div id="sbtResultCard" class="hidden mt-4 bg-white p-5 rounded-md border-2 border-fuchsia-300 text-sm shadow space-y-3">
+                    <div class="flex items-center justify-between border-b pb-2 border-fuchsia-100">
+                        <span class="font-bold text-gray-800 flex items-center gap-2">
+                            <span>🎖️</span> <span id="sbtBadgeName">開示請求イニシエーター</span>
+                        </span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-fuchsia-100 text-fuchsia-800">
+                            🔒 譲渡不能 (Soulbound: Locked)
+                        </span>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row items-center gap-4">
+                        <!-- 動的SVGプレビュー -->
+                        <div id="sbtSvgContainer" class="w-44 h-44 shrink-0 rounded-xl overflow-hidden shadow-lg border border-gray-200">
+                        </div>
+
+                        <!-- メタデータ詳細 -->
+                        <div class="flex-1 space-y-1.5 text-xs">
+                            <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                <span class="text-gray-500">Token ID:</span>
+                                <div id="sbtTokenId" class="font-mono font-bold text-purple-800 break-all select-all mt-0.5">-</div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span class="text-gray-500">授与先 Civic ID:</span>
+                                    <div id="sbtRecipient" class="font-bold text-gray-800">-</div>
+                                </div>
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span class="text-gray-500">規格 / ネットワーク:</span>
+                                    <div class="font-semibold text-gray-700">ERC-5192 (Base L2)</div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                <span class="text-gray-500">オンチェーン TxHash:</span>
+                                <div id="sbtTxHash" class="font-mono text-gray-600 break-all select-all">-</div>
+                            </div>
+                            <div class="pt-1 flex items-center justify-between">
+                                <span class="text-xs text-gray-500">ウォレットアプリ（MetaMask, Rainbow）で表示可能</span>
+                                <a id="sbtMetadataLink" href="#" target="_blank" rel="noopener noreferrer" class="text-purple-600 hover:underline font-bold">
+                                    JSON メタデータを表示 ↗
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- STEP 6: 経路案内 -->
@@ -374,6 +442,9 @@
                 <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="警察">
                     🚔 警察
                 </button>
+                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="裁判所">
+                    ⚖️ 裁判所
+                </button>
             </div>
 
             <!-- Public フィード -->
@@ -390,7 +461,92 @@
         </footer>
     </div>
 
+    <!-- 👤 ユーザー認証モーダル (Web & Web3 ハイブリッド) -->
+    <div id="authModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+            <button id="closeAuthModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+            
+            <div class="text-center mb-5">
+                <h3 class="text-xl font-bold text-gray-800">👤 Civic Lens ログイン / アカウント</h3>
+                <p class="text-xs text-gray-500 mt-1">請求履歴の保護やマイページ管理をご利用いただけます</p>
+            </div>
+
+            <!-- タブ切り替え -->
+            <div class="flex border-b border-gray-200 mb-5">
+                <button id="tabPasswordBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600">
+                    📧 メール / パスワード
+                </button>
+                <button id="tabWalletBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                    🦊 Web3 ウォレット
+                </button>
+            </div>
+
+            <!-- パネル 1: パスワード認証 -->
+            <div id="panelPassword" class="space-y-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span id="authModeLabel" class="text-xs font-bold text-gray-700">ログイン</span>
+                    <button type="button" id="toggleAuthModeBtn" class="text-xs text-indigo-600 hover:underline">
+                        アカウントをお持ちでない方（新規登録）
+                    </button>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">ユーザー名 または メールアドレス</label>
+                    <input type="text" id="authUsernameInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="taro_yamada">
+                </div>
+
+                <div id="emailFieldContainer" class="hidden">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">メールアドレス（任意）</label>
+                    <input type="email" id="authEmailInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="taro@example.com">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">パスワード</label>
+                    <input type="password" id="authPasswordInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="6文字以上">
+                </div>
+
+                <button id="submitPasswordAuthBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-md text-sm shadow transition mt-2">
+                    ログインする
+                </button>
+                <div id="authStatusMsg" class="text-xs text-center mt-2"></div>
+            </div>
+
+            <!-- パネル 2: Web3 ウォレット認証 (SIWE) -->
+            <div id="panelWallet" class="hidden space-y-4 py-2">
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 leading-relaxed">
+                    🦊 <strong>Web3 Sign-In with Ethereum</strong><br>
+                    MetaMaskなどのブラウザ拡張機能ウォレットを接続して、パスワードレスで即時ログインできます。
+                </div>
+
+                <button id="connectWalletAuthBtn" type="button" class="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-3 rounded-lg text-sm shadow flex items-center justify-center gap-2 transition">
+                    <span>🦊</span> MetaMask でワンクリックログイン
+                </button>
+
+                <div id="walletStatusMsg" class="text-xs text-center text-gray-500"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📂 マイ請求履歴モーダル -->
+    <div id="myRecordsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative border border-gray-200 max-h-[85vh] flex flex-col">
+            <button id="closeMyRecordsModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+            
+            <div class="mb-4 border-b pb-3">
+                <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <span>📂</span> マイ請求履歴（アカウント保管庫）
+                </h3>
+                <p class="text-xs text-gray-500 mt-1">あなたが作成・保存した開示請求書の一覧です（Private保存分も含め完全保護）</p>
+            </div>
+
+            <div id="myRecordsList" class="flex-1 overflow-y-auto space-y-3 pr-1 text-sm">
+                <div class="text-center text-gray-400 py-8">読み込み中...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        let currentUser = null;
         let selectedSituation = null;
         let cameraStream = null;
         let capturedImageData = null;
@@ -526,6 +682,39 @@
             });
         }
 
+        // 対象機関一覧を取得し、カテゴリ別にグループ化して <select> を組み立てる
+        async function loadAuthorities() {
+            const res = await fetch('/authorities');
+            const data = await res.json();
+            const select = document.getElementById('targetAuthority');
+            select.innerHTML = '';
+
+            const groups = {};
+            data.authorities.forEach(a => {
+                if (!groups[a.category]) groups[a.category] = [];
+                groups[a.category].push(a);
+            });
+
+            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const allCategories = [
+                ...categoryOrder.filter(c => groups[c]),
+                ...Object.keys(groups).filter(c => !categoryOrder.includes(c)),
+            ];
+
+            allCategories.forEach(category => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = `─── ${category} ───`;
+                groups[category].forEach(a => {
+                    const option = document.createElement('option');
+                    option.value = a.key;
+                    const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
+                    option.textContent = `${icon}${a.name}（${a.type}）`;
+                    optgroup.appendChild(option);
+                });
+                select.appendChild(optgroup);
+            });
+        }
+
         function selectSituation(s) {
             selectedSituation = s;
             document.querySelectorAll('.situation-card').forEach(c => {
@@ -616,11 +805,19 @@
             }
         });
 
+        // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
+        function mockBadge(isMock, label) {
+            if (!isMock) return '';
+            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ APIキー未設定のためサンプルデータです（${label}）</div>`;
+        }
+
         function displayAnalysis(data) {
             const analysis = data.anger_analysis;
 
             const angerPercent = (analysis.anger_level / 10) * 100;
             document.getElementById('angerDisplay').innerHTML = `
+                ${mockBadge(analysis.is_mock, 'AI怒り分析')}
+                ${mockBadge(data.emotion_is_mock, '表情感情解析')}
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
                         <div class="anger-meter h-4 rounded-full"></div>
@@ -758,6 +955,7 @@
                 </div>
                 <div class="bg-white border p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">📄 開示請求書</h3>
+                    ${mockBadge(data.is_mock, 'AI文書生成')}
                     <pre class="whitespace-pre-wrap text-sm font-mono">${data.request_text}</pre>
                 </div>
                 <div class="bg-green-50 p-4 rounded-md">
@@ -816,14 +1014,16 @@
                 formData.append('target_authority', targetAuthority);
                 formData.append('visibility', visibility);
                 if (situationKey) formData.append('situation_key', situationKey);
+                if (currentUser && currentUser.user_id) formData.append('user_id', currentUser.user_id);
 
                 const res = await fetch('/api/visibility/create', { method: 'POST', body: formData });
                 const data = await res.json();
 
+                const authNote = currentUser ? '（マイアカウントに記録）' : '';
                 if (data.visibility === 'public') {
-                    document.getElementById('saveStatus').innerHTML = `✅ 公開保存しました（<strong>${data.anonymous_user_id}</strong> として公開されます）`;
+                    document.getElementById('saveStatus').innerHTML = `✅ 公開保存しました（<strong>${data.anonymous_user_id}</strong> として公開されます）${authNote}`;
                 } else {
-                    document.getElementById('saveStatus').innerHTML = `✅ 非公開で保存しました`;
+                    document.getElementById('saveStatus').innerHTML = `✅ 非公開で保存しました ${authNote}`;
                 }
             } catch (err) {
                 document.getElementById('saveStatus').innerHTML = `<span style="color: red;">エラー: ${err.message}</span>`;
@@ -839,9 +1039,14 @@
             currentDisclosureText = data.request_text;
             currentTargetAuthority = data.authority;
             currentRecordTitle = data.ordinance_name ? `${data.ordinance_name}に基づく開示請求` : '開示請求書';
+
             // IPFS状態をリセット
             document.getElementById('ipfsResultCard').classList.add('hidden');
             document.getElementById('ipfsPinStatus').textContent = '';
+
+            // SBTカードリセット
+            document.getElementById('sbtResultCard').classList.add('hidden');
+            document.getElementById('sbtMintStatus').textContent = '';
             originalDisplayDisclosure(data);
         };
 
@@ -879,7 +1084,7 @@
                 document.getElementById('ipfsCidText').textContent = data.cid;
                 document.getElementById('ipfsFileSize').textContent = data.file_size;
                 document.getElementById('ipfsPinnedAt').textContent = new Date(data.pinned_at).toLocaleString('ja-JP');
-                
+
                 const gwLink = document.getElementById('ipfsGatewayLink');
                 gwLink.href = data.gateway_url;
 
@@ -899,6 +1104,54 @@
             navigator.clipboard.writeText(cid).then(() => {
                 alert('IPFS CIDをクリップボードにコピーしました:\n' + cid);
             });
+        });
+
+        // SBT ミントボタンのハンドラ
+        document.getElementById('mintSbtBtn').addEventListener('click', async () => {
+            if (!currentDisclosureText) {
+                alert('先に開示請求書を生成してください。');
+                return;
+            }
+
+            const btn = document.getElementById('mintSbtBtn');
+            const statusEl = document.getElementById('sbtMintStatus');
+            const resultCard = document.getElementById('sbtResultCard');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> ERC-5192 SBTコントラクト呼び出し・SVGオンチェーン生成中...';
+            statusEl.textContent = '市民監視官バッジをミント中...';
+
+            try {
+                // 市民IDの取得（未保存なら市民#+乱数）
+                const citizenId = '市民#' + Math.floor(10000 + Math.random() * 90000);
+
+                const formData = new FormData();
+                formData.append('recipient_id', citizenId);
+                formData.append('badge_key', 'first_request');
+
+                const res = await fetch('/api/web3/sbt/mint', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error('SBTミントに失敗しました');
+
+                const data = await res.json();
+
+                // UI更新
+                document.getElementById('sbtBadgeName').textContent = data.badge_name;
+                document.getElementById('sbtTokenId').textContent = data.token_id;
+                document.getElementById('sbtRecipient').textContent = data.recipient_id;
+                document.getElementById('sbtTxHash').textContent = data.tx_hash;
+                document.getElementById('sbtSvgContainer').innerHTML = data.svg_image;
+
+                const metaLink = document.getElementById('sbtMetadataLink');
+                metaLink.href = `/api/web3/sbt/metadata/${data.token_id}`;
+
+                resultCard.classList.remove('hidden');
+                statusEl.textContent = '✨ 譲渡不能 SBT バッジが正常にミントされました！';
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🏅</span> 市民実績 SBT をミントする (First Disclosure)';
+            }
         });
 
         // =====================================================
@@ -944,7 +1197,9 @@
                 const date = new Date(r.created_at).toLocaleDateString('ja-JP');
                 const categoryBadge = r.category === '警察'
                     ? '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">🚔 警察</span>'
-                    : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>';
+                    : (r.category === '裁判所'
+                        ? '<span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">⚖️ 裁判所</span>'
+                        : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>');
                 const statusBadge = r.status === 'responded'
                     ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">✅ 開示あり</span>'
                     : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">⏳ 申請中</span>';
@@ -1121,8 +1376,271 @@
             });
         });
 
+        // =====================================================
+        // ユーザー認証 & マイ請求履歴（Web & Web3 ハイブリッド）
+        // =====================================================
+        let authMode = 'login'; // 'login' or 'register'
+
+        // ログイン状態確認
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/me');
+                const data = await res.json();
+                const navArea = document.getElementById('authNavArea');
+
+                if (data.authenticated && data.user) {
+                    currentUser = data.user;
+                    navArea.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                                <span>👤</span> <span>${currentUser.username}</span>
+                                <span class="text-gray-400 font-normal">|</span>
+                                <span class="text-indigo-600 font-mono text-[11px]">${currentUser.civic_id}</span>
+                            </span>
+                            <button id="openMyRecordsBtn" type="button" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded hover:bg-indigo-50 transition">
+                                📂 マイ請求
+                            </button>
+                            <button id="logoutBtn" type="button" class="text-xs text-gray-500 hover:text-red-600 px-2 py-1 rounded hover:bg-gray-100 transition">
+                                ログアウト
+                            </button>
+                        </div>
+                    `;
+
+                    document.getElementById('openMyRecordsBtn').addEventListener('click', openMyRecordsModal);
+                    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+                } else {
+                    currentUser = null;
+                    navArea.innerHTML = `
+                        <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 px-3.5 py-1.5 rounded-full hover:bg-gray-100 shadow-sm transition">
+                            <span>👤</span> ログイン / 新規登録
+                        </button>
+                    `;
+                    document.getElementById('openAuthModalBtn').addEventListener('click', () => {
+                        document.getElementById('authModal').classList.remove('hidden');
+                    });
+                }
+            } catch (err) {
+                console.error('Auth check error:', err);
+            }
+        }
+
+        // モーダル開閉
+        const authModal = document.getElementById('authModal');
+        const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
+        if (closeAuthModalBtn) {
+            closeAuthModalBtn.addEventListener('click', () => authModal.classList.add('hidden'));
+        }
+
+        // タブ切り替え（パスワード vs Web3）
+        const tabPasswordBtn = document.getElementById('tabPasswordBtn');
+        const tabWalletBtn = document.getElementById('tabWalletBtn');
+        const panelPassword = document.getElementById('panelPassword');
+        const panelWallet = document.getElementById('panelWallet');
+
+        tabPasswordBtn.addEventListener('click', () => {
+            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600';
+            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+            panelPassword.classList.remove('hidden');
+            panelWallet.classList.add('hidden');
+        });
+
+        tabWalletBtn.addEventListener('click', () => {
+            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600';
+            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+            panelWallet.classList.remove('hidden');
+            panelPassword.classList.add('hidden');
+        });
+
+        // ログイン / 新規登録切り替え
+        const toggleAuthModeBtn = document.getElementById('toggleAuthModeBtn');
+        const authModeLabel = document.getElementById('authModeLabel');
+        const submitPasswordAuthBtn = document.getElementById('submitPasswordAuthBtn');
+        const emailFieldContainer = document.getElementById('emailFieldContainer');
+
+        toggleAuthModeBtn.addEventListener('click', () => {
+            if (authMode === 'login') {
+                authMode = 'register';
+                authModeLabel.textContent = '新規ユーザー登録';
+                submitPasswordAuthBtn.textContent = 'アカウントを作成してログイン';
+                emailFieldContainer.classList.remove('hidden');
+                toggleAuthModeBtn.textContent = 'すでにアカウントをお持ちの方（ログイン）';
+            } else {
+                authMode = 'login';
+                authModeLabel.textContent = 'ログイン';
+                submitPasswordAuthBtn.textContent = 'ログインする';
+                emailFieldContainer.classList.add('hidden');
+                toggleAuthModeBtn.textContent = 'アカウントをお持ちでない方（新規登録）';
+            }
+            document.getElementById('authStatusMsg').textContent = '';
+        });
+
+        // パスワード認証サブミット
+        submitPasswordAuthBtn.addEventListener('click', async () => {
+            const username = document.getElementById('authUsernameInput').value.trim();
+            const password = document.getElementById('authPasswordInput').value;
+            const email = document.getElementById('authEmailInput').value.trim();
+            const statusMsg = document.getElementById('authStatusMsg');
+
+            if (!username || !password) {
+                statusMsg.innerHTML = '<span class="text-red-500">ユーザー名とパスワードを入力してください</span>';
+                return;
+            }
+
+            submitPasswordAuthBtn.disabled = true;
+            statusMsg.textContent = '通信中...';
+
+            try {
+                const formData = new FormData();
+                if (authMode === 'register') {
+                    formData.append('username', username);
+                    formData.append('password', password);
+                    if (email) formData.append('email', email);
+                    const res = await fetch('/api/auth/register', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || '登録に失敗しました');
+                } else {
+                    formData.append('username_or_email', username);
+                    formData.append('password', password);
+                    const res = await fetch('/api/auth/login', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail || 'ログインに失敗しました');
+                }
+
+                statusMsg.innerHTML = '<span class="text-green-600">✅ 認証成功！</span>';
+                authModal.classList.add('hidden');
+                await checkAuthStatus();
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                submitPasswordAuthBtn.disabled = false;
+            }
+        });
+
+        // Web3 ウォレットログイン (SIWE)
+        document.getElementById('connectWalletAuthBtn').addEventListener('click', async () => {
+            const statusMsg = document.getElementById('walletStatusMsg');
+            if (!window.ethereum) {
+                alert('MetaMask などのWeb3ブラウザウォレットが見つかりませんでした。\nMetaMask拡張機能をインストールするか、メール/パスワードでログインしてください。');
+                return;
+            }
+
+            statusMsg.textContent = 'ウォレット接続待機中...';
+
+            try {
+                // アカウントリクエスト
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (!accounts || accounts.length === 0) {
+                    throw new Error('ウォレットアドレスの取得が拒否されました');
+                }
+                const walletAddress = accounts[0];
+
+                // Nonce取得（サーバー側で発行・記録され、1回限り使用可能）
+                const nonceRes = await fetch('/api/auth/nonce');
+                const { nonce } = await nonceRes.json();
+
+                statusMsg.textContent = '署名を確認してください（ウォレットに署名リクエストが表示されます）...';
+
+                // SIWEメッセージに署名（このメッセージは auth.build_siwe_message() と完全一致させる必要がある）
+                const message =
+                    'Civic Lens にサインインします。\n' +
+                    'このリクエストは送金やトランザクションの承認ではありません。\n\n' +
+                    `Wallet: ${walletAddress}\n` +
+                    `Nonce: ${nonce}`;
+
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, walletAddress],
+                });
+
+                statusMsg.textContent = '署名認証中...';
+
+                // サーバーへウォレットログインリクエスト（署名を検証してもらう）
+                const formData = new FormData();
+                formData.append('wallet_address', walletAddress);
+                formData.append('nonce', nonce);
+                formData.append('signature', signature);
+
+                const res = await fetch('/api/auth/login-wallet', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'ウォレットログインに失敗しました');
+
+                statusMsg.innerHTML = '<span class="text-green-600">✅ ウォレットログイン成功！</span>';
+                authModal.classList.add('hidden');
+                await checkAuthStatus();
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            }
+        });
+
+        // ログアウト
+        async function handleLogout() {
+            if (!confirm('ログアウトしますか？')) return;
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                currentUser = null;
+                await checkAuthStatus();
+                alert('ログアウトしました');
+            } catch (err) {
+                console.error('Logout failed:', err);
+            }
+        }
+
+        // マイ請求履歴モーダル
+        const myRecordsModal = document.getElementById('myRecordsModal');
+        const closeMyRecordsModalBtn = document.getElementById('closeMyRecordsModalBtn');
+        closeMyRecordsModalBtn.addEventListener('click', () => myRecordsModal.classList.add('hidden'));
+
+        async function openMyRecordsModal() {
+            myRecordsModal.classList.remove('hidden');
+            const listEl = document.getElementById('myRecordsList');
+            listEl.innerHTML = '<div class="text-center text-gray-400 py-8">履歴を読み込み中...</div>';
+
+            try {
+                const res = await fetch('/api/auth/my-records');
+                if (!res.ok) throw new Error('マイ請求履歴の取得に失敗しました');
+                const data = await res.json();
+                const records = data.records;
+
+                if (records.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="text-center text-gray-400 py-8">
+                            まだ保存した請求がありません。<br>
+                            開示請求書を作成し「💾 保存する」を押すと、ここに保管されます。
+                        </div>
+                    `;
+                    return;
+                }
+
+                listEl.innerHTML = records.map(r => {
+                    const date = new Date(r.created_at).toLocaleDateString('ja-JP');
+                    const visBadge = r.visibility === 'public'
+                        ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">🌐 Public</span>'
+                        : '<span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">🔒 Private</span>';
+
+                    return `
+                        <div class="border border-gray-200 rounded-lg p-3 hover:border-indigo-300 transition bg-gray-50/50">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-gray-800 text-xs">🏛️ ${r.target_authority}</span>
+                                    ${visBadge}
+                                </div>
+                                <span class="text-xs text-gray-400">${date}</span>
+                            </div>
+                            <div class="text-xs text-gray-600 bg-white p-2 rounded border border-gray-100 line-clamp-2">
+                                ${r.user_input || r.request_text.substring(0, 100)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                listEl.innerHTML = `<div class="text-red-500 text-center py-6">エラー: ${err.message}</div>`;
+            }
+        }
+
         // 起動
+        checkAuthStatus();
         loadSituations();
+        loadAuthorities();
         loadPublicFeed();
     </script>
 </body>

@@ -1,0 +1,43 @@
+{
+  "key": "aichi-pref",
+  "category": "自治体",
+  "authority": "愛知県",
+  "authority_type": "知事",
+  "ordinance_name": "愛知県情報公開条例",
+  "ordinance_id": "平成12年愛知県条例第37号",
+  "enacted": "平成12年10月13日",
+  "request_form": "愛知県情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第7条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報",
+      "exception": ""
+    },
+    {
+      "number": "第7条第2号",
+      "name": "法人情報",
+      "description": "法人等に関する情報で、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第7条第3号",
+      "name": "事務執行影響",
+      "description": "県が行う事務又は事業に関する情報のうち、その性質上、公にすることにより当該事務の適正な執行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "愛知県情報公開審査会",
+  "contact": "愛知県庁 県民文化部 県民総務課 広報広聴室",
+  "office": {
+    "name": "愛知県庁",
+    "address": "〒460-8501 名古屋市中区三の丸三丁目1番2号",
+    "lat": 35.1803,
+    "lon": 136.9067,
+    "nearest_station": "市役所駅（名古屋市営地下鉄名城線）"
+  },
+  "aliases": ["愛知県", "県庁", "知事"]
+}

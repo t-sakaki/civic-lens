@@ -1,0 +1,55 @@
+{
+  "key": "aichi-police",
+  "category": "警察",
+  "authority": "愛知県警察本部",
+  "authority_type": "警察本部",
+  "ordinance_name": "愛知県警察本部情報公開規程",
+  "ordinance_id": "愛知県公安委員会規則第10号",
+  "enacted": "平成13年4月1日",
+  "request_form": "愛知県警察本部情報公開請求書",
+  "request_deadline_days": 30,
+  "extension_days": 30,
+  "review_period_days": 90,
+  "non_disclosure_grounds": [
+    {
+      "number": "第5条第1号",
+      "name": "個人情報",
+      "description": "個人に関する情報で特定の個人を識別できるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第2号",
+      "name": "法人情報",
+      "description": "法人等の正当な利益を害するおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第3号",
+      "name": "捜査情報",
+      "description": "捜査関係事項で、開示により捜査・公判・法執行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第4号",
+      "name": "公共安全情報",
+      "description": "警備・要人警護・テロ対策情報で、公共の安全と秩序の維持に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    },
+    {
+      "number": "第5条第5号",
+      "name": "事務執行影響",
+      "description": "警察の事務事業の性質上、公にすることにより当該事務の適正な遂行に支障を及ぼすおそれがあるもの",
+      "exception": ""
+    }
+  ],
+  "review_authority": "愛知県警察本部情報公開審査会",
+  "contact": "愛知県警察本部 総務課 情報公開室",
+  "office": {
+    "name": "愛知県警察本部",
+    "address": "〒460-8502 名古屋市中区三の丸二丁目1番1号",
+    "lat": 35.1810,
+    "lon": 136.9042,
+    "nearest_station": "市役所駅（名古屋市営地下鉄名城線）"
+  },
+  "aliases": ["愛知県警", "愛知県警察", "警察"]
+}
