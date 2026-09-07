@@ -279,6 +279,73 @@
 
                 <div id="saveStatus" class="mt-2 text-sm"></div>
             </div>
+
+            <!-- Web3: Civic Reputation SBT（市民名誉バッジNFT） -->
+            <div class="mt-6 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-5 rounded-lg border-2 border-fuchsia-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-purple-900 flex items-center gap-2">
+                        <span>🏅 Web3 Civic Reputation SBT (Soulbound Token)</span>
+                        <span class="text-xs bg-fuchsia-100 text-fuchsia-800 px-2 py-0.5 rounded-full border border-fuchsia-300 font-mono">ERC-5192</span>
+                    </h3>
+                    <span class="text-xs text-fuchsia-700 bg-white px-2 py-1 rounded shadow-sm font-medium">譲渡不能・市民実績証明</span>
+                </div>
+                <p class="text-xs text-purple-800 mb-3 leading-relaxed">
+                    行政への開示請求や集合知への還元は、社会を良くする確固たる市民の功績です。第三者への転売・譲渡ができない <strong>Soulbound Token (SBT)</strong> として、あなたの市民実績をウォレット／Civic IDに刻みます。
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-3 items-center">
+                    <button id="mintSbtBtn" class="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white px-5 py-2.5 rounded-md hover:from-purple-700 hover:to-fuchsia-700 font-semibold shadow flex items-center justify-center gap-2 transition">
+                        <span>🏅</span> 市民実績 SBT をミントする (First Disclosure)
+                    </button>
+                    <span id="sbtMintStatus" class="text-xs text-gray-500"></span>
+                </div>
+
+                <!-- SBTバッジ獲得結果カード -->
+                <div id="sbtResultCard" class="hidden mt-4 bg-white p-5 rounded-md border-2 border-fuchsia-300 text-sm shadow space-y-3">
+                    <div class="flex items-center justify-between border-b pb-2 border-fuchsia-100">
+                        <span class="font-bold text-gray-800 flex items-center gap-2">
+                            <span>🎖️</span> <span id="sbtBadgeName">開示請求イニシエーター</span>
+                        </span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-fuchsia-100 text-fuchsia-800">
+                            🔒 譲渡不能 (Soulbound: Locked)
+                        </span>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row items-center gap-4">
+                        <!-- 動的SVGプレビュー -->
+                        <div id="sbtSvgContainer" class="w-44 h-44 shrink-0 rounded-xl overflow-hidden shadow-lg border border-gray-200">
+                        </div>
+
+                        <!-- メタデータ詳細 -->
+                        <div class="flex-1 space-y-1.5 text-xs">
+                            <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                <span class="text-gray-500">Token ID:</span>
+                                <div id="sbtTokenId" class="font-mono font-bold text-purple-800 break-all select-all mt-0.5">-</div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span class="text-gray-500">授与先 Civic ID:</span>
+                                    <div id="sbtRecipient" class="font-bold text-gray-800">-</div>
+                                </div>
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span class="text-gray-500">規格 / ネットワーク:</span>
+                                    <div class="font-semibold text-gray-700">ERC-5192 (Base L2)</div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                <span class="text-gray-500">オンチェーン TxHash:</span>
+                                <div id="sbtTxHash" class="font-mono text-gray-600 break-all select-all">-</div>
+                            </div>
+                            <div class="pt-1 flex items-center justify-between">
+                                <span class="text-xs text-gray-500">ウォレットアプリ（MetaMask, Rainbow）で表示可能</span>
+                                <a id="sbtMetadataLink" href="#" target="_blank" rel="noopener noreferrer" class="text-purple-600 hover:underline font-bold">
+                                    JSON メタデータを表示 ↗
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- STEP 6: 経路案内 -->
@@ -919,12 +986,66 @@
         });
 
         // displayDisclosureの中でcurrentDisclosureTextを保存
+        let currentRecordTitle = '開示請求書';
         const originalDisplayDisclosure = displayDisclosure;
         displayDisclosure = function(data) {
             currentDisclosureText = data.request_text;
             currentTargetAuthority = data.authority;
+            currentRecordTitle = data.ordinance_name ? `${data.ordinance_name}に基づく開示請求` : '開示請求書';
+            
+            // SBTカードリセット
+            document.getElementById('sbtResultCard').classList.add('hidden');
+            document.getElementById('sbtMintStatus').textContent = '';
             originalDisplayDisclosure(data);
         };
+
+        // SBT ミントボタンのハンドラ
+        document.getElementById('mintSbtBtn').addEventListener('click', async () => {
+            if (!currentDisclosureText) {
+                alert('先に開示請求書を生成してください。');
+                return;
+            }
+
+            const btn = document.getElementById('mintSbtBtn');
+            const statusEl = document.getElementById('sbtMintStatus');
+            const resultCard = document.getElementById('sbtResultCard');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> ERC-5192 SBTコントラクト呼び出し・SVGオンチェーン生成中...';
+            statusEl.textContent = '市民監視官バッジをミント中...';
+
+            try {
+                // 市民IDの取得（未保存なら市民#+乱数）
+                const citizenId = '市民#' + Math.floor(10000 + Math.random() * 90000);
+
+                const formData = new FormData();
+                formData.append('recipient_id', citizenId);
+                formData.append('badge_key', 'first_request');
+
+                const res = await fetch('/api/web3/sbt/mint', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error('SBTミントに失敗しました');
+
+                const data = await res.json();
+
+                // UI更新
+                document.getElementById('sbtBadgeName').textContent = data.badge_name;
+                document.getElementById('sbtTokenId').textContent = data.token_id;
+                document.getElementById('sbtRecipient').textContent = data.recipient_id;
+                document.getElementById('sbtTxHash').textContent = data.tx_hash;
+                document.getElementById('sbtSvgContainer').innerHTML = data.svg_image;
+                
+                const metaLink = document.getElementById('sbtMetadataLink');
+                metaLink.href = `/api/web3/sbt/metadata/${data.token_id}`;
+
+                resultCard.classList.remove('hidden');
+                statusEl.textContent = '✨ 譲渡不能 SBT バッジが正常にミントされました！';
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🏅</span> 市民実績 SBT をミントする (First Disclosure)';
+            }
+        });
 
         // =====================================================
         // Public ダッシュボード（みんなの請求）

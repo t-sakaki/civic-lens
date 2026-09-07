@@ -42,6 +42,9 @@ from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
 )
+from web3_sbt import (
+    mint_sbt, get_sbt_metadata, get_user_passport, list_available_badges
+)
 from auth import (
     User, register_user, authenticate_password, authenticate_wallet,
     create_session_token, verify_session_token, get_user_by_id,
@@ -621,6 +624,48 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         "precedent_cases": precedents,
         "winning_probability": 0.74,
     }
+
+
+# ---------------------------------------------------------------------------
+# Web3 / Civic Reputation SBT (Soulbound Token / 譲渡不能バッジNFT)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/web3/sbt/mint")
+async def api_mint_sbt(
+    recipient_id: str = Form("市民#00001"),
+    badge_key: str = Form("first_request"),
+    wallet_address: Optional[str] = Form(None),
+):
+    """市民の開示請求・集合知貢献に対して譲渡不能SBTバッジを発行"""
+    record = mint_sbt(
+        recipient_id=recipient_id,
+        badge_key=badge_key,
+        wallet_address=wallet_address,
+    )
+    return record.model_dump()
+
+
+@app.get("/api/web3/sbt/badges")
+async def api_list_sbt_badges():
+    """獲得可能なSBTバッジの一覧を取得"""
+    badges = list_available_badges()
+    return {"badges": badges}
+
+
+@app.get("/api/web3/sbt/metadata/{token_id}")
+async def api_get_sbt_metadata(token_id: str):
+    """ERC-721 / ERC-5192 準拠のToken URIメタデータを取得"""
+    meta = get_sbt_metadata(token_id)
+    if not meta:
+        raise HTTPException(404, "SBT not found")
+    return meta
+
+
+@app.get("/api/web3/sbt/passport/{recipient_id_or_wallet}")
+async def api_get_user_passport(recipient_id_or_wallet: str):
+    """特定ユーザーまたはウォレットが保有するSBT一覧（シビック・パスポート）を取得"""
+    records = get_user_passport(recipient_id_or_wallet)
+    return {"passport": [r.model_dump() for r in records]}
 
 
 # ---------------------------------------------------------------------------
