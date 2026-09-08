@@ -6,6 +6,13 @@
     <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
     <meta name="description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
 
+    <!-- Favicon -->
+    <link rel="icon" href="/static/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/favicon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+
     <!-- OGP (Facebook, LINE, Slack など) -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Civic Lens">
@@ -127,7 +134,6 @@
                 animation: none;
             }
         }
-
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
         #userInput::placeholder {
             color: #4b5563; /* ダークグレイ */
@@ -315,7 +321,7 @@
             <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
             <div class="grid md:grid-cols-2 gap-6">
-                <!-- テキスト入力 -->
+                <!-- テキスト入力（チャット風） -->
                 <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -330,6 +336,7 @@
                             <span id="voiceStatusText">音声入力（話して入力）</span>
                         </button>
                     </div>
+
                     <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
                     <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
                         <span class="relative flex h-2.5 w-2.5">
