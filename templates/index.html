@@ -106,6 +106,21 @@
                 animation: none;
             }
         }
+        .no-scrollbar {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .prompt-chip {
+            flex-shrink: 0;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .prompt-chip:hover {
+            transform: translateY(-1px);
+        }
 
         /* --- 思考中インジケーター (Thinking Indicator) --- */
         .thinking-box {
@@ -280,7 +295,7 @@
 
             <div class="mt-4 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-gray-100">
                 <button id="useFreeInputBtn" class="text-sm text-blue-600 hover:underline">
-                    ↑ どれも違う / 具体的な不満を直接入力 →
+                    ↓ 自分の言葉で直接入力する
                 </button>
                 <button id="globalVoiceBtn" type="button" class="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow hover:from-red-600 hover:to-rose-700 transition transform hover:scale-105">
                     <span class="text-base">🎙️</span>
@@ -289,12 +304,13 @@
             </div>
         </section>
 
-        <!-- STEP 1: 感情入力 -->
-        <section id="freeInputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
+        <!-- STEP 1: 感情入力（チャット感覚でそのまま入力可能） -->
+        <section id="freeInputSection" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-1 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
+            <p class="text-sm text-gray-500 mb-4">STEP 0で選ばなくても大丈夫。下のチャット欄にそのまま話しかけてください。</p>
 
             <div class="grid md:grid-cols-2 gap-6">
-                <!-- テキスト入力 -->
+                <!-- テキスト入力（チャット風） -->
                 <div>
                     <div class="flex justify-between items-center mb-2">
                         <label class="block text-sm font-medium text-gray-700">言葉で伝える</label>
@@ -303,7 +319,18 @@
                             <span id="voiceStatusText">音声入力（話して入力）</span>
                         </button>
                     </div>
-                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+
+                    <!-- 💡 プロンプトのヒント（サジェストチップ） -->
+                    <div class="mb-2">
+                        <div class="flex items-center gap-1.5 text-[11px] text-indigo-600 font-semibold mb-1.5">
+                            <span>💡</span><span>入力のヒント（タップして入力）</span>
+                        </div>
+                        <div id="promptSuggestions" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                            <!-- 動的に生成 -->
+                        </div>
+                    </div>
+
+                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="ここに直接入力してOKです。例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
                     <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
                         <span class="relative flex h-2.5 w-2.5">
                           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -325,10 +352,6 @@
                     </div>
                 </div>
             </div>
-
-            <button id="backToSituationsBtn" class="mt-4 text-sm text-blue-600 hover:underline">
-                ← シチュエーション選択に戻る
-            </button>
         </section>
 
         <!-- 自治体選択 -->
@@ -1191,17 +1214,46 @@
             });
         }
 
+        // すでに常時表示されているチャット欄まで滑らかにスクロールしてフォーカスする
         document.getElementById('useFreeInputBtn').addEventListener('click', () => {
-            document.getElementById('freeInputSection').classList.remove('hidden');
             selectedSituation = null;
             renderAuthorityOptions(null);
+            const userInput = document.getElementById('userInput');
+            userInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            userInput.focus();
         });
 
-        document.getElementById('backToSituationsBtn').addEventListener('click', () => {
-            document.getElementById('freeInputSection').classList.add('hidden');
-            selectedSituation = null;
-            renderAuthorityOptions(null);
-        });
+        // 💡 入力のヒント（サジェストチップ） — チャットのプロンプト例のように、タップで即入力
+        const PROMPT_SUGGESTIONS = [
+            '町内会館の建設費が高すぎる気がする。内訳を知りたい。',
+            '生活保護の申請を窓口で門前払いされた。記録を確認したい。',
+            '近所の道路工事がずっと終わらない。工程表を見たい。',
+            '議員の政務活動費の使い道が不透明で納得できない。',
+            '保育園の待機児童数の実態が公表されている数字と違う気がする。',
+            'ゴミ収集の民間委託費用が高すぎるのでは？契約内容を知りたい。',
+        ];
+
+        function renderPromptSuggestions() {
+            const container = document.getElementById('promptSuggestions');
+            if (!container) return;
+            container.innerHTML = '';
+            PROMPT_SUGGESTIONS.forEach(text => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'prompt-chip px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 hover:border-indigo-300';
+                chip.textContent = text.length > 24 ? text.slice(0, 24) + '…' : text;
+                chip.title = text;
+                chip.addEventListener('click', () => {
+                    selectedSituation = null;
+                    renderAuthorityOptions(null);
+                    const userInput = document.getElementById('userInput');
+                    userInput.value = text;
+                    userInput.focus();
+                });
+                container.appendChild(chip);
+            });
+        }
+        renderPromptSuggestions();
 
         // カメラ起動
         document.getElementById('startCamera').addEventListener('click', async () => {
