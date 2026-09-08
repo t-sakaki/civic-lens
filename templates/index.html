@@ -74,6 +74,109 @@
         .cl-cta:hover {
             background: linear-gradient(90deg, #ffbb55 0%, #f2924c 100%);
         }
+        /* --- 左サイドメニュー（履歴一覧）。ハンバーガーで開閉できる --- */
+        .cl-hamburger-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.16);
+            color: #EDEDF2;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .cl-hamburger-btn:hover { background: rgba(255,255,255,0.12); }
+        .cl-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 300px;
+            max-width: 84vw;
+            height: 100vh;
+            background: var(--cl-bg2);
+            border-right: 1px solid rgba(242, 169, 59, 0.18);
+            z-index: 60;
+            transform: translateX(-100%);
+            transition: transform 0.22s ease;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+        }
+        .cl-sidebar.cl-sidebar-open {
+            transform: translateX(0);
+        }
+        .cl-sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        .cl-sidebar-title {
+            color: #EDEDF2;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+        .cl-sidebar-close-btn {
+            background: transparent;
+            border: none;
+            color: #9CA3AF;
+            font-size: 1.1rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 4px 6px;
+            border-radius: 6px;
+        }
+        .cl-sidebar-close-btn:hover { background: rgba(255,255,255,0.08); color: #EDEDF2; }
+        .cl-sidebar-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 8px;
+        }
+        .cl-sidebar-empty {
+            color: #6B7280;
+            font-size: 0.78rem;
+            padding: 10px 8px;
+        }
+        .cl-history-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            margin-bottom: 2px;
+            cursor: default;
+        }
+        .cl-history-item:hover { background: rgba(255,255,255,0.06); }
+        .cl-history-item-main {
+            color: #EDEDF2;
+            font-size: 0.8rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .cl-history-item-meta {
+            color: #8B93A7;
+            font-size: 0.7rem;
+        }
+        .cl-sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease;
+        }
+        .cl-sidebar-overlay.cl-sidebar-overlay-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
         .anger-meter {
             background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
         }
@@ -288,10 +391,25 @@
     </style>
 </head>
 <body class="min-h-screen">
+    <!-- 左サイドメニュー（履歴一覧）。ハンバーガーボタンで開閉。Claude Codeの履歴パネルを参考にしたUI -->
+    <div id="sidebarOverlay" class="cl-sidebar-overlay"></div>
+    <aside id="historySidebar" class="cl-sidebar" aria-hidden="true">
+        <div class="cl-sidebar-header">
+            <span class="cl-sidebar-title">🕒 履歴</span>
+            <button id="closeSidebarBtn" type="button" class="cl-sidebar-close-btn" aria-label="履歴メニューを閉じる">✕</button>
+        </div>
+        <div id="sidebarHistoryBody" class="cl-sidebar-body">
+            <p class="cl-sidebar-empty">まだ履歴はありません</p>
+        </div>
+    </aside>
+
     <div class="container mx-auto px-4 py-6 max-w-4xl">
         <!-- ナビゲーション & 認証ステータスバー (NEW!) -->
         <div class="cl-navbar flex items-center justify-between mb-8 pb-3 px-4 pt-3 rounded-xl border">
             <div class="flex items-center gap-2">
+                <button id="openSidebarBtn" type="button" class="cl-hamburger-btn" aria-label="履歴メニューを開く" aria-expanded="false" aria-controls="historySidebar">
+                    <span aria-hidden="true">☰</span>
+                </button>
                 <a href="/" class="font-bold text-white text-sm tracking-wide hover:text-amber-300 transition">🔍 Civic Lens</a>
                 <span class="cl-badge text-xs font-mono px-2 py-0.5 rounded border">Web & Web3 Auth</span>
             </div>
@@ -380,12 +498,7 @@
             </button>
             <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
             <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
-            <div id="municipalityHistoryWrap" class="mt-2 hidden">
-                <button id="toggleMunicipalityHistoryBtn" type="button" class="text-xs text-gray-500 hover:underline">
-                    🕒 特定履歴を表示
-                </button>
-                <ul id="municipalityHistoryList" class="hidden mt-1 space-y-1 text-xs text-gray-600 border-l-2 border-gray-200 pl-2"></ul>
-            </div>
+            <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
         </section>
 
         <!-- 解析ボタン -->
@@ -1430,9 +1543,8 @@
         };
 
         async function loadMunicipalityHistory() {
-            const wrap = document.getElementById('municipalityHistoryWrap');
-            const list = document.getElementById('municipalityHistoryList');
-            if (!wrap || !list) return;
+            const body = document.getElementById('sidebarHistoryBody');
+            if (!body) return;
             try {
                 const sessionId = getOrCreateSessionId();
                 const url = sessionId
@@ -1442,24 +1554,47 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 const records = data.records || [];
-                wrap.classList.toggle('hidden', records.length === 0);
-                list.innerHTML = records.map(r => {
+                if (records.length === 0) {
+                    body.innerHTML = '<p class="cl-sidebar-empty">まだ履歴はありません</p>';
+                    return;
+                }
+                body.innerHTML = records.map(r => {
                     const label = municipalityHistoryStatusLabels[r.status] || r.status;
                     const when = new Date(r.created_at).toLocaleString('ja-JP');
                     const authority = r.authority_name ? `（${r.authority_name}）` : '';
-                    return `<li>${when} — ${r.full_name}${authority} ${label}</li>`;
+                    return `
+                        <div class="cl-history-item">
+                            <span class="cl-history-item-main">${r.full_name}${authority}</span>
+                            <span class="cl-history-item-meta">${when} ・ ${label}</span>
+                        </div>
+                    `;
                 }).join('');
             } catch (e) {
                 // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
             }
         }
 
-        const toggleMunicipalityHistoryBtn = document.getElementById('toggleMunicipalityHistoryBtn');
-        if (toggleMunicipalityHistoryBtn) {
-            toggleMunicipalityHistoryBtn.addEventListener('click', () => {
-                document.getElementById('municipalityHistoryList').classList.toggle('hidden');
-            });
+        // --- 左サイドメニュー（履歴一覧）の開閉。Claude Codeのようにハンバーガーで開閉できる ---
+        const historySidebar = document.getElementById('historySidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const openSidebarBtn = document.getElementById('openSidebarBtn');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+
+        function setSidebarOpen(open) {
+            if (!historySidebar || !sidebarOverlay) return;
+            historySidebar.classList.toggle('cl-sidebar-open', open);
+            historySidebar.setAttribute('aria-hidden', open ? 'false' : 'true');
+            sidebarOverlay.classList.toggle('cl-sidebar-overlay-open', open);
+            if (openSidebarBtn) openSidebarBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) loadMunicipalityHistory();
         }
+
+        if (openSidebarBtn) openSidebarBtn.addEventListener('click', () => setSidebarOpen(true));
+        if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => setSidebarOpen(false));
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => setSidebarOpen(false));
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') setSidebarOpen(false);
+        });
 
         function selectSituation(s) {
             selectedSituation = s;
