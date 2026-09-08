@@ -31,6 +31,7 @@ class MunicipalityHistoryRecord(BaseModel):
     status: str  # "found" / "found_pooled" / "researching" / "failed"
     authority_key: Optional[str] = None
     authority_name: Optional[str] = None
+    candidates: List[str] = []  # 都道府県・周辺市区町村を含む候補機関名の一覧
     created_at: str
 
 
@@ -54,6 +55,7 @@ def create_record(
     status: str,
     authority_key: Optional[str] = None,
     authority_name: Optional[str] = None,
+    candidates: Optional[List[str]] = None,
     session_id: Optional[str] = None,
     ip: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -72,6 +74,7 @@ def create_record(
         status=status,
         authority_key=authority_key,
         authority_name=authority_name,
+        candidates=candidates or [],
         created_at=datetime.utcnow().isoformat() + "Z",
     )
     _collection().document(record.id).set(record.model_dump())
