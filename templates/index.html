@@ -89,6 +89,23 @@
             background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
         }
+        /* --- アイコンの「呼吸」アニメーション（エージェントが生きている感を演出） --- */
+        .situation-emoji {
+            display: inline-block;
+            transform-origin: center;
+        }
+        @keyframes emojiBreathe {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.18) translateY(-3px); }
+        }
+        .situation-card:hover .situation-emoji {
+            animation: emojiBreathe 1.4s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .situation-card:hover .situation-emoji {
+                animation: none;
+            }
+        }
 
         /* --- 思考中インジケーター (Thinking Indicator) --- */
         .thinking-box {
@@ -1093,7 +1110,7 @@
                 card.className = 'situation-card border-2 border-gray-200 rounded-lg p-3 text-center hover:border-blue-400';
                 card.dataset.key = s.key;
                 card.innerHTML = `
-                    <div class="text-3xl mb-1">${s.emoji}</div>
+                    <div class="situation-emoji text-3xl mb-1">${s.emoji}</div>
                     <div class="font-semibold text-sm">${s.label}</div>
                 `;
                 card.addEventListener('click', () => selectSituation(s));
