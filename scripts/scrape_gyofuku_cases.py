@@ -14,7 +14,7 @@
 - 実行は手動・低頻度（本スクリプトを人間が明示的に実行した場合のみ）を想定している。
 
 ## 使い方
-    .venv/bin/python scripts/scrape_gyofuku_cases.py [--max-pages-per-query 3]
+    .venv/bin/python scripts/scrape_gyofuku_cases.py [--max-pages-per-query 6]
 
 Playwright (Chromium) が必要:
     pip install playwright && python -m playwright install chromium
@@ -43,8 +43,13 @@ TARGET_LAW_KEYWORDS = [
     "公文書等の管理",
 ]
 
-# 検索クエリ（フリーワード）。各キーワード×「認容」で検索する。
-SEARCH_KEYWORDS = ["情報公開", "個人情報保護", "公文書管理"]
+# 検索クエリ（フリーワード）。
+# 従来は「法令キーワード + 認容」（例:「情報公開 認容」）で検索していたが、
+# フリーワード検索が両語を含む文書に絞り込む(AND的な)挙動のため取りこぼしが大きく、
+# 実際には「認容」単独で検索した場合の総件数（裁決382件・答申471件、2026年時点）の
+# 1割強しか収集できていなかった。そのため「認容」単独で検索し、法令の関連性は
+# 取得後に _is_relevant_law() でローカルにフィルタする方式に変更した。
+SEARCH_KEYWORDS = ["認容"]
 
 WAIT_BETWEEN_REQUESTS_SEC = 2.0
 
@@ -130,7 +135,7 @@ def _clean(text: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def scrape(max_pages_per_query: int = 3, max_records: int = 300, headless: bool = True) -> list[PrecedentCase]:
+def scrape(max_pages_per_query: int = 6, max_records: int = 1000, headless: bool = True) -> list[PrecedentCase]:
     from playwright.sync_api import sync_playwright
 
     collected: dict[str, PrecedentCase] = {}
@@ -160,7 +165,7 @@ def _scrape_one_query(browser, cfg: dict, keyword: str, max_pages: int,
         page.wait_for_load_state("networkidle")
         time.sleep(WAIT_BETWEEN_REQUESTS_SEC)
 
-        page.fill("#freewordQuery", f"{keyword} 認容")
+        page.fill("#freewordQuery", keyword)
         page.select_option("#sortOrder", cfg["sort_order_value"])
         page.click("#dispCount4")  # 100件表示
         page.click("button.large.search")
@@ -184,6 +189,9 @@ def _scrape_one_query(browser, cfg: dict, keyword: str, max_pages: int,
                 case_id = f'{cfg["vc"]}-{row["case_ref_id"]}'
                 if case_id in collected:
                     continue
+                matched_law_keyword = next(
+                    (k for k in TARGET_LAW_KEYWORDS if k in row["basis_laws"]), keyword
+                )
                 source_url = (
                     f'{SITE_ROOT}/Main?vc=&sc=select&{"J004" if cfg["vc"] == "J002" else "J007"}='
                     f'&{cfg["id_field"]}={row["case_ref_id"]}'
@@ -201,7 +209,7 @@ def _scrape_one_query(browser, cfg: dict, keyword: str, max_pages: int,
                     summary=row["summary"],
                     source_url=source_url,
                     attribution=f"出典：行政不服審査裁決・答申検索データベース（{source_url}）",
-                    matched_keyword=keyword,
+                    matched_keyword=matched_law_keyword,
                     collected_at=now_iso,
                 )
 
@@ -296,8 +304,8 @@ def save(cases: list[PrecedentCase]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-pages-per-query", type=int, default=3)
-    parser.add_argument("--max-records", type=int, default=300)
+    parser.add_argument("--max-pages-per-query", type=int, default=6)
+    parser.add_argument("--max-records", type=int, default=1000)
     parser.add_argument("--headful", action="store_true")
     args = parser.parse_args()
 
