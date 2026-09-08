@@ -1,7 +1,7 @@
 {
   "source": "総務省 行政不服審査裁決・答申検索データベース (https://fufukudb.search.soumu.go.jp/koukai/Main)",
   "license_note": "本データは公共データ利用規約(PDL1.0)に基づき、出典明記のうえ利用しています。各裁決・答申の全文の著作権は当該行政庁に帰属する場合があるため、全文は保存せず検索結果一覧の概要スニペットのみを保持しています。原文は各レコードのsource_urlを参照してください。",
-  "updated_at": "2026-09-08T17:59:16.599057+00:00",
+  "updated_at": "2026-09-08T23:12:15.753613+00:00",
   "count": 45,
   "cases": [
     {
@@ -18,7 +18,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=14386",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=14386）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-13297",
@@ -34,7 +34,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=13297",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=13297）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-12522",
@@ -50,7 +50,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=12522",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=12522）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-12523",
@@ -66,7 +66,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=12523",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=12523）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-9653",
@@ -82,7 +82,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=9653",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=9653）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-8721",
@@ -98,7 +98,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=8721",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=8721）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-6660",
@@ -114,7 +114,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=6660",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=6660）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-6144",
@@ -130,7 +130,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=6144",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=6144）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-5722",
@@ -146,7 +146,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5722",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5722）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-7714",
@@ -162,7 +162,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=7714",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=7714）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-7716",
@@ -178,7 +178,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=7716",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=7716）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-5983",
@@ -194,7 +194,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5983",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5983）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-5984",
@@ -210,7 +210,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5984",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=5984）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3800",
@@ -226,7 +226,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3800",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3800）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3801",
@@ -242,7 +242,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3801",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3801）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3790",
@@ -258,7 +258,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3790",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3790）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-2316",
@@ -274,7 +274,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=2316",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=2316）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-2448",
@@ -290,7 +290,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=2448",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=2448）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3534",
@@ -306,7 +306,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3534",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3534）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3535",
@@ -322,7 +322,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3535",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3535）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J002-3762",
@@ -338,7 +338,7 @@
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3762",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J004=&saiketsuId=3762）",
       "matched_keyword": "個人情報保護",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-10107",
@@ -349,28 +349,28 @@
       "basis_laws": "池田市 情報公開 条例",
       "decision_date": "2025/03/24",
       "document_number": "令和６年度答申第３号",
-      "result": "行政文書一部開示決定に関する審査請求を一部 認容 し、処分庁が特定漏れの事実を認める 行政文書を特定の上で、池田市 情報公開 条例第７条各号に規定する不開示情報を除いて開示し、その余の部分については棄却すべ…",
-      "summary": "2025/04/03",
+      "result": "一部認容",
+      "summary": "行政文書一部開示決定に関する審査請求を一部 認容 し、処分庁が特定漏れの事実を認める 行政文書を特定の上で、池田市 情報公開 条例第７条各号に規定する不開示情報を除いて開示し、その余の部分については棄却すべ…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=10107",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=10107）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-10680",
       "category": "答申",
-      "authority": "熊本市 情報公開 ・個人情報保護審議会",
-      "council_name": "熊本県熊本市",
+      "authority": "熊本県熊本市",
+      "council_name": "熊本市 情報公開 ・個人情報保護審議会",
       "kind": "審査請求",
       "basis_laws": "熊本市 情報公開 条例",
       "decision_date": "2025/03/07",
       "document_number": "087",
-      "result": "…ある。②実施機関が行った文書等開示（一部請求拒否）決定及び文書等開示請求拒否決定は、妥当である（一部 認容 ）。",
-      "summary": "2025/06/02",
+      "result": "一部認容",
+      "summary": "…ある。②実施機関が行った文書等開示（一部請求拒否）決定及び文書等開示請求拒否決定は、妥当である（一部 認容 ）。",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=10680",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=10680）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-9629",
@@ -381,12 +381,12 @@
       "basis_laws": "池田市 情報公開 条例",
       "decision_date": "2024/09/04",
       "document_number": "令和６年度答申第１号",
-      "result": "行政文書一部開示決定に関する審査請求を一部 認容 し、処分庁池田市長が特定漏れの事実を認める行政文書を特定の上で、池田市 情報公開 条例第７条各号に規定する不開示情報を除いて開示し、その余の部分については棄却…",
-      "summary": "2024/09/30",
+      "result": "一部認容",
+      "summary": "行政文書一部開示決定に関する審査請求を一部 認容 し、処分庁池田市長が特定漏れの事実を認める行政文書を特定の上で、池田市 情報公開 条例第７条各号に規定する不開示情報を除いて開示し、その余の部分については棄却…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=9629",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=9629）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-9262",
@@ -397,28 +397,28 @@
       "basis_laws": "草加市 情報公開 条例",
       "decision_date": "2024/05/31",
       "document_number": "答申第８号",
-      "result": "審査請求人が令和５年９月１３日付けで提起した草加市長による草加市 情報公開 条例に基づく公文書非公開決定処分に対する審査請求について、これを 認容 し、本件処分を取り消すべきであると考えます。",
-      "summary": "",
+      "result": "認容",
+      "summary": "審査請求人が令和５年９月１３日付けで提起した草加市長による草加市 情報公開 条例に基づく公文書非公開決定処分に対する審査請求について、これを 認容 し、本件処分を取り消すべきであると考えます。",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=9262",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=9262）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-11508",
       "category": "答申",
-      "authority": "大阪市個人情報保護審議会",
-      "council_name": "大阪府大阪市",
+      "authority": "大阪府大阪市",
+      "council_name": "大阪市個人情報保護審議会",
       "kind": "審査請求",
       "basis_laws": "大阪市個人情報保護条例第４０条第２項",
       "decision_date": "2024/03/29",
       "document_number": "大個審答申第206号",
-      "result": "…することの検証を求めます。 (15) さらに、処分庁がした弁明書提出期限の怠り、職務専念義務の怠り、審議手続きの妨害行為について 認容 を、処分庁に求めます。 ア 処分庁は、本庁行政課の 情報公開 グル…",
-      "summary": "",
+      "result": "認容",
+      "summary": "…することの検証を求めます。 (15) さらに、処分庁がした弁明書提出期限の怠り、職務専念義務の怠り、審議手続きの妨害行為について 認容 を、処分庁に求めます。 ア 処分庁は、本庁行政課の 情報公開 グル…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11508",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11508）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-5411",
@@ -429,12 +429,12 @@
       "basis_laws": "向日市 情報公開 条例",
       "decision_date": "2021/07/12",
       "document_number": "３向情審答申第１号",
-      "result": "審査請求人の請求の一部を 認容 し、その余に関する請求を棄却すべきである。3向情審答申第1号令和3年7月12日実施機関向日市長安田守様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第15条第1項の規定…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "審査請求人の請求の一部を 認容 し、その余に関する請求を棄却すべきである。3向情審答申第1号令和3年7月12日実施機関向日市長安田守様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第15条第1項の規定…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=5411",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=5411）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-4671",
@@ -445,12 +445,12 @@
       "basis_laws": "向日市 情報公開 条例",
       "decision_date": "2020/10/02",
       "document_number": "2向情審答申第2号",
-      "result": "審査請求人の請求の一部を 認容 し、その余に関する請求を棄却すべきである。2向情審答申第2号令和2年10月2日実施機関向日市公平委員会委員長山口義治様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第1…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "審査請求人の請求の一部を 認容 し、その余に関する請求を棄却すべきである。2向情審答申第2号令和2年10月2日実施機関向日市公平委員会委員長山口義治様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第1…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=4671",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=4671）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-4670",
@@ -461,12 +461,12 @@
       "basis_laws": "向日市 情報公開 条例",
       "decision_date": "2020/08/03",
       "document_number": "2向情審答申第1号",
-      "result": "本件審査請求を 認容 し、本件処分を取り消すべきである。2向情審答申第1号令和2年8月3日実施機関向日市長安田守様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第15条第1項の規定に基づく諮問について…",
-      "summary": "",
+      "result": "認容",
+      "summary": "本件審査請求を 認容 し、本件処分を取り消すべきである。2向情審答申第1号令和2年8月3日実施機関向日市長安田守様向日市 情報公開 審査会会長本多滝夫向日市 情報公開 条例第15条第1項の規定に基づく諮問について…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=4670",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=4670）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-6546",
@@ -477,12 +477,12 @@
       "basis_laws": "文京区 情報公開 条例第１２条第１項",
       "decision_date": "2019/10/01",
       "document_number": "令和元年度（情審）答申第１号",
-      "result": "本件第１審査請求及び本件第２審査請求は 、いずれも 認容 されるべきである。諮問番号:平成30年度(情審)諮問第2号答申番号:令和元年度(情審)答申第1号答申書第1審査会の結論審査請求人○○○○(以下｢審…",
-      "summary": "2019/11/05",
+      "result": "認容",
+      "summary": "本件第１審査請求及び本件第２審査請求は 、いずれも 認容 されるべきである。諮問番号:平成30年度(情審)諮問第2号答申番号:令和元年度(情審)答申第1号答申書第1審査会の結論審査請求人○○○○(以下｢審…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=6546",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=6546）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2146",
@@ -493,60 +493,60 @@
       "basis_laws": "磐田市個人情報保護条例",
       "decision_date": "2018/11/30",
       "document_number": "答申第１号",
-      "result": "実施機関が行った自己情報一部開示決定の一部を 認容 し、その他の部分は実施機関の決定は妥当である。磐個第4号平成30年11月30日磐田市長渡部修様磐田市個人情報保護審査会会長佐藤和美磐田市個人情報保護条例…",
-      "summary": "2019/03/15",
+      "result": "一部認容",
+      "summary": "実施機関が行った自己情報一部開示決定の一部を 認容 し、その他の部分は実施機関の決定は妥当である。磐個第4号平成30年11月30日磐田市長渡部修様磐田市個人情報保護審査会会長佐藤和美磐田市個人情報保護条例…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2146",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2146）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2275",
       "category": "答申",
-      "authority": "青梅市 情報公開 ・個人情報保護審査会",
-      "council_name": "青梅市病院事業管理者",
+      "authority": "青梅市病院事業管理者",
+      "council_name": "青梅市 情報公開 ・個人情報保護審査会",
       "kind": "審査請求",
       "basis_laws": "青梅市 情報公開 条例",
       "decision_date": "2018/09/20",
       "document_number": "平成３０年９月２０日青情個審査第１４号",
-      "result": "…頭復命に使用した一切の関係書類を不存在と した公文書不存在決定処分の取消しを求める請求については、これを 認容 すべきであ る。 (2) 審査請求人のその余の本件審査請求については、これを棄却すべきであ…",
-      "summary": "2018/11/22",
+      "result": "認容",
+      "summary": "…頭復命に使用した一切の関係書類を不存在と した公文書不存在決定処分の取消しを求める請求については、これを 認容 すべきであ る。 (2) 審査請求人のその余の本件審査請求については、これを棄却すべきであ…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2275",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2275）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2276",
       "category": "答申",
-      "authority": "青梅市 情報公開 ・個人情報保護審査会",
-      "council_name": "東京都青梅市",
+      "authority": "東京都青梅市",
+      "council_name": "青梅市 情報公開 ・個人情報保護審査会",
       "kind": "審査請求",
       "basis_laws": "青梅市 情報公開 条例",
       "decision_date": "2018/09/20",
       "document_number": "平成３０年９月２０日青情個審査第１５号",
-      "result": "審査請求人の本件審査請求は、これを 認容 すべきである。公文書公開請求に対する不作為にかかる審査請求について(答申)1審査会の結論審査請求人の本件審査請求は､これを 認容 すべきである｡2審査請求の趣旨審査請…",
-      "summary": "2018/11/22",
+      "result": "認容",
+      "summary": "審査請求人の本件審査請求は、これを 認容 すべきである。公文書公開請求に対する不作為にかかる審査請求について(答申)1審査会の結論審査請求人の本件審査請求は､これを 認容 すべきである｡2審査請求の趣旨審査請…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2276",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2276）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-1694",
       "category": "答申",
-      "authority": "青梅市 情報公開 ・個人情報保護審査会",
-      "council_name": "東京都青梅市",
+      "authority": "東京都青梅市",
+      "council_name": "青梅市 情報公開 ・個人情報保護審査会",
       "kind": "審査請求",
       "basis_laws": "青梅市 情報公開 条例",
       "decision_date": "2018/06/08",
       "document_number": "平成３０年６月８日青情個審査第５号",
-      "result": "…本件審査請求のうち、出張命令書を不存在とした公文書不存在決定処 分の取消しを求める請求については、これを 認容 すべきである。 (2) 審査請求人のその余の本件審査請求については、これを棄却すべきである…",
-      "summary": "2018/11/16",
+      "result": "認容",
+      "summary": "…本件審査請求のうち、出張命令書を不存在とした公文書不存在決定処 分の取消しを求める請求については、これを 認容 すべきである。 (2) 審査請求人のその余の本件審査請求については、これを棄却すべきである…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=1694",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=1694）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2058",
@@ -557,12 +557,12 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2015/06/26",
       "document_number": "答申第84号",
-      "result": "…等の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第84号平成27年(2015年)6月26日日野市長大坪冬…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…等の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第84号平成27年(2015年)6月26日日野市長大坪冬…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2058",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2058）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2054",
@@ -573,12 +573,12 @@
       "basis_laws": "日野市個人情報保護条例",
       "decision_date": "2014/08/22",
       "document_number": "答申第80号",
-      "result": "…に対してなされた非開示（不存在）決定に対する異議申立についての答申。答申の結論については、異議申立は 認容 するのが相当と判断。答申第80号平成26年(2014年)8月22日日野市長大坪冬彦様日野市情報…",
-      "summary": "",
+      "result": "認容",
+      "summary": "…に対してなされた非開示（不存在）決定に対する異議申立についての答申。答申の結論については、異議申立は 認容 するのが相当と判断。答申第80号平成26年(2014年)8月22日日野市長大坪冬彦様日野市情報…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2054",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2054）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2050",
@@ -589,12 +589,12 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2013/11/20",
       "document_number": "答申第76号",
-      "result": "…求に対してなされた公開決定に対する取消しを求める異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第76号平成25年(2013年)11月20日日野市長大坪…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…求に対してなされた公開決定に対する取消しを求める異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第76号平成25年(2013年)11月20日日野市長大坪…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2050",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2050）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2046",
@@ -605,12 +605,12 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2012/05/11",
       "document_number": "答申第72号",
-      "result": "…書の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第72号平成24年(2012年)5月11日日野市長馬場弘…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…書の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第72号平成24年(2012年)5月11日日野市長馬場弘…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2046",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2046）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2039",
@@ -621,12 +621,12 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2012/03/22",
       "document_number": "答申第66号",
-      "result": "…料の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第66号平成24年(2012年)3月22日日野市教育委員…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…料の公開請求に対してなされた部分公開決定に対する異議申立についての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第66号平成24年(2012年)3月22日日野市教育委員…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2039",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2039）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2041",
@@ -637,12 +637,12 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2012/03/22",
       "document_number": "答申第68号",
-      "result": "…説明の公開請求に対してなされた部分公開決定に対する異議申立ついての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第68号平成24年(2012年)3月22日日野市教育委員…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…説明の公開請求に対してなされた部分公開決定に対する異議申立ついての答申。答申の結論については、一部を 認容 し、残余を棄却するのが相当と判断。答申第68号平成24年(2012年)3月22日日野市教育委員…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2041",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2041）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-2001",
@@ -653,44 +653,44 @@
       "basis_laws": "日野市 情報公開 条例",
       "decision_date": "2006/02/17",
       "document_number": "答申第28号",
-      "result": "…市民検討委員会」と題する書面に記載された5名の市民委員の氏名については却下し、その他についてはこれを 認容 し、公開するのが相当と判断。答申第28号平成18年(2006年)2月17日日野市教育委員会様日…",
-      "summary": "",
+      "result": "認容",
+      "summary": "…市民検討委員会」と題する書面に記載された5名の市民委員の氏名については却下し、その他についてはこれを 認容 し、公開するのが相当と判断。答申第28号平成18年(2006年)2月17日日野市教育委員会様日…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2001",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=2001）",
       "matched_keyword": "情報公開",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-11313",
       "category": "答申",
-      "authority": "鳥取県情報公開・ 個人情報保護 審査会",
-      "council_name": "鳥取県人事委員会",
+      "authority": "鳥取県人事委員会",
+      "council_name": "鳥取県情報公開・ 個人情報保護 審査会",
       "kind": "審査請求",
       "basis_laws": "鳥取県情報公開条例（平成１２年鳥取県条例第２号）第９条第２項第１号、第３号ア、第５号及び第６号エ｜鳥取県情報公開条例第９条、第１３条及び第１４条",
       "decision_date": "2026/02/25",
       "document_number": "令和８年（鳥情）答申第３号",
-      "result": "…記オに掲げる部分については非開示とし、それ以外は原処分を維持することが妥当なものである。 ２ 裁決方針 本件審査請求については、一部 認容 し、それ以外は棄却すべきである。 第４ 調査…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…記オに掲げる部分については非開示とし、それ以外は原処分を維持することが妥当なものである。 ２ 裁決方針 本件審査請求については、一部 認容 し、それ以外は棄却すべきである。 第４ 調査…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11313",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11313）",
       "matched_keyword": "個人情報保護",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-11293",
       "category": "答申",
-      "authority": "鳥取県情報公開・ 個人情報保護 審査会",
-      "council_name": "鳥取県",
+      "authority": "鳥取県",
+      "council_name": "鳥取県情報公開・ 個人情報保護 審査会",
       "kind": "審査請求",
       "basis_laws": "個人情報の保護に関する法律（平成１５年法律第５７号）第７８条第１項第７号柱書、第７９条第１項",
       "decision_date": "2026/02/16",
       "document_number": "令和８年（鳥個）答申第１号",
-      "result": "…審査請求人に係る部分のみとした処分庁の判断は妥当である。 (２) 諮問庁による判断 諮問庁の判断及びその理由は次のとおりである。 ア 判断 本件審査請求は一部 認容 される…",
-      "summary": "",
+      "result": "一部認容",
+      "summary": "…審査請求人に係る部分のみとした処分庁の判断は妥当である。 (２) 諮問庁による判断 諮問庁の判断及びその理由は次のとおりである。 ア 判断 本件審査請求は一部 認容 される…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11293",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=11293）",
       "matched_keyword": "個人情報保護",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-3112",
@@ -701,12 +701,12 @@
       "basis_laws": "墨田区情報公開条例",
       "decision_date": "2019/09/26",
       "document_number": "平成30年度諮問第1号答申",
-      "result": "…の庇い立てがまかり通るようでは1件もないだろう｡⑻よって､本件処分は違法及び不当であり､本審査請求を 認容 すべきである｡第4諮問庁の説明要旨諮問庁は､弁明書(平成30年4月27日付け)及び口頭理由説明…",
-      "summary": "2019/11/05",
+      "result": "認容",
+      "summary": "…の庇い立てがまかり通るようでは1件もないだろう｡⑻よって､本件処分は違法及び不当であり､本審査請求を 認容 すべきである｡第4諮問庁の説明要旨諮問庁は､弁明書(平成30年4月27日付け)及び口頭理由説明…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=3112",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=3112）",
       "matched_keyword": "個人情報保護",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     },
     {
       "case_id": "J005-1911",
@@ -717,12 +717,12 @@
       "basis_laws": "粕屋町 個人情報保護 条例・粕屋町 個人情報保護 条例施行規則",
       "decision_date": "2018/10/29",
       "document_number": "答申第２号",
-      "result": "…書｣中の保護者への対応にあたった職員の職及び1部職員名(係長以上の職員名)のみ審査請求人の主張を1部 認容 とし､開示とすることが妥当である｡第2審査関係人の主張の要旨1審査請求人の主張審査請求人は､次…",
-      "summary": "2018/11/09",
+      "result": "認容",
+      "summary": "…書｣中の保護者への対応にあたった職員の職及び1部職員名(係長以上の職員名)のみ審査請求人の主張を1部 認容 とし､開示とすることが妥当である｡第2審査関係人の主張の要旨1審査請求人の主張審査請求人は､次…",
       "source_url": "https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=1911",
       "attribution": "出典：行政不服審査裁決・答申検索データベース（https://fufukudb.search.soumu.go.jp/koukai/Main?vc=&sc=select&J007=&toshinId=1911）",
       "matched_keyword": "個人情報保護",
-      "collected_at": "2026-09-08T17:58:29.262297+00:00"
+      "collected_at": "2026-09-08T23:11:28.287890+00:00"
     }
   ]
 }

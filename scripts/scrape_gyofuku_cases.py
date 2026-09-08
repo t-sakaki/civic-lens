@@ -49,22 +49,35 @@ SEARCH_KEYWORDS = ["情報公開", "個人情報保護", "公文書管理"]
 WAIT_BETWEEN_REQUESTS_SEC = 2.0
 
 # vc="J002"(裁決検索) / "J005"(答申検索) の設定差分
+#
+# 検索結果テーブルの列構成が2種類で異なる点に注意:
+#   J002(裁決検索): No/審査庁名/種類/処分根拠法令/審査会等名 → 裁決日(文書番号)/裁決結果/裁決の概要/答申日
+#     → 「裁決結果」列に "一部認容" 等の明確な結果ラベルが入っている。
+#   J005(答申検索): No/審査会等名/種類/処分根拠法令/審査庁名 → 答申日(答申番号)/答申の概要/裁決日
+#     → 結果ラベルの専用列が存在しない。「答申の概要」テキスト中の「認容」の語から結果を推定する。
+#   （審査庁名と審査会等名の列順も入れ替わっている点にも注意）
 SEARCH_TYPES = [
     {
         "vc": "J002",
         "category": "裁決",
         "sort_order_value": "05",  # 裁決日順
         "id_field": "saiketsuId",
-        "result_label": "裁決結果",
         "date_label": "裁決日",
+        "authority_col": 1,
+        "council_col": 4,
+        "result_col": 6,     # 裁決結果（明示的な列がある）
+        "summary_col": 7,    # 裁決の概要
     },
     {
         "vc": "J005",
         "category": "答申",
         "sort_order_value": "04",  # 答申日順
         "id_field": "toshinId",
-        "result_label": "答申結果",
         "date_label": "答申日",
+        "authority_col": 4,
+        "council_col": 1,
+        "result_col": None,  # 専用列なし。summary_colのテキストから推定する
+        "summary_col": 6,    # 答申の概要
     },
 ]
 
@@ -94,6 +107,21 @@ def _is_relevant_law(basis_laws: str) -> bool:
 def _is_granted(result_text: str) -> bool:
     """認容・一部認容のみを対象とする（棄却・却下・その他は除外）。"""
     return "認容" in result_text
+
+
+def _infer_toshin_result(summary_text: str) -> str:
+    """答申検索(J005)には結果専用の列がないため、答申の概要テキスト中の
+    「認容」という語の直前十数文字に「一部」が含まれるかで一部認容/認容を推定する。
+    ハイライト表示（<span class="highlight">）のタグ除去で語の前後に空白が入るため、
+    厳密な隣接一致ではなく直前ウィンドウの部分一致で判定する。
+    """
+    if not summary_text:
+        return ""
+    idx = summary_text.find("認容")
+    if idx == -1:
+        return ""
+    window = summary_text[max(0, idx - 15):idx]
+    return "一部認容" if "一部" in window else "認容"
 
 
 def _clean(text: Optional[str]) -> str:
@@ -198,22 +226,26 @@ def _parse_result_rows(html: str, cfg: dict) -> list[dict]:
         case_ref_id = id_m.group(1)
 
         cells = re.findall(r"<td[^>]*>(.*?)</td>", block, re.S)
-        # 想定カラム順: [No/ID, 審査庁名, 種類, 処分根拠法令, 審査会等名,
-        #                裁決日(文書番号), 裁決結果, 裁決の概要, 答申日]
-        def cell_text(idx: int) -> str:
-            if idx >= len(cells):
+
+        def cell_text(idx: Optional[int]) -> str:
+            if idx is None or idx >= len(cells):
                 return ""
             raw = cells[idx]
             raw = re.sub(r"<[^>]+>", " ", raw)
             return _clean(raw)
 
-        authority = cell_text(1)
+        # J002/J005で列順（審査庁名・審査会等名）と結果列の有無が異なるため、
+        # cfgのカラム設定に従って抽出する（SEARCH_TYPESのコメント参照）。
+        authority = cell_text(cfg["authority_col"])
         kind = cell_text(2)
         basis_laws = cell_text(3)
-        council_name = cell_text(4)
+        council_name = cell_text(cfg["council_col"])
         date_and_docnum = cell_text(5)
-        result = cell_text(6)
-        summary = cell_text(7)
+        summary = cell_text(cfg["summary_col"])
+        if cfg["result_col"] is not None:
+            result = cell_text(cfg["result_col"])
+        else:
+            result = _infer_toshin_result(summary)
 
         date_parts = date_and_docnum.split(" ", 1)
         decision_date = date_parts[0] if date_parts else ""
