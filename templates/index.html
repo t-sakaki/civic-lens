@@ -134,6 +134,60 @@
                 animation: none;
             }
         }
+        /* --- プロンプトを主役にした、チャット風コンポーザー --- */
+        .composer-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 1rem;
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+        .composer-card:focus-within {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+        }
+        .composer-textarea {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            resize: vertical;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .composer-textarea:focus {
+            outline: none;
+        }
+        .composer-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid #f3f4f6;
+        }
+        .composer-tool-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .composer-tool-btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+        .composer-tool-btn.active {
+            border-color: #f87171;
+            background: #fee2e2;
+        }
+
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
         #userInput::placeholder {
             color: #4b5563; /* ダークグレイ */
@@ -315,56 +369,54 @@
             </div>
         </header>
 
-        <!-- STEP 0: 怒り・不満の入力（テキスト入力とシチュエーション選択を統合） -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🎯 何に怒りを感じていますか？</h2>
+        <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
+        <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-2xl">🎯</span>
+                <h2 class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
+            </div>
             <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- テキスト入力（チャット風） -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
-                            言葉で伝える
-                            <span class="suggestion-hint">
-                                <span class="thinking-dots"><span></span><span></span><span></span></span>
-                                ヒントを提案中
-                            </span>
-                        </label>
-                        <button id="voiceInputBtn" type="button" class="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition-all font-medium">
+            <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
+            <div class="composer-card">
+                <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+
+                <div class="composer-toolbar">
+                    <div class="flex items-center gap-1.5">
+                        <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
                             <span id="voiceIcon">🎙️</span>
-                            <span id="voiceStatusText">音声入力（話して入力）</span>
                         </button>
-                    </div>
-
-                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
-                    <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
-                        <span class="relative flex h-2.5 w-2.5">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）">📷</button>
+                        <span class="suggestion-hint">
+                            <span class="thinking-dots"><span></span><span></span><span></span></span>
+                            ヒントを提案中
                         </span>
-                        <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
                     </div>
-
-                    <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
-                         押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
-                    <div class="mt-3">
-                        <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
-                        <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
-                    </div>
+                    <span id="voiceStatusText" class="text-xs text-gray-400"></span>
                 </div>
 
-                <!-- カメラ入力（YouCam API） -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">表情で伝える（YouCam API）</label>
-                    <div class="bg-gray-100 rounded-md p-4 text-center">
-                        <video id="cameraPreview" class="w-full rounded-md mb-2 hidden" autoplay playsinline></video>
-                        <canvas id="cameraCanvas" class="hidden"></canvas>
-                        <button id="startCamera" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷 カメラ起動</button>
-                        <button id="captureImage" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 hidden">📸 撮影</button>
-                        <p id="cameraStatus" class="text-sm text-gray-500 mt-2"></p>
-                    </div>
+                <div id="voiceIndicator" class="hidden mx-3 mb-3 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                    </span>
+                    <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
                 </div>
+
+                <!-- カメラ（YouCam API）: 📷 を押したときだけ展開する、コンポーザーに付属する小さなパネル -->
+                <div id="cameraPanel" class="hidden mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <video id="cameraPreview" class="w-full max-w-[220px] mx-auto rounded-md mb-2 hidden" autoplay playsinline></video>
+                    <canvas id="cameraCanvas" class="hidden"></canvas>
+                    <button id="captureImage" class="bg-green-500 text-white px-4 py-1.5 rounded-md hover:bg-green-600 hidden text-sm">📸 撮影</button>
+                    <p id="cameraStatus" class="text-xs text-gray-500 mt-1"></p>
+                </div>
+            </div>
+
+            <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
+                 押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
+            <div class="mt-3">
+                <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
+                <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
             </div>
         </section>
 
@@ -1081,18 +1133,12 @@
             if (recording) {
                 if (icon) icon.textContent = '🔴';
                 if (text) text.textContent = '聞き取り中...（完了時はクリック）';
-                if (btn) {
-                    btn.classList.remove('bg-red-50', 'text-red-600');
-                    btn.classList.add('bg-red-600', 'text-white', 'shadow');
-                }
+                if (btn) btn.classList.add('active');
                 if (indicator) indicator.classList.remove('hidden');
             } else {
                 if (icon) icon.textContent = '🎙️';
-                if (text) text.textContent = '音声入力（話して入力）';
-                if (btn) {
-                    btn.classList.add('bg-red-50', 'text-red-600');
-                    btn.classList.remove('bg-red-600', 'text-white', 'shadow');
-                }
+                if (text) text.textContent = '';
+                if (btn) btn.classList.remove('active');
                 if (indicator) indicator.classList.add('hidden');
             }
         }
@@ -1471,8 +1517,24 @@
             });
         }
 
-        // カメラ起動
+        // カメラ起動（コンポーザーのツールバーアイコンを押すと、その場でパネルが展開する）
         document.getElementById('startCamera').addEventListener('click', async () => {
+            const panel = document.getElementById('cameraPanel');
+            const startBtn = document.getElementById('startCamera');
+
+            // すでに起動中なら閉じる（トグル）
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+                panel.classList.add('hidden');
+                startBtn.classList.remove('active');
+                document.getElementById('cameraPreview').classList.add('hidden');
+                document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('cameraStatus').textContent = '';
+                return;
+            }
+
+            panel.classList.remove('hidden');
             try {
                 cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 const video = document.getElementById('cameraPreview');
@@ -1480,6 +1542,7 @@
                 video.classList.remove('hidden');
                 document.getElementById('captureImage').classList.remove('hidden');
                 document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+                startBtn.classList.add('active');
             } catch (err) {
                 document.getElementById('cameraStatus').textContent = 'カメラアクセス拒否';
             }
@@ -1496,8 +1559,10 @@
 
             if (cameraStream) {
                 cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
                 video.classList.add('hidden');
                 document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('startCamera').classList.remove('active');
             }
         });
 
