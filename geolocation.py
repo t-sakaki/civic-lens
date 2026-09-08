@@ -1,35 +1,24 @@
 """Civic Lens — 現在地から自治体を特定
 
-ブラウザの Geolocation API から取得した緯度経度を、国土交通省 国土地理院の
-リバースジオコーディングAPI（認証キー不要・無料）で行政区画（都道府県・市区町村）
-に変換する。
+ブラウザの Geolocation API から取得した緯度経度を、OpenStreetMap Nominatim の
+リバースジオコーディングAPI（認証キー不要・無料、利用ポリシー: 1リクエスト/秒程度、
+User-Agent必須）で行政区画（都道府県・市区町村）に変換する。
 
-このAPIはJIS都道府県コード（先頭2桁）+ 市区町村コード（後続3桁）から成る
-全国地方公共団体コード（muniCd）を返すため、都道府県名は固定テーブルで解決する。
+注意: 国土地理院のリバースジオコーダーAPIは町字（大字）名までしか返さず
+市区町村名そのものは含まれないため、Nominatimのaddress.city/town/village等を用いる。
 """
+import hashlib
 import requests
 from typing import Optional
 from pydantic import BaseModel
 
-GSI_REVERSE_GEOCODER_URL = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress"
-
-PREFECTURE_CODES = {
-    "01": "北海道", "02": "青森県", "03": "岩手県", "04": "宮城県", "05": "秋田県",
-    "06": "山形県", "07": "福島県", "08": "茨城県", "09": "栃木県", "10": "群馬県",
-    "11": "埼玉県", "12": "千葉県", "13": "東京都", "14": "神奈川県", "15": "新潟県",
-    "16": "富山県", "17": "石川県", "18": "福井県", "19": "山梨県", "20": "長野県",
-    "21": "岐阜県", "22": "静岡県", "23": "愛知県", "24": "三重県", "25": "滋賀県",
-    "26": "京都府", "27": "大阪府", "28": "兵庫県", "29": "奈良県", "30": "和歌山県",
-    "31": "鳥取県", "32": "島根県", "33": "岡山県", "34": "広島県", "35": "山口県",
-    "36": "徳島県", "37": "香川県", "38": "愛媛県", "39": "高知県", "40": "福岡県",
-    "41": "佐賀県", "42": "長崎県", "43": "熊本県", "44": "大分県", "45": "宮崎県",
-    "46": "鹿児島県", "47": "沖縄県",
-}
+NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+_USER_AGENT = "civic-lens-hackathon/1.0 (municipality geolocation lookup)"
 
 
 class MunicipalityLocation(BaseModel):
     """現在地から特定した行政区画"""
-    muni_code: str          # 全国地方公共団体コード（5桁）
+    muni_code: str          # 都道府県+市区町村名から生成した安定な内部キー（JISコードではない）
     prefecture: str         # "愛知県"
     municipality: str       # "安城市"
     full_name: str          # "愛知県安城市"
@@ -38,10 +27,15 @@ class MunicipalityLocation(BaseModel):
     is_mock: bool = False
 
 
+def _muni_code(prefecture: str, municipality: str) -> str:
+    """都道府県+市区町村名から、プール/履歴のキーとして使う安定なハッシュ値を生成する"""
+    return hashlib.sha1(f"{prefecture}{municipality}".encode("utf-8")).hexdigest()[:12]
+
+
 def _mock_location(lat: float, lon: float) -> MunicipalityLocation:
     """API未到達時のフォールバック（安城市をデフォルトとする）"""
     return MunicipalityLocation(
-        muni_code="23212",
+        muni_code=_muni_code("愛知県", "安城市"),
         prefecture="愛知県",
         municipality="安城市",
         full_name="愛知県安城市",
@@ -52,36 +46,46 @@ def _mock_location(lat: float, lon: float) -> MunicipalityLocation:
 
 
 def detect_municipality(lat: float, lon: float) -> Optional[MunicipalityLocation]:
-    """緯度経度から市区町村を特定する（国土地理院リバースジオコーダー使用）"""
+    """緯度経度から市区町村を特定する（Nominatimリバースジオコーダー使用）"""
     try:
         response = requests.get(
-            GSI_REVERSE_GEOCODER_URL,
-            params={"lat": lat, "lon": lon},
+            NOMINATIM_REVERSE_URL,
+            params={
+                "lat": lat,
+                "lon": lon,
+                "format": "jsonv2",
+                "accept-language": "ja",
+                "zoom": 14,
+            },
+            headers={"User-Agent": _USER_AGENT},
             timeout=10,
         )
         response.raise_for_status()
         data = response.json()
-        results = data.get("results")
-        if not results:
-            return None
+        address = data.get("address", {})
 
-        muni_code = str(results.get("muniCd", "")).zfill(5)
-        muni_name = results.get("lv01Nm", "")
-        pref_code = muni_code[:2]
-        pref_name = PREFECTURE_CODES.get(pref_code, "")
+        prefecture = address.get("province") or address.get("state") or ""
+        municipality = (
+            address.get("city")
+            or address.get("town")
+            or address.get("village")
+            or address.get("county")
+            or address.get("municipality")
+            or ""
+        )
 
-        if not muni_code or not muni_name:
+        if not prefecture or not municipality:
             return None
 
         return MunicipalityLocation(
-            muni_code=muni_code,
-            prefecture=pref_name,
-            municipality=muni_name,
-            full_name=f"{pref_name}{muni_name}",
+            muni_code=_muni_code(prefecture, municipality),
+            prefecture=prefecture,
+            municipality=municipality,
+            full_name=f"{prefecture}{municipality}",
             lat=lat,
             lon=lon,
             is_mock=False,
         )
     except Exception as e:
-        print(f"国土地理院リバースジオコーダー エラー: {e}")
+        print(f"Nominatim リバースジオコーダー エラー: {e}")
         return _mock_location(lat, lon)

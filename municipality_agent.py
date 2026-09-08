@@ -9,10 +9,18 @@ from municipality_pool import mark_researching, save_research_result, mark_faile
 
 
 def research_and_pool_municipality(muni_code: str, prefecture: str, municipality: str, full_name: str) -> None:
-    """バックグラウンドタスクとして実行: 自治体の情報公開条例を調査しプールに保存する"""
-    mark_researching(muni_code, prefecture, municipality, full_name)
+    """バックグラウンドタスクとして実行: 自治体の情報公開条例を調査しプールに保存する
+
+    Firestore未設定・接続失敗時も例外を外に漏らさない（BackgroundTasks内の例外は
+    レスポンスに影響しないが、ログにだけは残す）。
+    """
     try:
+        mark_researching(muni_code, prefecture, municipality, full_name)
         research = research_municipality_disclosure_system(municipality, prefecture)
         save_research_result(muni_code, research)
     except Exception as e:
-        mark_failed(muni_code, str(e))
+        print(f"自治体調査バックグラウンドタスクエラー（{full_name}）: {e}")
+        try:
+            mark_failed(muni_code, str(e))
+        except Exception:
+            pass
