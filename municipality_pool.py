@@ -24,6 +24,8 @@ class PooledMunicipality(BaseModel):
     prefecture: str
     municipality: str
     full_name: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     status: str  # "researching" / "ready" / "failed"
     ordinance_name: Optional[str] = None
     authority_type: Optional[str] = None
@@ -48,7 +50,14 @@ def get_pooled(muni_code: str) -> Optional[Dict]:
     return snap.to_dict() if snap.exists else None
 
 
-def mark_researching(muni_code: str, prefecture: str, municipality: str, full_name: str) -> Dict:
+def mark_researching(
+    muni_code: str,
+    prefecture: str,
+    municipality: str,
+    full_name: str,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+) -> Dict:
     """調査開始を仮登録する（既存レコードがあれば上書きしない）"""
     existing = get_pooled(muni_code)
     if existing:
@@ -60,6 +69,8 @@ def mark_researching(muni_code: str, prefecture: str, municipality: str, full_na
         prefecture=prefecture,
         municipality=municipality,
         full_name=full_name,
+        lat=lat,
+        lon=lon,
         status="researching",
         created_at=now,
         updated_at=now,

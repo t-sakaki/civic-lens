@@ -197,8 +197,23 @@ async def detect_municipality_from_location(
                 location.prefecture,
                 location.municipality,
                 location.full_name,
+                location.lat,
+                location.lon,
             )
             research_status = "researching"
+
+    # 調査済みプールの自治体を "pool:<muni_code>" キーの候補として先頭に追加し、
+    # 対象機関プルダウンに反映できるようにする（現在地そのものなので距離0扱い）
+    pool_authority_key = None
+    if research_status == "found_pooled" and pooled:
+        pool_authority_key = f"pool:{location.muni_code}"
+        candidates = [{
+            "key": pool_authority_key,
+            "name": pooled.get("municipality") or location.municipality,
+            "type": pooled.get("authority_type") or "市長",
+            "category": "自治体",
+            "distance_km": 0.0,
+        }] + candidates
 
     try:
         create_municipality_history_record(
@@ -209,8 +224,8 @@ async def detect_municipality_from_location(
             lat=location.lat,
             lon=location.lon,
             status="found" if exact_match else (research_status or "researching"),
-            authority_key=matched_key or None,
-            authority_name=exact_match.authority if exact_match else None,
+            authority_key=matched_key or pool_authority_key,
+            authority_name=exact_match.authority if exact_match else (pooled.get("municipality") if pooled else None),
             candidates=[c["name"] for c in candidates],
             session_id=session_id,
             user_id=user_id,
@@ -221,8 +236,8 @@ async def detect_municipality_from_location(
     return {
         "status": "found" if exact_match else research_status,
         "location": location.model_dump(),
-        "authority_key": matched_key or None,
-        "authority_name": exact_match.authority if exact_match else None,
+        "authority_key": matched_key or pool_authority_key,
+        "authority_name": exact_match.authority if exact_match else (pooled.get("municipality") if pooled else None),
         "candidates": candidates,
         "pooled": pooled,
     }
@@ -238,7 +253,15 @@ async def get_municipality_research_status(muni_code: str):
         pooled = None
     if pooled is None:
         raise HTTPException(status_code=404, detail="調査タスクが見つかりません")
-    return {"status": pooled.get("status", "researching"), "pooled": pooled}
+
+    status = pooled.get("status", "researching")
+    authority_key = f"pool:{muni_code}" if status == "ready" else None
+    return {
+        "status": status,
+        "pooled": pooled,
+        "authority_key": authority_key,
+        "authority_name": pooled.get("municipality") if status == "ready" else None,
+    }
 
 
 @app.get("/api/municipality/history")
