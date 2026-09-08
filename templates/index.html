@@ -716,7 +716,7 @@
                 </div>
             </div>
             <p class="text-center text-[10px] text-gray-400 mt-1">
-                ※ 過去の情報公開審査会・不服審査の裁決傾向をもとに一般化した代表例です。個別事案の結果を保証するものではありません。
+                ※ 総務省「行政不服審査裁決・答申検索データベース」に掲載された実際の認容事例です（<a href="/precedent-cases" class="underline hover:text-amber-300">一覧・検索はこちら</a>）。個別事案の結果を保証するものではありません。
             </p>
         </div>
 
@@ -1475,8 +1475,9 @@
         let cameraStream = null;
         let capturedImageData = null;
 
-        // 🏆 認容事例テロップ（一般化した代表例）
-        const disclosureWinExamples = [
+        // 🏆 認容事例テロップ：総務省「行政不服審査裁決・答申検索データベース」由来の実データ
+        // （フォールバック用の一般化した代表例。APIが利用できない場合のみ使用）
+        const disclosureWinExamplesFallback = [
             { authority: '〇〇市', doc: '市長海外視察の復命書・支出関係文書', result: '全部開示（認容）' },
             { authority: '〇〇県警', doc: '交通事故の実況見分調書', result: '一部開示（認容）' },
             { authority: '〇〇区', doc: '議員政務活動費の領収書一式', result: '全部開示（認容）' },
@@ -1485,25 +1486,49 @@
             { authority: '〇〇市', doc: '公共工事の入札関係文書', result: '全部開示（認容）' },
         ];
 
-        function renderWinTicker() {
+        function renderWinTicker(examples, isReal) {
             const track = document.getElementById('winTicker');
             if (!track) return;
+            track.innerHTML = '';
             const makeCard = (w) => {
-                const el = document.createElement('div');
+                const el = isReal ? document.createElement('a') : document.createElement('div');
                 el.className = 'win-card bg-white/95 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm flex items-center gap-2';
+                if (isReal) {
+                    el.href = w.source_url || '/precedent-cases';
+                    el.target = '_blank';
+                    el.rel = 'noopener noreferrer';
+                }
                 el.innerHTML = `
-                    <span class="font-bold text-emerald-700">✅ 認容</span>
+                    <span class="font-bold text-emerald-700">✅ ${w.result || '認容'}</span>
                     <span class="text-gray-500">${w.authority}</span>
                     <span class="font-medium">${w.doc}</span>
-                    <span class="text-gray-400">→</span>
-                    <span class="font-semibold text-teal-700">${w.result}</span>
+                    ${w.decision_date ? `<span class="text-gray-400">（${w.decision_date}）</span>` : ''}
                 `;
                 return el;
             };
             // 無限スクロールのため2周分レンダリング
-            [...disclosureWinExamples, ...disclosureWinExamples].forEach(w => track.appendChild(makeCard(w)));
+            [...examples, ...examples].forEach(w => track.appendChild(makeCard(w)));
         }
-        renderWinTicker();
+
+        async function loadWinTicker() {
+            try {
+                const res = await fetch('/api/precedent-cases?result=認容&limit=30');
+                if (!res.ok) throw new Error('failed to fetch precedent cases');
+                const data = await res.json();
+                const cases = (data.cases || []).map(c => ({
+                    authority: c.authority || c.council_name || '',
+                    doc: c.basis_laws || (c.summary ? c.summary.slice(0, 40) + '…' : ''),
+                    result: c.result || '認容',
+                    decision_date: c.decision_date || '',
+                    source_url: c.source_url || '/precedent-cases',
+                }));
+                if (cases.length === 0) throw new Error('no precedent cases');
+                renderWinTicker(cases, true);
+            } catch (e) {
+                renderWinTicker(disclosureWinExamplesFallback, false);
+            }
+        }
+        loadWinTicker();
 
         // 🤖 エージェント自律稼働ログ（タイプライター風ループ）— AIエージェントであることの可視化
         const agentLogMessages = [
