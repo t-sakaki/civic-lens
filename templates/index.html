@@ -213,6 +213,12 @@
             background: #eff6ff;
             transform: translateY(-1px);
         }
+        .situation-chip.selected {
+            border-color: #6366f1;
+            background: #eef2ff;
+            color: #4338ca;
+            font-weight: 600;
+        }
         .situation-chip-emoji {
             display: inline-block;
             font-size: 1.05rem;
@@ -237,6 +243,100 @@
                 animation: none;
             }
         }
+        /* --- プロンプトを主役にした、チャット風コンポーザー --- */
+        .composer-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 1rem;
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+        .composer-card:focus-within {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+        }
+        .composer-textarea {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            resize: vertical;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .composer-textarea:focus {
+            outline: none;
+        }
+        .composer-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid #f3f4f6;
+        }
+        .composer-tool-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .composer-tool-btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+        .composer-tool-btn.active {
+            border-color: #f87171;
+            background: #fee2e2;
+        }
+
+        /* --- 対象機関タグ（チャットボックス内蔵）: ホバー/タップでポップオーバーのサジェストが動的に開く --- */
+        .composer-tool-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 2.1rem;
+            padding: 0 0.85rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #374151;
+            cursor: pointer;
+            transition: all 0.15s;
+            max-width: 12rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .composer-tool-tag:hover,
+        .composer-tool-tag.open {
+            border-color: #818cf8;
+            background: #eef2ff;
+            color: #4338ca;
+        }
+        .authority-popover {
+            position: absolute;
+            z-index: 30;
+            top: calc(100% + 8px);
+            left: 0;
+            width: min(360px, 88vw);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+            padding: 0.9rem;
+            animation: fadeIn 0.15s ease-out;
+        }
+
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
         #userInput::placeholder {
             color: #4b5563; /* ダークグレイ */
@@ -433,72 +533,78 @@
             </div>
         </header>
 
-        <!-- STEP 0: 怒り・不満の入力（テキスト入力とシチュエーション選択を統合） -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🎯 何に怒りを感じていますか？</h2>
+        <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
+        <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-2xl">🎯</span>
+                <h2 class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
+            </div>
             <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- テキスト入力（チャット風） -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
-                            言葉で伝える
-                            <span class="suggestion-hint">
-                                <span class="thinking-dots"><span></span><span></span><span></span></span>
-                                ヒントを提案中
-                            </span>
-                        </label>
-                        <button id="voiceInputBtn" type="button" class="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition-all font-medium">
+            <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
+            <div class="composer-card">
+                <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+
+                <div class="composer-toolbar">
+                    <div class="flex items-center gap-1.5">
+                        <!-- 対象機関はチャットボックス内のタグ。ホバー（タッチ端末はタップ）で
+                             候補チップが動的に表示されるポップオーバーが開く -->
+                        <div class="relative inline-block" id="authorityTagWrap">
+                            <button type="button" id="authorityTag" class="composer-tool-tag">
+                                <span id="selectedAuthorityIcon">🏛️</span>
+                                <span id="selectedAuthorityLabel">読み込み中...</span>
+                            </button>
+                            <div id="authorityPopover" class="hidden authority-popover">
+                                <p class="text-xs text-gray-500 mb-2">タップして対象機関を選択</p>
+                                <div id="authorityChipFlow" class="flex flex-wrap gap-2 min-h-[2.5rem] mb-2"></div>
+                                <button id="detectMunicipalityBtn" type="button" class="text-xs text-indigo-600 hover:underline">
+                                    📍 現在地から自治体を特定する
+                                </button>
+                                <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+                                <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
+                                <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
+                            </div>
+                        </div>
+                        <select id="targetAuthority" class="hidden">
+                            <option value="">読み込み中...</option>
+                        </select>
+                        <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium"></p>
+
+                        <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
                             <span id="voiceIcon">🎙️</span>
-                            <span id="voiceStatusText">音声入力（話して入力）</span>
                         </button>
-                    </div>
-
-                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
-                    <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
-                        <span class="relative flex h-2.5 w-2.5">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）">📷</button>
+                        <span class="suggestion-hint">
+                            <span class="thinking-dots"><span></span><span></span><span></span></span>
+                            ヒントを提案中
                         </span>
-                        <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
                     </div>
-
-                    <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
-                         押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
-                    <div class="mt-3">
-                        <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
-                        <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
-                    </div>
+                    <span id="voiceStatusText" class="text-xs text-gray-400"></span>
                 </div>
 
-                <!-- カメラ入力（YouCam API） -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">表情で伝える（YouCam API）</label>
-                    <div class="bg-gray-100 rounded-md p-4 text-center">
-                        <video id="cameraPreview" class="w-full rounded-md mb-2 hidden" autoplay playsinline></video>
-                        <canvas id="cameraCanvas" class="hidden"></canvas>
-                        <button id="startCamera" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷 カメラ起動</button>
-                        <button id="captureImage" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 hidden">📸 撮影</button>
-                        <p id="cameraStatus" class="text-sm text-gray-500 mt-2"></p>
-                    </div>
+                <div id="voiceIndicator" class="hidden mx-3 mb-3 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                    </span>
+                    <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
+                </div>
+
+                <!-- カメラ（YouCam API）: 📷 を押したときだけ展開する、コンポーザーに付属する小さなパネル -->
+                <div id="cameraPanel" class="hidden mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <video id="cameraPreview" class="w-full max-w-[220px] mx-auto rounded-md mb-2 hidden" autoplay playsinline></video>
+                    <canvas id="cameraCanvas" class="hidden"></canvas>
+                    <button id="captureImage" class="bg-green-500 text-white px-4 py-1.5 rounded-md hover:bg-green-600 hidden text-sm">📸 撮影</button>
+                    <p id="cameraStatus" class="text-xs text-gray-500 mt-1"></p>
                 </div>
             </div>
-        </section>
 
-        <!-- 自治体選択 -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🏛️ 対象機関</h2>
-            <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium mb-2"></p>
-            <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
-                <option value="">読み込み中...</option>
-            </select>
-            <button id="detectMunicipalityBtn" type="button" class="mt-2 text-sm text-indigo-600 hover:underline">
-                📍 現在地から自治体を特定する
-            </button>
-            <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
-            <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
-            <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
+            <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
+                 押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
+            <div class="mt-3">
+                <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
+                <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
+            </div>
         </section>
 
         <!-- 解析ボタン -->
@@ -996,6 +1102,9 @@
                 <button id="tabWalletBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     🦊 Web3 ウォレット
                 </button>
+                <button id="tabMagicLinkBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                    ✨ マジックリンク
+                </button>
             </div>
 
             <!-- パネル 1: パスワード認証 -->
@@ -1040,6 +1149,24 @@
                 </button>
 
                 <div id="walletStatusMsg" class="text-xs text-center text-gray-500"></div>
+            </div>
+
+            <!-- パネル 3: マジックリンク（パスワード不要のメールログイン） -->
+            <div id="panelMagicLink" class="hidden space-y-3 py-2">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-900 leading-relaxed">
+                    ✨ <strong>マジックリンクログイン</strong><br>
+                    パスワード不要。メールアドレス宛にログイン用リンクを送信します（15分間有効・1回限り）。
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">メールアドレス</label>
+                    <input type="email" id="magicLinkEmailInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="taro@example.com">
+                </div>
+
+                <button id="submitMagicLinkBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-md text-sm shadow transition mt-2">
+                    ログイン用リンクを送信する
+                </button>
+                <div id="magicLinkStatusMsg" class="text-xs text-center mt-2"></div>
             </div>
         </div>
     </div>
@@ -1194,18 +1321,12 @@
             if (recording) {
                 if (icon) icon.textContent = '🔴';
                 if (text) text.textContent = '聞き取り中...（完了時はクリック）';
-                if (btn) {
-                    btn.classList.remove('bg-red-50', 'text-red-600');
-                    btn.classList.add('bg-red-600', 'text-white', 'shadow');
-                }
+                if (btn) btn.classList.add('active');
                 if (indicator) indicator.classList.remove('hidden');
             } else {
                 if (icon) icon.textContent = '🎙️';
-                if (text) text.textContent = '音声入力（話して入力）';
-                if (btn) {
-                    btn.classList.add('bg-red-50', 'text-red-600');
-                    btn.classList.remove('bg-red-600', 'text-white', 'shadow');
-                }
+                if (text) text.textContent = '';
+                if (btn) btn.classList.remove('active');
                 if (indicator) indicator.classList.add('hidden');
             }
         }
@@ -1351,6 +1472,7 @@
             const data = await res.json();
             allAuthorities = data.authorities;
             renderAuthorityOptions(null);
+            setInterval(renderAuthorityChipBatch, SITUATION_CHIP_INTERVAL_MS);
         }
 
         // Geolocationのバックグラウンド調査で新たに判明した自治体（data/authorities/*.json
@@ -1409,7 +1531,119 @@
                     : '';
                 hint.classList.toggle('hidden', !filterCategory);
             }
+
+            updateSelectedAuthorityBadge();
+            renderAuthorityChipBatch();
         }
+
+        // 対象機関を選択する唯一の入口。<select>の値を更新し、選択中バッジと
+        // チップの見た目を同期させる（シチュエーションチップ・位置情報検出のどちらから来ても同じ経路を通す）
+        function setSelectedAuthority(key) {
+            const select = document.getElementById('targetAuthority');
+            if (![...select.options].some(o => o.value === key)) return;
+            select.value = key;
+            updateSelectedAuthorityBadge();
+        }
+
+        function updateSelectedAuthorityBadge() {
+            const select = document.getElementById('targetAuthority');
+            const icon = document.getElementById('selectedAuthorityIcon');
+            const label = document.getElementById('selectedAuthorityLabel');
+            if (!select || !icon || !label) return;
+
+            const current = allAuthorities.find(a => a.key === select.value);
+            if (!current) {
+                label.textContent = '未選択';
+                return;
+            }
+            icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
+            const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
+            label.textContent = `${current.name}（${current.type}${autoTag}）`;
+        }
+
+        // 対象機関も、シチュエーションと同じ「流れるチップ」で選ぶ。<select>は状態保持専用で非表示。
+        let authorityChipCursor = 0;
+        const AUTHORITY_CHIPS_VISIBLE = 6;
+
+        function renderAuthorityChipBatch() {
+            const container = document.getElementById('authorityChipFlow');
+            if (!container || allAuthorities.length === 0) return;
+
+            const pool = currentAuthorityFilter
+                ? allAuthorities.filter(a => a.category === currentAuthorityFilter)
+                : allAuthorities;
+            if (pool.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const existingChips = [...container.children];
+            existingChips.forEach(chip => chip.classList.add('chip-leaving'));
+
+            const buildNextBatch = () => {
+                container.innerHTML = '';
+                const selectedKey = document.getElementById('targetAuthority').value;
+                const count = Math.min(AUTHORITY_CHIPS_VISIBLE, pool.length);
+                for (let i = 0; i < count; i++) {
+                    const a = pool[authorityChipCursor % pool.length];
+                    authorityChipCursor++;
+
+                    const icon = a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'situation-chip' + (a.key === selectedKey ? ' selected' : '');
+                    chip.dataset.key = a.key;
+                    chip.innerHTML = `<span class="situation-chip-emoji">${icon}</span><span>${a.name}（${a.type}${autoTag}）</span>`;
+                    chip.addEventListener('click', () => {
+                        setSelectedAuthority(a.key);
+                        closeAuthorityPopover();
+                    });
+                    container.appendChild(chip);
+                }
+            };
+
+            if (existingChips.length > 0) {
+                setTimeout(buildNextBatch, 350);
+            } else {
+                buildNextBatch();
+            }
+        }
+
+        // 対象機関タグのポップオーバー: PCはホバーで開閉、タッチ端末はタップで開閉する
+        const authorityTagWrap = document.getElementById('authorityTagWrap');
+        const authorityTag = document.getElementById('authorityTag');
+        const authorityPopover = document.getElementById('authorityPopover');
+        let authorityPopoverCloseTimer = null;
+
+        function openAuthorityPopover() {
+            clearTimeout(authorityPopoverCloseTimer);
+            authorityPopover.classList.remove('hidden');
+            authorityTag.classList.add('open');
+            renderAuthorityChipBatch();
+        }
+
+        function closeAuthorityPopover() {
+            authorityPopover.classList.add('hidden');
+            authorityTag.classList.remove('open');
+        }
+
+        authorityTag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (authorityPopover.classList.contains('hidden')) {
+                openAuthorityPopover();
+            } else {
+                closeAuthorityPopover();
+            }
+        });
+        authorityTag.addEventListener('mouseenter', openAuthorityPopover);
+        authorityTagWrap.addEventListener('mouseleave', () => {
+            authorityPopoverCloseTimer = setTimeout(closeAuthorityPopover, 300);
+        });
+        authorityPopover.addEventListener('mouseenter', () => clearTimeout(authorityPopoverCloseTimer));
+        authorityPopover.addEventListener('click', (e) => e.stopPropagation());
+        document.addEventListener('click', () => closeAuthorityPopover());
 
         // 未ログイン時でも履歴を紐付けられるよう、匿名IDをlocalStorageに永続化する
         function getOrCreateSessionId() {
@@ -1492,11 +1726,8 @@
 
             listEl.querySelectorAll('.municipality-candidate-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const select = document.getElementById('targetAuthority');
                     const key = btn.dataset.authorityKey;
-                    if ([...select.options].some(o => o.value === key)) {
-                        select.value = key;
-                    }
+                    setSelectedAuthority(key);
                     renderMunicipalityCandidates(candidates, key);
                 });
             });
@@ -1507,10 +1738,7 @@
             renderMunicipalityCandidates(data.candidates, data.authority_key);
 
             if (data.status === 'found') {
-                const select = document.getElementById('targetAuthority');
-                if ([...select.options].some(o => o.value === data.authority_key)) {
-                    select.value = data.authority_key;
-                }
+                setSelectedAuthority(data.authority_key);
                 statusEl.textContent = `✅ ${loc.full_name} 周辺の候補を${(data.candidates || []).length}件見つけました。下から対象機関を選んでください`;
                 return;
             }
@@ -1518,7 +1746,7 @@
                 // 未収録の自治体はサーバー側で調査が完了してから返ってくる（同期処理）ため、
                 // このレスポンスの時点で対象機関プルダウンに即座に反映できる
                 addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
-                document.getElementById('targetAuthority').value = data.authority_key;
+                setSelectedAuthority(data.authority_key);
                 renderMunicipalityCandidates(data.candidates, data.authority_key);
                 statusEl.textContent = `✅ ${loc.full_name}（${data.authority_name}）を対象機関に反映しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
                 return;
@@ -1526,10 +1754,7 @@
             // failed: 調査に失敗した場合は、最も近い既知の候補を暫定的に選んでおく
             const nearestKnown = (data.candidates || [])[0];
             if (nearestKnown) {
-                const select = document.getElementById('targetAuthority');
-                if ([...select.options].some(o => o.value === nearestKnown.key)) {
-                    select.value = nearestKnown.key;
-                }
+                setSelectedAuthority(nearestKnown.key);
                 renderMunicipalityCandidates(data.candidates, nearestKnown.key);
             }
             statusEl.textContent = `⚠️ ${loc.full_name} の情報公開制度の調査に失敗しました。近隣の候補（${nearestKnown ? nearestKnown.name : '一覧'}）から選択してください`;
@@ -1606,8 +1831,24 @@
             });
         }
 
-        // カメラ起動
+        // カメラ起動（コンポーザーのツールバーアイコンを押すと、その場でパネルが展開する）
         document.getElementById('startCamera').addEventListener('click', async () => {
+            const panel = document.getElementById('cameraPanel');
+            const startBtn = document.getElementById('startCamera');
+
+            // すでに起動中なら閉じる（トグル）
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+                panel.classList.add('hidden');
+                startBtn.classList.remove('active');
+                document.getElementById('cameraPreview').classList.add('hidden');
+                document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('cameraStatus').textContent = '';
+                return;
+            }
+
+            panel.classList.remove('hidden');
             try {
                 cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 const video = document.getElementById('cameraPreview');
@@ -1615,6 +1856,7 @@
                 video.classList.remove('hidden');
                 document.getElementById('captureImage').classList.remove('hidden');
                 document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+                startBtn.classList.add('active');
             } catch (err) {
                 document.getElementById('cameraStatus').textContent = 'カメラアクセス拒否';
             }
@@ -1631,8 +1873,10 @@
 
             if (cameraStream) {
                 cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
                 video.classList.add('hidden');
                 document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('startCamera').classList.remove('active');
             }
         });
 
@@ -1669,7 +1913,7 @@
                 document.getElementById('actionSection').classList.remove('hidden');
 
                 if (data.anger_analysis.target_authority_key) {
-                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
+                    setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
             } catch (err) {
                 alert('エラー: ' + err.message);
@@ -2552,22 +2796,30 @@
         // タブ切り替え（パスワード vs Web3）
         const tabPasswordBtn = document.getElementById('tabPasswordBtn');
         const tabWalletBtn = document.getElementById('tabWalletBtn');
+        const tabMagicLinkBtn = document.getElementById('tabMagicLinkBtn');
         const panelPassword = document.getElementById('panelPassword');
         const panelWallet = document.getElementById('panelWallet');
+        const panelMagicLink = document.getElementById('panelMagicLink');
+        const authTabInactiveClass = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
 
-        tabPasswordBtn.addEventListener('click', () => {
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600';
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelPassword.classList.remove('hidden');
-            panelWallet.classList.add('hidden');
-        });
+        function showAuthPanel(panel) {
+            panelPassword.classList.toggle('hidden', panel !== 'password');
+            panelWallet.classList.toggle('hidden', panel !== 'wallet');
+            panelMagicLink.classList.toggle('hidden', panel !== 'magic');
+            tabPasswordBtn.className = panel === 'password'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+            tabWalletBtn.className = panel === 'wallet'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600'
+                : authTabInactiveClass;
+            tabMagicLinkBtn.className = panel === 'magic'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+        }
 
-        tabWalletBtn.addEventListener('click', () => {
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600';
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelWallet.classList.remove('hidden');
-            panelPassword.classList.add('hidden');
-        });
+        tabPasswordBtn.addEventListener('click', () => showAuthPanel('password'));
+        tabWalletBtn.addEventListener('click', () => showAuthPanel('wallet'));
+        tabMagicLinkBtn.addEventListener('click', () => showAuthPanel('magic'));
 
         // ログイン / 新規登録切り替え
         const toggleAuthModeBtn = document.getElementById('toggleAuthModeBtn');
@@ -2687,6 +2939,35 @@
                 await checkAuthStatus();
             } catch (err) {
                 statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            }
+        });
+
+        // マジックリンクログイン（パスワード不要のメールログイン）
+        document.getElementById('submitMagicLinkBtn').addEventListener('click', async () => {
+            const email = document.getElementById('magicLinkEmailInput').value.trim();
+            const statusMsg = document.getElementById('magicLinkStatusMsg');
+            const submitBtn = document.getElementById('submitMagicLinkBtn');
+
+            if (!email) {
+                statusMsg.innerHTML = '<span class="text-red-500">メールアドレスを入力してください</span>';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusMsg.textContent = '送信中...';
+
+            try {
+                const formData = new FormData();
+                formData.append('email', email);
+                const res = await fetch('/api/auth/magic-link/request', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'リンクの送信に失敗しました');
+
+                statusMsg.innerHTML = '<span class="text-green-600">✅ ' + email + ' 宛にログイン用リンクを送信しました。メール内のリンクをクリックしてログインしてください（15分間有効）。</span>';
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                submitBtn.disabled = false;
             }
         });
 
