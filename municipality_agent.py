@@ -8,14 +8,21 @@ from gmi_client import research_municipality_disclosure_system
 from municipality_pool import mark_researching, save_research_result, mark_failed
 
 
-def research_and_pool_municipality(muni_code: str, prefecture: str, municipality: str, full_name: str) -> None:
+def research_and_pool_municipality(
+    muni_code: str,
+    prefecture: str,
+    municipality: str,
+    full_name: str,
+    lat: float = None,
+    lon: float = None,
+) -> None:
     """バックグラウンドタスクとして実行: 自治体の情報公開条例を調査しプールに保存する
 
     Firestore未設定・接続失敗時も例外を外に漏らさない（BackgroundTasks内の例外は
     レスポンスに影響しないが、ログにだけは残す）。
     """
     try:
-        mark_researching(muni_code, prefecture, municipality, full_name)
+        mark_researching(muni_code, prefecture, municipality, full_name, lat, lon)
         research = research_municipality_disclosure_system(municipality, prefecture)
         save_research_result(muni_code, research)
     except Exception as e:

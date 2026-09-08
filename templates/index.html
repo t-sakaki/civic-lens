@@ -1131,6 +1131,7 @@
 
         // 対象機関一覧を取得しておき、必要に応じてカテゴリで絞り込んで <select> を組み立てる
         let allAuthorities = [];
+        let currentAuthorityFilter = null;
 
         async function loadAuthorities() {
             const res = await fetch('/authorities');
@@ -1139,7 +1140,16 @@
             renderAuthorityOptions(null);
         }
 
+        // Geolocationのバックグラウンド調査で新たに判明した自治体（data/authorities/*.json
+        // 未収録）を "pool:<muni_code>" キーの候補として<select>に追加する
+        function addDynamicAuthorityOption(key, name, type) {
+            if (allAuthorities.some(a => a.key === key)) return;
+            allAuthorities.push({ key, name, type: type || '市長', category: '自治体' });
+            renderAuthorityOptions(currentAuthorityFilter);
+        }
+
         function renderAuthorityOptions(filterCategory) {
+            currentAuthorityFilter = filterCategory;
             const select = document.getElementById('targetAuthority');
             const previousValue = select.value;
             select.innerHTML = '';
@@ -1167,7 +1177,8 @@
                     const option = document.createElement('option');
                     option.value = a.key;
                     const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
-                    option.textContent = `${icon}${a.name}（${a.type}）`;
+                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    option.textContent = `${icon}${a.name}（${a.type}${autoTag}）`;
                     optgroup.appendChild(option);
                 });
                 select.appendChild(optgroup);
@@ -1289,15 +1300,18 @@
                 return;
             }
             if (data.status === 'found_pooled') {
-                statusEl.textContent = `✅ ${loc.full_name} は調査済みです（${data.pooled.ordinance_name || '情報公開条例'}）。周辺の候補からも選べます`;
+                addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
+                document.getElementById('targetAuthority').value = data.authority_key;
+                renderMunicipalityCandidates(data.candidates, data.authority_key);
+                statusEl.textContent = `✅ ${loc.full_name} は調査済みです（${data.pooled.ordinance_name || '情報公開条例'}）。対象機関に反映しました`;
                 return;
             }
             // researching: バックグラウンドエージェントが調査中なのでポーリングする
             statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...（周辺の候補からも選べます）`;
-            pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl);
+            pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl, 0, data.candidates || []);
         }
 
-        async function pollMunicipalityStatus(muniCode, fullName, statusEl, attempt = 0) {
+        async function pollMunicipalityStatus(muniCode, fullName, statusEl, attempt = 0, candidates = []) {
             if (attempt >= 15) {
                 statusEl.textContent = `⏳ ${fullName} の調査に時間がかかっています。しばらくしてから再度お試しください`;
                 return;
@@ -1307,14 +1321,24 @@
                     const res = await fetch(`/api/municipality/status/${muniCode}`);
                     const data = await res.json();
                     if (data.status === 'ready') {
-                        statusEl.textContent = `✅ ${fullName} の情報公開制度を調査しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
+                        addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
+                        document.getElementById('targetAuthority').value = data.authority_key;
+                        const readyCandidate = {
+                            key: data.authority_key,
+                            name: data.authority_name,
+                            type: data.pooled.authority_type || '市長',
+                            category: '自治体',
+                            distance_km: 0.0,
+                        };
+                        renderMunicipalityCandidates([readyCandidate, ...candidates], data.authority_key);
+                        statusEl.textContent = `✅ ${fullName} の情報公開制度を調査しました（${data.pooled.ordinance_name || '情報公開条例'}）。対象機関に反映しました`;
                     } else if (data.status === 'failed') {
                         statusEl.textContent = `❌ ${fullName} の調査に失敗しました`;
                     } else {
-                        pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1);
+                        pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1, candidates);
                     }
                 } catch (e) {
-                    pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1);
+                    pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1, candidates);
                 }
             }, 2000);
         }
