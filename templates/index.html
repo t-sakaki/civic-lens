@@ -107,6 +107,25 @@
             }
         }
 
+        /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
+        #userInput::placeholder {
+            color: #4b5563; /* ダークグレイ */
+            opacity: 1;
+        }
+        .suggestion-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: #9ca3af;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .suggestion-hint .thinking-dots span {
+                animation: none;
+            }
+        }
+
         /* --- 思考中インジケーター (Thinking Indicator) --- */
         .thinking-box {
             display: flex;
@@ -297,7 +316,13 @@
                 <!-- テキスト入力 -->
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <label class="block text-sm font-medium text-gray-700">言葉で伝える</label>
+                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            言葉で伝える
+                            <span class="suggestion-hint">
+                                <span class="thinking-dots"><span></span><span></span><span></span></span>
+                                ヒントを提案中
+                            </span>
+                        </label>
                         <button id="voiceInputBtn" type="button" class="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition-all font-medium">
                             <span id="voiceIcon">🎙️</span>
                             <span id="voiceStatusText">音声入力（話して入力）</span>
@@ -1110,6 +1135,57 @@
                 stopVoiceRecognition();
             }
         });
+
+        // プロンプト入力欄のプレースホルダーをタイプライター風に動かし続け、
+        // 「AIが常に動いている・生きている」感覚を演出する（入力中は止める）
+        const SUGGESTION_PROMPTS = [
+            '市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。',
+            '近所の道路工事、入札額が不自然に高い気がする。設計書と積算根拠を見てみたい。',
+            '補助金をもらった団体の実績報告書が公開されていない。使い道を確認したい。',
+            '警察に相談したのに何も対応してくれなかった。当時の対応記録を開示してほしい。',
+            '議会で審議された予算の内訳がよく分からない。詳しい資料がほしい。',
+        ];
+
+        function startPromptSuggestionAnimation() {
+            const el = document.getElementById('userInput');
+            if (!el) return;
+
+            let promptIndex = 0;
+            let charIndex = 0;
+            let deleting = false;
+
+            const tick = () => {
+                // ユーザーが何か入力している間は邪魔をせず、空になったら自動的に再開する
+                if (el.value.trim() !== '' || document.activeElement === el) {
+                    setTimeout(tick, 600);
+                    return;
+                }
+
+                const current = SUGGESTION_PROMPTS[promptIndex % SUGGESTION_PROMPTS.length];
+
+                if (!deleting) {
+                    charIndex++;
+                    el.placeholder = current.slice(0, charIndex);
+                    if (charIndex >= current.length) {
+                        deleting = true;
+                        setTimeout(tick, 2200); // 全文表示後、少し静止して読ませる
+                        return;
+                    }
+                    setTimeout(tick, 45);
+                } else {
+                    charIndex--;
+                    el.placeholder = current.slice(0, charIndex);
+                    if (charIndex <= 0) {
+                        deleting = false;
+                        promptIndex++;
+                        setTimeout(tick, 500);
+                        return;
+                    }
+                    setTimeout(tick, 20);
+                }
+            };
+            tick();
+        }
 
         // シチュエーション一覧を取得
         async function loadSituations() {
@@ -2547,6 +2623,7 @@
         loadSituations();
         loadPublicFeed();
         loadMunicipalityHistory();
+        startPromptSuggestionAnimation();
 
         (async () => {
             // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
