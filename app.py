@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +35,7 @@ from ordinance_data import (
 from station_guide import find_nearest_government_office, get_office_info
 from geolocation import detect_municipality
 from municipality_pool import get_pooled
-from municipality_agent import research_and_pool_municipality
+from municipality_agent import research_municipality_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
@@ -150,7 +150,6 @@ async def get_authorities():
 
 @app.post("/api/municipality/detect")
 async def detect_municipality_from_location(
-    background_tasks: BackgroundTasks,
     lat: float = Form(...),
     lon: float = Form(...),
     session_id: Optional[str] = Form(None),
@@ -162,8 +161,10 @@ async def detect_municipality_from_location(
     警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
     機関をすべて候補として返す（`candidates`）。
     現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
-    無ければバックグラウンドで情報公開制度を調査してプールに保存しつつ
-    status に "researching" を含める（クライアントは /api/municipality/status で結果をポーリングする）。
+    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
+    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
+    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
+    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
     特定結果は毎回、履歴（municipality_detection_history）にも保存する。
     """
     location = detect_municipality(lat, lon)
@@ -176,8 +177,8 @@ async def detect_municipality_from_location(
     matched_key = match_authority_by_text(location.municipality, default="")
     exact_match = AUTHORITIES[matched_key] if matched_key else None
 
-    # プール参照・バックグラウンド調査・履歴保存はFirestoreに依存する拡張機能であり、
-    # Firebase未設定/接続失敗時でも候補一覧（静的データのみで完結）は必ず返す
+    # プール参照・調査・履歴保存はFirestoreに依存する部分があるが、候補一覧（静的データの
+    # みで完結）は Firebase未設定/接続失敗時でも必ず返す
     pooled = None
     research_status = None
     if not exact_match:
@@ -188,11 +189,8 @@ async def detect_municipality_from_location(
 
         if pooled and pooled.get("status") == "ready":
             research_status = "found_pooled"
-        elif pooled and pooled.get("status") == "researching":
-            research_status = "researching"
         else:
-            background_tasks.add_task(
-                research_and_pool_municipality,
+            pooled = research_municipality_now(
                 location.muni_code,
                 location.prefecture,
                 location.municipality,
@@ -200,7 +198,7 @@ async def detect_municipality_from_location(
                 location.lat,
                 location.lon,
             )
-            research_status = "researching"
+            research_status = "found_pooled" if pooled.get("status") == "ready" else "failed"
 
     # 調査済みプールの自治体を "pool:<muni_code>" キーの候補として先頭に追加し、
     # 対象機関プルダウンに反映できるようにする（現在地そのものなので距離0扱い）

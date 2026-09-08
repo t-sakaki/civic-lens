@@ -1263,6 +1263,8 @@
                     formData.append('lon', lon);
                     const sessionId = getOrCreateSessionId();
                     if (sessionId) formData.append('session_id', sessionId);
+                    // 未収録の自治体はサーバー側で調査してから応答するため、数秒かかることがある
+                    statusEl.textContent = '🔎 対象機関を特定中...（未収録の自治体は情報公開制度の調査に数秒かかる場合があります）';
                     const res = await fetch('/api/municipality/detect', { method: 'POST', body: formData });
                     if (!res.ok) throw new Error('自治体の特定に失敗しました');
                     const data = await res.json();
@@ -1330,15 +1332,15 @@
                 return;
             }
             if (data.status === 'found_pooled') {
+                // 未収録の自治体はサーバー側で調査が完了してから返ってくる（同期処理）ため、
+                // このレスポンスの時点で対象機関プルダウンに即座に反映できる
                 addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
                 document.getElementById('targetAuthority').value = data.authority_key;
                 renderMunicipalityCandidates(data.candidates, data.authority_key);
-                statusEl.textContent = `✅ ${loc.full_name} は調査済みです（${data.pooled.ordinance_name || '情報公開条例'}）。対象機関に反映しました`;
+                statusEl.textContent = `✅ ${loc.full_name}（${data.authority_name}）を対象機関に反映しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
                 return;
             }
-            // researching: 一宮市自体はまだプルダウンに無いため、調査完了までの暫定として
-            // 最も近い既知の候補（都道府県・隣接市区町村等）を仮選択しておく（何も反映されないまま
-            // 放置されて見えるのを防ぐ）。調査が完了次第、この自治体自身の選択肢に差し替える
+            // failed: 調査に失敗した場合は、最も近い既知の候補を暫定的に選んでおく
             const nearestKnown = (data.candidates || [])[0];
             if (nearestKnown) {
                 const select = document.getElementById('targetAuthority');
@@ -1347,40 +1349,7 @@
                 }
                 renderMunicipalityCandidates(data.candidates, nearestKnown.key);
             }
-            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...（それまでは暫定的に${nearestKnown ? nearestKnown.name : '近隣の機関'}を選択中。周辺の候補からも選べます）`;
-            pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl, 0, data.candidates || []);
-        }
-
-        async function pollMunicipalityStatus(muniCode, fullName, statusEl, attempt = 0, candidates = []) {
-            if (attempt >= 15) {
-                statusEl.textContent = `⏳ ${fullName} の調査に時間がかかっています。しばらくしてから再度お試しください`;
-                return;
-            }
-            setTimeout(async () => {
-                try {
-                    const res = await fetch(`/api/municipality/status/${muniCode}`);
-                    const data = await res.json();
-                    if (data.status === 'ready') {
-                        addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
-                        document.getElementById('targetAuthority').value = data.authority_key;
-                        const readyCandidate = {
-                            key: data.authority_key,
-                            name: data.authority_name,
-                            type: data.pooled.authority_type || '市長',
-                            category: '自治体',
-                            distance_km: 0.0,
-                        };
-                        renderMunicipalityCandidates([readyCandidate, ...candidates], data.authority_key);
-                        statusEl.textContent = `✅ ${fullName} の情報公開制度を調査しました（${data.pooled.ordinance_name || '情報公開条例'}）。対象機関に反映しました`;
-                    } else if (data.status === 'failed') {
-                        statusEl.textContent = `❌ ${fullName} の調査に失敗しました`;
-                    } else {
-                        pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1, candidates);
-                    }
-                } catch (e) {
-                    pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1, candidates);
-                }
-            }, 2000);
+            statusEl.textContent = `⚠️ ${loc.full_name} の情報公開制度の調査に失敗しました。近隣の候補（${nearestKnown ? nearestKnown.name : '一覧'}）から選択してください`;
         }
 
         const municipalityHistoryStatusLabels = {
