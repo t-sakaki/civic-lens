@@ -39,6 +39,7 @@ from municipality_agent import research_municipality_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
+from precedent_cases import search_cases, get_case as get_precedent_case
 from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
@@ -460,6 +461,35 @@ async def get_route(
         "office": office,
         "route": route,
     }
+
+
+@app.get("/precedent-cases", response_class=HTMLResponse)
+async def precedent_cases_page():
+    """認容事例（裁決・答申）の閲覧・検索ページ"""
+    template_file = BASE_DIR / "templates" / "precedent_cases.html"
+    with open(template_file, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/api/precedent-cases")
+async def api_precedent_cases(
+    q: str = "",
+    category: str = "",
+    result: str = "",
+    limit: int = 50,
+):
+    """認容事例の一覧・検索API（総務省 行政不服審査裁決・答申検索データベース由来）"""
+    cases = search_cases(query=q, category=category, result=result, limit=limit)
+    return {"count": len(cases), "cases": cases}
+
+
+@app.get("/api/precedent-cases/{case_id}")
+async def api_precedent_case_detail(case_id: str):
+    """認容事例の詳細（1件）"""
+    case = get_precedent_case(case_id)
+    if not case:
+        raise HTTPException(404, f"事例が見つかりません: {case_id}")
+    return case
 
 
 @app.get("/api/situations")

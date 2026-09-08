@@ -43,7 +43,7 @@ Civic Lens は、市民の「怒り・不信・諦め」を入力すると、AI�
 1. **感情解析（YouCam API）** — 市民の怒り表情を検知し、エージェントへの入力に変換
 2. **条例自動マッチング（Vertex AI + GMI Cloud）** — 市民の怒り内容から適用条例を自動特定
 3. **開示請求書・司法行政文書開示申出書の自動生成** — 17機関（7自治体・議会 + 4警察本部 + 6裁判所）対応。行政文書だけでなく裁判所の「司法行政文書の開示に関する事務の取扱要綱」に基づく開示請求にも完全対応
-4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例（自治体条例、警察情報公開規程、裁判所取扱要綱）を交えて構築
+4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例（自治体条例、警察情報公開規程、裁判所取扱要綱）を交えて構築。先例として提示する認容事例は、総務省「行政不服審査裁決・答申検索データベース」から収集した実在のデータをGemini Embeddingsによるベクトル検索で照合したものを使用し、Geminiによる先例の「創作」を防止
 5. **期限管理（60日ルール等）** — Cloud Scheduler で自動通知
 6. **窓口までの経路案内（駅すぱあとAPI）** — 市民が実際に行動する後押し
 7. **シチュエーション別テンプレート** — 13種類（海外視察、公共事業、補助金、警察事案、裁判所司法行政・予算執行等）から選ぶだけ
@@ -58,6 +58,7 @@ Civic Lens は、市民の「怒り・不信・諦め」を入力すると、AI�
 | **GMI Cloud (DeepSeek V4 Pro)** | 条例・判例RAG推論 | `gmi_client.py` |
 | **駅すぱあとAPI** | 最寄り市役所までの経路案内 | `station_guide.py` |
 | **YouCam API** | 市民の怒り表情解析 | `emotion_analyzer.py` |
+| **総務省 行政不服審査裁決・答申検索データベース + Gemini Embeddings** | 認容事例の実データ検索（先例の「創作」防止） | `precedent_cases.py`, `scripts/scrape_gyofuku_cases.py`, `scripts/build_precedent_embeddings.py` |
 
 ### ADKアーキテクチャ
 ```
@@ -77,18 +78,31 @@ SequentialAgent (civic_lens_integrated)
 - **Cloud Scheduler** — 期限通知cron
 - **Firebase Authentication + Firestore** — ユーザー認証（メール/パスワード・Web3ウォレット）、開示請求記録・フォーク・スターの永続化。Cloud Runのステートレスなコンテナ間でもデータを保持するために使用
 
+### 🤖 認容事例 自動収集エージェント（定期実行）
+
+反論ロジックに使う先例データは、`.github/workflows/scrape-precedents.yml` により週1回（サーバー負荷に配慮し高頻度にはしない）自動更新される。GitHub ActionsがPlaywrightで総務省「行政不服審査裁決・答申検索データベース」(https://fufukudb.search.soumu.go.jp/koukai/Main) を巡回して認容・一部認容事例を収集（`scripts/scrape_gyofuku_cases.py`）し、続けてGemini Embeddings（`gemini-embedding-001`）で検索用ベクトルを計算する（`scripts/build_precedent_embeddings.py`、既に計算済みのcase_idは再計算しないキャッシュ設計）。`workflow_dispatch`により手動実行も可能。
+
+収集データはPDL1.0（公共データ利用規約）に配慮し、裁決・答申の全文ではなくデータベースが提示する概要スニペットのみを保存し、各レコードに出典URLを必ず添付する。また、mainブランチへの直接コミット・pushは行わず、差分が生じた場合のみ`peter-evans/create-pull-request`でブランチを切ってプルリクエストを作成し、人間のレビュー・マージを介す設計にしている。
+
 ## 📁 ファイル構成
 
 ```
 civic-lens/
-├── app.py                # FastAPI メイン（エンドポイント定義）
-├── agent.py              # Gemini エージェント本体
-├── ordinance_data.py     # 5自治体分の条例データ
-├── station_guide.py      # 駅すぱあとAPI統合
-├── emotion_analyzer.py   # YouCam API統合
-├── gmi_client.py         # GMI Cloud RAG
+├── app.py                            # FastAPI メイン（エンドポイント定義）
+├── agent.py                          # Gemini エージェント本体
+├── ordinance_data.py                 # 5自治体分の条例データ
+├── station_guide.py                  # 駅すぱあとAPI統合
+├── emotion_analyzer.py               # YouCam API統合
+├── gmi_client.py                     # GMI Cloud RAG
+├── precedent_cases.py                # 認容事例の検索（Gemini Embeddings + Ngramフォールバック）
+├── scripts/
+│   ├── scrape_gyofuku_cases.py       # 総務省DBからの認容事例スクレイパー
+│   └── build_precedent_embeddings.py # 認容事例の埋め込みベクトル生成
 ├── templates/
-│   └── index.html        # メインユーザーインターフェース
+│   ├── index.html                    # メインユーザーインターフェース
+│   └── precedent_cases.html          # 認容事例 閲覧・検索ページ
+├── .github/workflows/
+│   └── scrape-precedents.yml         # 認容事例 自動収集エージェント（定期実行）
 ├── requirements.txt
 ├── Dockerfile
 └── README.md

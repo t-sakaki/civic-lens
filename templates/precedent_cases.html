@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>認容事例データベース — Civic Lens</title>
+    <meta name="description" content="総務省 行政不服審査裁決・答申検索データベースから収集した「認容」事例（情報公開・個人情報保護関連）を検索・閲覧できます。">
+    <link rel="icon" href="/static/favicon.ico" sizes="any">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --cl-bg: #0b1120;
+            --cl-bg2: #141d33;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+        }
+        body {
+            font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+            background-color: var(--cl-bg);
+            color: #EDEDF2;
+        }
+        .cl-navbar {
+            background: rgba(11, 17, 32, 0.55);
+            border-color: rgba(242, 169, 59, 0.22) !important;
+            backdrop-filter: blur(6px);
+        }
+        .cl-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+        }
+        .cl-badge {
+            background: rgba(242, 169, 59, 0.12);
+            color: var(--cl-amber);
+            border-color: rgba(242, 169, 59, 0.35);
+        }
+        .cl-badge-result-granted {
+            background: rgba(95, 212, 196, 0.14);
+            color: var(--cl-teal);
+            border-color: rgba(95, 212, 196, 0.4);
+        }
+        input, select {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.16);
+            color: #EDEDF2;
+        }
+        input::placeholder { color: rgba(237,237,242,0.45); }
+        a.cl-link { color: var(--cl-teal); }
+        a.cl-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav class="cl-navbar border-b sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="font-bold text-lg" style="color: var(--cl-amber)">Civic Lens</a>
+            <a href="/" class="text-sm text-gray-300 hover:text-white">← トップに戻る</a>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        <header class="mb-6">
+            <h1 class="text-2xl font-bold mb-2">認容事例データベース</h1>
+            <p class="text-sm text-gray-300 leading-relaxed">
+                総務省「行政不服審査裁決・答申検索データベース」から収集した、情報公開・個人情報保護関連法令に基づく
+                <span style="color: var(--cl-teal)">「認容」「一部認容」</span>事例の一覧です。
+                各事例の概要はデータベースの検索結果に表示される抜粋のみを保持しており、裁決・答申の全文は保存していません。
+                詳細・原文は各カードの「原文を見る」リンクから、総務省のデータベースでご確認ください。
+            </p>
+            <p class="text-xs text-gray-500 mt-2" id="update-note"></p>
+        </header>
+
+        <section class="cl-card rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-end">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-400" for="q">キーワード（自治体名・根拠法令・概要）</label>
+                <input id="q" type="text" placeholder="例：情報公開 個人情報" class="rounded px-3 py-2 text-sm w-64">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-400" for="category">種類</label>
+                <select id="category" class="rounded px-3 py-2 text-sm">
+                    <option value="">すべて</option>
+                    <option value="裁決">裁決</option>
+                    <option value="答申">答申</option>
+                </select>
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-400" for="result">結果</label>
+                <select id="result" class="rounded px-3 py-2 text-sm">
+                    <option value="">認容・一部認容すべて</option>
+                    <option value="一部認容">一部認容</option>
+                    <option value="認容">認容（全部）</option>
+                </select>
+            </div>
+            <button id="search-btn" class="rounded px-4 py-2 text-sm font-semibold" style="background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%); color: #10131f;">検索</button>
+            <span id="result-count" class="text-xs text-gray-400 ml-auto"></span>
+        </section>
+
+        <section id="case-list" class="grid gap-4"></section>
+        <p id="empty-note" class="text-sm text-gray-500 hidden">条件に合う事例が見つかりませんでした。</p>
+    </main>
+
+    <script>
+        const listEl = document.getElementById('case-list');
+        const countEl = document.getElementById('result-count');
+        const emptyEl = document.getElementById('empty-note');
+
+        function resultBadgeClass(result) {
+            return (result || '').includes('認容') ? 'cl-badge-result-granted' : 'cl-badge';
+        }
+
+        function renderCase(c) {
+            const div = document.createElement('div');
+            div.className = 'cl-card rounded-2xl p-5';
+            div.innerHTML = `
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <span class="text-xs px-2 py-1 rounded-full border cl-badge">${c.category || ''}</span>
+                    <span class="text-xs px-2 py-1 rounded-full border ${resultBadgeClass(c.result)}">${c.result || ''}</span>
+                    <span class="text-sm font-semibold">${c.authority || ''}</span>
+                    <span class="text-xs text-gray-400 ml-auto">${c.decision_date || ''}</span>
+                </div>
+                <div class="text-xs text-gray-400 mb-2">${c.basis_laws || ''}</div>
+                <p class="text-sm text-gray-200 leading-relaxed mb-3">${c.summary || ''}</p>
+                <div class="flex items-center justify-between text-xs text-gray-500">
+                    <span>${c.document_number || ''}</span>
+                    <a class="cl-link" href="${c.source_url}" target="_blank" rel="noopener">原文を見る（総務省DB）→</a>
+                </div>
+            `;
+            return div;
+        }
+
+        async function runSearch() {
+            const q = document.getElementById('q').value.trim();
+            const category = document.getElementById('category').value;
+            const result = document.getElementById('result').value;
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            if (category) params.set('category', category);
+            if (result) params.set('result', result);
+            params.set('limit', '100');
+
+            listEl.innerHTML = '<p class="text-sm text-gray-500">検索中...</p>';
+            emptyEl.classList.add('hidden');
+            try {
+                const res = await fetch(`/api/precedent-cases?${params.toString()}`);
+                const data = await res.json();
+                listEl.innerHTML = '';
+                countEl.textContent = `${data.count}件`;
+                if (!data.cases || data.cases.length === 0) {
+                    emptyEl.classList.remove('hidden');
+                    return;
+                }
+                data.cases.forEach(c => listEl.appendChild(renderCase(c)));
+            } catch (e) {
+                listEl.innerHTML = '<p class="text-sm text-red-400">読み込みに失敗しました。</p>';
+            }
+        }
+
+        document.getElementById('search-btn').addEventListener('click', runSearch);
+        document.getElementById('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+        runSearch();
+    </script>
+</body>
+</html>
