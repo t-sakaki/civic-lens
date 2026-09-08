@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <script>
+        // 描画前にテーマを反映し、既定(ダーク)テーマへの一瞬の切り替わり(FOUC)を防ぐ
+        (function () {
+            try {
+                var theme = localStorage.getItem('cl-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
@@ -32,23 +41,84 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
+        :root,
+        html[data-theme="dark"] {
             --cl-bg: #0b1120;
             --cl-bg2: #141d33;
             --cl-amber: #f2a93b;
             --cl-teal: #5fd4c4;
+            --cl-body-bg-image:
+                radial-gradient(circle at 15% 0%, rgba(99, 102, 241, 0.16), transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.14), transparent 45%);
+            --cl-title-grad: linear-gradient(90deg, #818cf8 0%, #67e8f9 50%, #818cf8 100%);
+            --cl-header-tagline: #94a3b8;
+            --cl-header-status: rgba(103, 232, 249, 0.8);
+            --cl-header-status-dot: #22d3ee;
+            --cl-authbtn-bg: rgba(255,255,255,0.05);
+            --cl-authbtn-border: rgba(255,255,255,0.1);
+            --cl-authbtn-text: #e2e8f0;
+            --cl-authbtn-hover-bg: rgba(255,255,255,0.1);
+            --cl-hamburger-bg: rgba(255,255,255,0.06);
+            --cl-hamburger-border: rgba(255,255,255,0.16);
+            --cl-hamburger-text: #EDEDF2;
+            --cl-hamburger-hover-bg: rgba(255,255,255,0.12);
+        }
+        /* --- ゴールドテーマ：旧デザイン（動画バナー・琥珀色アクセント） --- */
+        html[data-theme="golden"] {
+            --cl-bg: #0b1120;
+            --cl-bg2: #141d33;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+            --cl-body-bg-image:
+                linear-gradient(180deg, rgba(11,17,32,0.72) 0%, rgba(11,17,32,0.94) 620px, #0b1120 900px),
+                url('/static/brand/civic_lens_bg.png');
+            --cl-title-grad: linear-gradient(90deg, #f2a93b 0%, #ffbb55 50%, #f2a93b 100%);
+            --cl-header-tagline: #b8926a;
+            --cl-header-status: rgba(242, 169, 59, 0.85);
+            --cl-header-status-dot: #f2a93b;
+            --cl-authbtn-bg: rgba(242, 169, 59, 0.06);
+            --cl-authbtn-border: rgba(242, 169, 59, 0.3);
+            --cl-authbtn-text: #EDEDF2;
+            --cl-authbtn-hover-bg: rgba(242, 169, 59, 0.14);
+            --cl-hamburger-bg: rgba(242, 169, 59, 0.08);
+            --cl-hamburger-border: rgba(242, 169, 59, 0.3);
+            --cl-hamburger-text: #EDEDF2;
+            --cl-hamburger-hover-bg: rgba(242, 169, 59, 0.16);
+        }
+        /* --- ライトテーマ --- */
+        html[data-theme="light"] {
+            --cl-bg: #f5f6fa;
+            --cl-bg2: #ffffff;
+            --cl-amber: #d97e1c;
+            --cl-teal: #0f9c8c;
+            --cl-body-bg-image:
+                radial-gradient(circle at 15% 0%, rgba(99, 102, 241, 0.08), transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(15, 156, 140, 0.08), transparent 45%);
+            --cl-title-grad: linear-gradient(90deg, #4f46e5 0%, #0f9c8c 50%, #4f46e5 100%);
+            --cl-header-tagline: #475569;
+            --cl-header-status: rgba(15, 156, 140, 0.9);
+            --cl-header-status-dot: #0f9c8c;
+            --cl-authbtn-bg: rgba(15, 23, 42, 0.04);
+            --cl-authbtn-border: rgba(15, 23, 42, 0.14);
+            --cl-authbtn-text: #1e293b;
+            --cl-authbtn-hover-bg: rgba(15, 23, 42, 0.08);
+            --cl-hamburger-bg: rgba(15, 23, 42, 0.04);
+            --cl-hamburger-border: rgba(15, 23, 42, 0.14);
+            --cl-hamburger-text: #1e293b;
+            --cl-hamburger-hover-bg: rgba(15, 23, 42, 0.08);
         }
         body {
             font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
             background-color: var(--cl-bg);
-            background-image:
-                radial-gradient(circle at 15% 0%, rgba(99, 102, 241, 0.16), transparent 45%),
-                radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.14), transparent 45%);
+            background-image: var(--cl-body-bg-image);
             background-repeat: no-repeat;
+            background-position: top center;
+            background-size: 100% auto, 100% auto;
             background-attachment: fixed;
+            transition: background-color 0.2s ease;
         }
         .luxury-title {
-            background: linear-gradient(90deg, #818cf8 0%, #67e8f9 50%, #818cf8 100%);
+            background: var(--cl-title-grad);
             background-size: 200% auto;
             -webkit-background-clip: text;
             background-clip: text;
@@ -110,13 +180,53 @@
             width: 34px;
             height: 34px;
             border-radius: 8px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.16);
-            color: #EDEDF2;
+            background: var(--cl-hamburger-bg);
+            border: 1px solid var(--cl-hamburger-border);
+            color: var(--cl-hamburger-text);
             cursor: pointer;
             transition: background 0.15s;
         }
-        .cl-hamburger-btn:hover { background: rgba(255,255,255,0.12); }
+        .cl-hamburger-btn:hover { background: var(--cl-hamburger-hover-bg); }
+        .cl-header-tagline { color: var(--cl-header-tagline); }
+        .cl-header-status { color: var(--cl-header-status); }
+        .cl-header-status-dot { background: var(--cl-header-status-dot); }
+        .cl-authbtn {
+            background: var(--cl-authbtn-bg);
+            border: 1px solid var(--cl-authbtn-border);
+            color: var(--cl-authbtn-text);
+        }
+        .cl-authbtn:hover { background: var(--cl-authbtn-hover-bg); }
+        /* ゴールドテーマ専用の旧デザイン要素。テーマ選択時のみ表示 */
+        .cl-hero-golden {
+            display: none;
+            background: radial-gradient(120% 160% at 50% 0%, var(--cl-bg2) 0%, var(--cl-bg) 70%);
+            border: 1px solid rgba(242, 169, 59, 0.18);
+        }
+        html[data-theme="golden"] .cl-hero-golden { display: block; }
+        html[data-theme="golden"] .cl-hero-slim-extra { display: none; }
+        /* --- テーマ切り替えUI（ハンバーガーメニュー内） --- */
+        .cl-theme-options {
+            display: flex;
+            gap: 6px;
+            padding: 0 8px 12px;
+        }
+        .cl-theme-btn {
+            flex: 1;
+            font-size: 0.72rem;
+            padding: 6px 4px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.04);
+            color: #C7CCDA;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .cl-theme-btn:hover { background: rgba(255,255,255,0.09); }
+        .cl-theme-btn-active {
+            border-color: var(--cl-amber);
+            color: #fff;
+            background: rgba(255,255,255,0.12);
+        }
         .cl-sidebar {
             position: fixed;
             top: 0;
@@ -165,6 +275,13 @@
             flex: 1;
             overflow-y: auto;
             padding: 10px 8px;
+        }
+        .cl-sidebar-section-title {
+            color: #8B93A7;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            padding: 10px 12px 4px;
         }
         .cl-sidebar-empty {
             color: #6B7280;
@@ -531,9 +648,16 @@
     <div id="sidebarOverlay" class="cl-sidebar-overlay"></div>
     <aside id="historySidebar" class="cl-sidebar" aria-hidden="true">
         <div class="cl-sidebar-header">
-            <span class="cl-sidebar-title">🕒 履歴</span>
+            <span class="cl-sidebar-title">メニュー</span>
             <button id="closeSidebarBtn" type="button" class="cl-sidebar-close-btn" aria-label="履歴メニューを閉じる">✕</button>
         </div>
+        <p class="cl-sidebar-section-title">🎨 デザインテーマ</p>
+        <div class="cl-theme-options" role="radiogroup" aria-label="デザインテーマ">
+            <button type="button" class="cl-theme-btn" data-theme-value="dark" aria-pressed="false">ダーク</button>
+            <button type="button" class="cl-theme-btn" data-theme-value="golden" aria-pressed="false">ゴールド</button>
+            <button type="button" class="cl-theme-btn" data-theme-value="light" aria-pressed="false">ライト</button>
+        </div>
+        <p class="cl-sidebar-section-title">🕒 履歴</p>
         <div id="sidebarHistoryBody" class="cl-sidebar-body">
             <p class="cl-sidebar-empty">まだ履歴はありません</p>
         </div>
@@ -547,21 +671,21 @@
                     <span aria-hidden="true">☰</span>
                 </button>
                 <a href="/" aria-label="Civic Lens トップページへ" class="luxury-title text-lg sm:text-xl font-extrabold tracking-tight shrink-0">🔍 Civic Lens</a>
-                <span class="hidden sm:inline text-xs text-slate-400 truncate">市民の怒りを情報公開に変換するAIエージェント</span>
-                <span class="hidden md:flex items-center gap-1.5 text-[10px] text-cyan-300/80 font-mono shrink-0">
-                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span class="hidden sm:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
+                <span class="hidden md:flex items-center gap-1.5 text-[10px] cl-header-status font-mono shrink-0">
+                    <span class="w-1.5 h-1.5 rounded-full cl-header-status-dot animate-pulse"></span>
                     <span id="agentLogInline">起動中...</span>
                 </span>
             </div>
             <div id="authNavArea" class="shrink-0">
-                <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 px-3 py-1.5 rounded-full hover:bg-white/10 transition">
+                <button id="openAuthModalBtn" type="button" class="cl-authbtn inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition">
                     <span>👤</span><span class="hidden sm:inline">ログイン / 新規登録</span>
                 </button>
             </div>
         </header>
 
-        <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける -->
-        <div class="mb-6 relative">
+        <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける（ダーク/ライトテーマ） -->
+        <div class="mb-6 relative cl-hero-slim-extra">
             <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg overflow-hidden">
                 <div class="flex items-center">
                     <div class="shrink-0 bg-black/20 px-3 py-2 text-white text-xs font-bold flex items-center gap-1.5 z-10">
@@ -576,6 +700,19 @@
                 ※ 過去の情報公開審査会・不服審査の裁決傾向をもとに一般化した代表例です。個別事案の結果を保証するものではありません。
             </p>
         </div>
+
+        <!-- ゴールドテーマ選択時のみ表示する旧デザインの動画バナー -->
+        <header class="cl-hero-golden text-center mb-12 rounded-2xl overflow-hidden">
+            <a href="/" aria-label="Civic Lens トップページへ" class="block">
+                <video class="w-full h-auto block" style="aspect-ratio: 1600 / 360;" autoplay loop muted playsinline poster="/static/brand/civic_lens_banner_poster.png">
+                    <source src="/static/brand/civic_lens_banner.mp4" type="video/mp4">
+                </video>
+            </a>
+            <div class="px-6 pb-8 pt-2 -mt-1">
+                <p class="text-sm text-gray-400 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
+                <p class="text-xs text-gray-500 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+            </div>
+        </header>
 
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
@@ -1948,6 +2085,22 @@
             if (e.key === 'Escape') setSidebarOpen(false);
         });
 
+        // 🎨 デザインテーマ切り替え（ダーク / ゴールド / ライト）。選択はlocalStorageに保存して次回訪問時にも反映
+        const THEME_STORAGE_KEY = 'cl-theme';
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) {}
+            document.querySelectorAll('.cl-theme-btn').forEach((btn) => {
+                const active = btn.dataset.themeValue === theme;
+                btn.classList.toggle('cl-theme-btn-active', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        }
+        document.querySelectorAll('.cl-theme-btn').forEach((btn) => {
+            btn.addEventListener('click', () => applyTheme(btn.dataset.themeValue));
+        });
+        applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
         function selectSituation(s) {
             selectedSituation = s;
             renderAuthorityOptions(s.category);
@@ -2881,15 +3034,15 @@
                     currentUser = data.user;
                     navArea.innerHTML = `
                         <div class="flex items-center gap-2">
-                            <span class="text-xs bg-white/5 border border-white/10 text-slate-200 font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
+                            <span class="cl-authbtn text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
                                 <span>👤</span> <span>${currentUser.username}</span>
-                                <span class="text-slate-500 font-normal">|</span>
-                                <span class="text-cyan-300 font-mono text-[11px]">${currentUser.civic_id}</span>
+                                <span class="cl-header-tagline font-normal">|</span>
+                                <span class="cl-header-status font-mono text-[11px]">${currentUser.civic_id}</span>
                             </span>
-                            <button id="openMyRecordsBtn" type="button" class="text-xs text-cyan-300 hover:text-cyan-200 font-semibold px-2 py-1 rounded hover:bg-white/5 transition">
+                            <button id="openMyRecordsBtn" type="button" class="cl-authbtn text-xs font-semibold px-2 py-1 rounded transition">
                                 📂 マイ請求
                             </button>
-                            <button id="logoutBtn" type="button" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1 rounded hover:bg-white/5 transition">
+                            <button id="logoutBtn" type="button" class="cl-authbtn text-xs px-2 py-1 rounded transition">
                                 ログアウト
                             </button>
                         </div>
@@ -2900,7 +3053,7 @@
                 } else {
                     currentUser = null;
                     navArea.innerHTML = `
-                        <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/5 border border-white/10 text-slate-200 px-3.5 py-1.5 rounded-full hover:bg-white/10 transition">
+                        <button id="openAuthModalBtn" type="button" class="cl-authbtn inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full transition">
                             <span>👤</span><span class="hidden sm:inline">ログイン / 新規登録</span>
                         </button>
                     `;
