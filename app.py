@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,8 +29,13 @@ from ordinance_data import (
     get_ordinance,
     is_court_authority,
     is_police_authority,
+    match_authority_by_text,
 )
 from station_guide import find_nearest_government_office, get_office_info
+from geolocation import detect_municipality
+from municipality_pool import get_pooled
+from municipality_agent import research_and_pool_municipality
+from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
 from situations import get_situation_list, get_situation
@@ -140,6 +145,92 @@ async def get_authorities():
             for key, info in AUTHORITIES.items()
         ]
     }
+
+
+@app.post("/api/municipality/detect")
+async def detect_municipality_from_location(
+    background_tasks: BackgroundTasks,
+    lat: float = Form(...),
+    lon: float = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """ブラウザの現在地（緯度経度）から自治体を特定する
+
+    data/authorities/*.json に収録済みの自治体ならそのキーを即座に返す。
+    未収録の自治体は municipality_pool（Firestore）を確認し、無ければ
+    バックグラウンドで情報公開制度を調査してプールに保存しつつ
+    status="researching" を返す（クライアントは /api/municipality/status で結果をポーリングする）。
+    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    """
+    location = detect_municipality(lat, lon)
+    if location is None:
+        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
+
+    user_id = current_user.user_id if current_user else None
+
+    def _save_history(status: str, authority_key: Optional[str] = None, authority_name: Optional[str] = None):
+        create_municipality_history_record(
+            muni_code=location.muni_code,
+            prefecture=location.prefecture,
+            municipality=location.municipality,
+            full_name=location.full_name,
+            lat=location.lat,
+            lon=location.lon,
+            status=status,
+            authority_key=authority_key,
+            authority_name=authority_name,
+            session_id=session_id,
+            user_id=user_id,
+        )
+
+    matched_key = match_authority_by_text(location.municipality, default="")
+    if matched_key:
+        _save_history("found", matched_key, AUTHORITIES[matched_key].authority)
+        return {
+            "status": "found",
+            "location": location.model_dump(),
+            "authority_key": matched_key,
+            "authority_name": AUTHORITIES[matched_key].authority,
+        }
+
+    pooled = get_pooled(location.muni_code)
+    if pooled and pooled.get("status") == "ready":
+        _save_history("found_pooled", authority_name=pooled.get("ordinance_name"))
+        return {"status": "found_pooled", "location": location.model_dump(), "pooled": pooled}
+    if pooled and pooled.get("status") == "researching":
+        _save_history("researching")
+        return {"status": "researching", "location": location.model_dump()}
+
+    background_tasks.add_task(
+        research_and_pool_municipality,
+        location.muni_code,
+        location.prefecture,
+        location.municipality,
+        location.full_name,
+    )
+    _save_history("researching")
+    return {"status": "researching", "location": location.model_dump()}
+
+
+@app.get("/api/municipality/status/{muni_code}")
+async def get_municipality_research_status(muni_code: str):
+    """バックグラウンド調査の進捗をポーリングするためのエンドポイント"""
+    pooled = get_pooled(muni_code)
+    if pooled is None:
+        raise HTTPException(status_code=404, detail="調査タスクが見つかりません")
+    return {"status": pooled.get("status", "researching"), "pooled": pooled}
+
+
+@app.get("/api/municipality/history")
+async def get_municipality_detection_history(
+    session_id: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """自治体特定の実行履歴（ログイン中は user_id、未ログインは session_id で紐付け）"""
+    user_id = current_user.user_id if current_user else None
+    records = get_municipality_history(session_id=session_id, user_id=user_id)
+    return {"records": [r.model_dump() for r in records]}
 
 
 @app.post("/api/analyze")

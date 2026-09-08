@@ -338,6 +338,16 @@
             <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
                 <option value="">読み込み中...</option>
             </select>
+            <button id="detectMunicipalityBtn" type="button" class="mt-2 text-sm text-indigo-600 hover:underline">
+                📍 現在地から自治体を特定する
+            </button>
+            <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+            <div id="municipalityHistoryWrap" class="mt-2 hidden">
+                <button id="toggleMunicipalityHistoryBtn" type="button" class="text-xs text-gray-500 hover:underline">
+                    🕒 特定履歴を表示
+                </button>
+                <ul id="municipalityHistoryList" class="hidden mt-1 space-y-1 text-xs text-gray-600 border-l-2 border-gray-200 pl-2"></ul>
+            </div>
         </section>
 
         <!-- 解析ボタン -->
@@ -1174,6 +1184,131 @@
                     : '';
                 hint.classList.toggle('hidden', !filterCategory);
             }
+        }
+
+        // 未ログイン時でも履歴を紐付けられるよう、匿名IDをlocalStorageに永続化する
+        function getOrCreateSessionId() {
+            try {
+                let id = localStorage.getItem('civicLensSessionId');
+                if (!id) {
+                    id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+                    localStorage.setItem('civicLensSessionId', id);
+                }
+                return id;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // 現在地（Geolocation API）から自治体を特定し、対象機関の <select> に反映する
+        async function detectMunicipalityFromLocation() {
+            const statusEl = document.getElementById('detectMunicipalityStatus');
+            if (!navigator.geolocation) {
+                statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
+                return;
+            }
+
+            statusEl.textContent = '📍 現在地を取得中...';
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                try {
+                    const formData = new FormData();
+                    formData.append('lat', lat);
+                    formData.append('lon', lon);
+                    const sessionId = getOrCreateSessionId();
+                    if (sessionId) formData.append('session_id', sessionId);
+                    const res = await fetch('/api/municipality/detect', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error('自治体の特定に失敗しました');
+                    const data = await res.json();
+                    await handleMunicipalityDetectResult(data, statusEl);
+                    loadMunicipalityHistory();
+                } catch (e) {
+                    statusEl.textContent = `❌ ${e.message}`;
+                }
+            }, (err) => {
+                statusEl.textContent = `❌ 位置情報を取得できませんでした（${err.message}）`;
+            });
+        }
+
+        async function handleMunicipalityDetectResult(data, statusEl) {
+            const loc = data.location;
+            if (data.status === 'found') {
+                const select = document.getElementById('targetAuthority');
+                if ([...select.options].some(o => o.value === data.authority_key)) {
+                    select.value = data.authority_key;
+                }
+                statusEl.textContent = `✅ ${loc.full_name} を特定しました（${data.authority_name}）`;
+                return;
+            }
+            if (data.status === 'found_pooled') {
+                statusEl.textContent = `✅ ${loc.full_name} を特定しました（${data.pooled.ordinance_name || '情報公開条例'}・調査済み）`;
+                return;
+            }
+            // researching: バックグラウンドエージェントが調査中なのでポーリングする
+            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...`;
+            pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl);
+        }
+
+        async function pollMunicipalityStatus(muniCode, fullName, statusEl, attempt = 0) {
+            if (attempt >= 15) {
+                statusEl.textContent = `⏳ ${fullName} の調査に時間がかかっています。しばらくしてから再度お試しください`;
+                return;
+            }
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/municipality/status/${muniCode}`);
+                    const data = await res.json();
+                    if (data.status === 'ready') {
+                        statusEl.textContent = `✅ ${fullName} の情報公開制度を調査しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
+                    } else if (data.status === 'failed') {
+                        statusEl.textContent = `❌ ${fullName} の調査に失敗しました`;
+                    } else {
+                        pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1);
+                    }
+                } catch (e) {
+                    pollMunicipalityStatus(muniCode, fullName, statusEl, attempt + 1);
+                }
+            }, 2000);
+        }
+
+        const municipalityHistoryStatusLabels = {
+            found: '✅ 特定済み',
+            found_pooled: '✅ 特定済み（調査済み）',
+            researching: '🔎 調査中',
+            failed: '❌ 失敗',
+        };
+
+        async function loadMunicipalityHistory() {
+            const wrap = document.getElementById('municipalityHistoryWrap');
+            const list = document.getElementById('municipalityHistoryList');
+            if (!wrap || !list) return;
+            try {
+                const sessionId = getOrCreateSessionId();
+                const url = sessionId
+                    ? `/api/municipality/history?session_id=${encodeURIComponent(sessionId)}`
+                    : '/api/municipality/history';
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) return;
+                const data = await res.json();
+                const records = data.records || [];
+                wrap.classList.toggle('hidden', records.length === 0);
+                list.innerHTML = records.map(r => {
+                    const label = municipalityHistoryStatusLabels[r.status] || r.status;
+                    const when = new Date(r.created_at).toLocaleString('ja-JP');
+                    const authority = r.authority_name ? `（${r.authority_name}）` : '';
+                    return `<li>${when} — ${r.full_name}${authority} ${label}</li>`;
+                }).join('');
+            } catch (e) {
+                // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
+            }
+        }
+
+        const toggleMunicipalityHistoryBtn = document.getElementById('toggleMunicipalityHistoryBtn');
+        if (toggleMunicipalityHistoryBtn) {
+            toggleMunicipalityHistoryBtn.addEventListener('click', () => {
+                document.getElementById('municipalityHistoryList').classList.toggle('hidden');
+            });
         }
 
         function selectSituation(s) {
@@ -2352,11 +2487,17 @@
             }
         }
 
+        const detectMunicipalityBtn = document.getElementById('detectMunicipalityBtn');
+        if (detectMunicipalityBtn) {
+            detectMunicipalityBtn.addEventListener('click', detectMunicipalityFromLocation);
+        }
+
         // 起動
         checkAuthStatus();
         loadSituations();
         loadAuthorities();
         loadPublicFeed();
+        loadMunicipalityHistory();
     </script>
 </body>
 </html>
