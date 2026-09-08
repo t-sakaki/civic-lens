@@ -1231,15 +1231,18 @@
             }
         }
 
-        // 現在地（Geolocation API）から自治体を特定し、対象機関の <select> に反映する
-        async function detectMunicipalityFromLocation() {
+        // 現在地（Geolocation API）から自治体を特定し、対象機関の <select> に反映する。
+        // ページ読み込み時にバックグラウンドで自動実行される（silent: true）ほか、
+        // 「📍 現在地から自治体を特定する」ボタンからも手動で再実行できる。
+        async function detectMunicipalityFromLocation(options = {}) {
+            const silent = options.silent === true;
             const statusEl = document.getElementById('detectMunicipalityStatus');
             if (!navigator.geolocation) {
-                statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
+                if (!silent) statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
                 return;
             }
 
-            statusEl.textContent = '📍 現在地を取得中...';
+            if (!silent) statusEl.textContent = '📍 現在地を取得中...';
             navigator.geolocation.getCurrentPosition(async (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
@@ -1258,8 +1261,12 @@
                     statusEl.textContent = `❌ ${e.message}`;
                 }
             }, (err) => {
-                statusEl.textContent = `❌ 位置情報を取得できませんでした（${err.message}）`;
-            });
+                // silent時（自動判定）は、位置情報が許可されていないだけの状況が大半のため
+                // ❌表示で不安を与えず、手動ボタンを促す穏やかな文言にとどめる
+                statusEl.textContent = silent
+                    ? '📍 位置情報が利用できません（ボタンから手動で特定できます）'
+                    : `❌ 位置情報を取得できませんでした（${err.message}）`;
+            }, silent ? { timeout: 8000 } : undefined);
         }
 
         // 対象機関は1つに絞り込まず、都道府県・周辺市区町村を含む候補を一覧表示し、
@@ -2594,9 +2601,15 @@
         // 起動
         checkAuthStatus();
         loadSituations();
-        loadAuthorities();
         loadPublicFeed();
         loadMunicipalityHistory();
+
+        (async () => {
+            // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
+            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定を行う
+            await loadAuthorities();
+            detectMunicipalityFromLocation({ silent: true });
+        })();
     </script>
 </body>
 </html>
