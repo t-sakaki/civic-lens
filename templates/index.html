@@ -1306,8 +1306,18 @@
                 statusEl.textContent = `✅ ${loc.full_name} は調査済みです（${data.pooled.ordinance_name || '情報公開条例'}）。対象機関に反映しました`;
                 return;
             }
-            // researching: バックグラウンドエージェントが調査中なのでポーリングする
-            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...（周辺の候補からも選べます）`;
+            // researching: 一宮市自体はまだプルダウンに無いため、調査完了までの暫定として
+            // 最も近い既知の候補（都道府県・隣接市区町村等）を仮選択しておく（何も反映されないまま
+            // 放置されて見えるのを防ぐ）。調査が完了次第、この自治体自身の選択肢に差し替える
+            const nearestKnown = (data.candidates || [])[0];
+            if (nearestKnown) {
+                const select = document.getElementById('targetAuthority');
+                if ([...select.options].some(o => o.value === nearestKnown.key)) {
+                    select.value = nearestKnown.key;
+                }
+                renderMunicipalityCandidates(data.candidates, nearestKnown.key);
+            }
+            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...（それまでは暫定的に${nearestKnown ? nearestKnown.name : '近隣の機関'}を選択中。周辺の候補からも選べます）`;
             pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl, 0, data.candidates || []);
         }
 
