@@ -84,51 +84,56 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .situation-card {
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-        .situation-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .situation-card.selected {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            color: white;
-        }
         /* --- アイコンの「呼吸」アニメーション（エージェントが生きている感を演出） --- */
-        .situation-emoji {
-            display: inline-block;
-            transform-origin: center;
-        }
         @keyframes emojiBreathe {
             0%, 100% { transform: scale(1) translateY(0); }
             50% { transform: scale(1.18) translateY(-3px); }
         }
-        .situation-card:hover .situation-emoji {
+
+        /* --- シチュエーションのチップ流れ（数秒おきにフェード入れ替え。悩んでいる人が読むより先に「押す」を選べるように） --- */
+        .situation-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 0.8rem;
+            color: #374151;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s, transform 0.15s;
+            animation: chipFadeIn 0.5s ease-out;
+        }
+        .situation-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+        .situation-chip-emoji {
+            display: inline-block;
+            font-size: 1.05rem;
+            transform-origin: center;
+        }
+        .situation-chip:hover .situation-chip-emoji {
             animation: emojiBreathe 1.4s ease-in-out infinite;
         }
+        @keyframes chipFadeIn {
+            from { opacity: 0; transform: translateY(4px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .situation-chip.chip-leaving {
+            animation: chipFadeOut 0.35s ease-in forwards;
+            pointer-events: none;
+        }
+        @keyframes chipFadeOut {
+            to { opacity: 0; transform: translateY(-4px) scale(0.95); }
+        }
         @media (prefers-reduced-motion: reduce) {
-            .situation-card:hover .situation-emoji {
+            .situation-chip, .situation-chip.chip-leaving, .situation-chip:hover .situation-chip-emoji {
                 animation: none;
             }
         }
-        .no-scrollbar {
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .prompt-chip {
-            flex-shrink: 0;
-            white-space: nowrap;
-            transition: all 0.15s;
-        }
-        .prompt-chip:hover {
-            transform: translateY(-1px);
-        }
-
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
         #userInput::placeholder {
             color: #4b5563; /* ダークグレイ */
@@ -310,30 +315,10 @@
             </div>
         </header>
 
-        <!-- STEP 0: シチュエーション選択（NEW!） -->
+        <!-- STEP 0: 怒り・不満の入力（テキスト入力とシチュエーション選択を統合） -->
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🎯 STEP 0: 何に怒りを感じていますか？</h2>
-            <p class="text-sm text-gray-600 mb-4">シチュエーションを選ぶと、請求すべき行政文書を自動でリストアップします</p>
-
-            <div id="situationGrid" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <!-- 動的に生成 -->
-            </div>
-
-            <div class="mt-4 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-gray-100">
-                <button id="useFreeInputBtn" class="text-sm text-blue-600 hover:underline">
-                    ↓ 自分の言葉で直接入力する
-                </button>
-                <button id="globalVoiceBtn" type="button" class="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow hover:from-red-600 hover:to-rose-700 transition transform hover:scale-105">
-                    <span class="text-base">🎙️</span>
-                    <span>声で話しかける（音声入力）</span>
-                </button>
-            </div>
-        </section>
-
-        <!-- STEP 1: 感情入力（チャット感覚でそのまま入力可能） -->
-        <section id="freeInputSection" class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-1 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
-            <p class="text-sm text-gray-500 mb-4">STEP 0で選ばなくても大丈夫。下のチャット欄にそのまま話しかけてください。</p>
+            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🎯 何に怒りを感じていますか？</h2>
+            <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
             <div class="grid md:grid-cols-2 gap-6">
                 <!-- テキスト入力（チャット風） -->
@@ -352,23 +337,20 @@
                         </button>
                     </div>
 
-                    <!-- 💡 プロンプトのヒント（サジェストチップ） -->
-                    <div class="mb-2">
-                        <div class="flex items-center gap-1.5 text-[11px] text-indigo-600 font-semibold mb-1.5">
-                            <span>💡</span><span>入力のヒント（タップして入力）</span>
-                        </div>
-                        <div id="promptSuggestions" class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                            <!-- 動的に生成 -->
-                        </div>
-                    </div>
-
-                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="ここに直接入力してOKです。例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
                     <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
                         <span class="relative flex h-2.5 w-2.5">
                           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                           <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
                         </span>
                         <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
+                    </div>
+
+                    <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
+                         押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
+                    <div class="mt-3">
+                        <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
+                        <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
                     </div>
                 </div>
 
@@ -1095,7 +1077,6 @@
             const text = document.getElementById('voiceStatusText');
             const btn = document.getElementById('voiceInputBtn');
             const indicator = document.getElementById('voiceIndicator');
-            const globalBtn = document.getElementById('globalVoiceBtn');
 
             if (recording) {
                 if (icon) icon.textContent = '🔴';
@@ -1105,7 +1086,6 @@
                     btn.classList.add('bg-red-600', 'text-white', 'shadow');
                 }
                 if (indicator) indicator.classList.remove('hidden');
-                if (globalBtn) globalBtn.classList.add('animate-pulse');
             } else {
                 if (icon) icon.textContent = '🎙️';
                 if (text) text.textContent = '音声入力（話して入力）';
@@ -1114,7 +1094,6 @@
                     btn.classList.remove('bg-red-600', 'text-white', 'shadow');
                 }
                 if (indicator) indicator.classList.add('hidden');
-                if (globalBtn) globalBtn.classList.remove('animate-pulse');
             }
         }
 
@@ -1122,11 +1101,6 @@
             if (!SpeechRecognition) {
                 alert('お使いのブラウザは音声入力（Web Speech API）に対応していません。Google Chromeなどのブラウザでお試しください。');
                 return;
-            }
-            // 入力セクションを開く
-            const freeSection = document.getElementById('freeInputSection');
-            if (freeSection.classList.contains('hidden')) {
-                freeSection.classList.remove('hidden');
             }
             const userInput = document.getElementById('userInput');
             userInput.focus();
@@ -1158,13 +1132,6 @@
         }
 
         document.getElementById('voiceInputBtn').addEventListener('click', toggleVoiceRecognition);
-        document.getElementById('globalVoiceBtn').addEventListener('click', () => {
-            if (!isVoiceRecording) {
-                startVoiceRecognition();
-            } else {
-                stopVoiceRecognition();
-            }
-        });
 
         // プロンプト入力欄のプレースホルダーをタイプライター風に動かし続け、
         // 「AIが常に動いている・生きている」感覚を演出する（入力中は止める）
@@ -1217,22 +1184,49 @@
             tick();
         }
 
-        // シチュエーション一覧を取得
+        // シチュエーション一覧を取得し、チップとして数秒おきにフェードで流し続ける
+        let allSituations = [];
+        let situationChipCursor = 0;
+        const SITUATION_CHIPS_VISIBLE = 6;
+        const SITUATION_CHIP_INTERVAL_MS = 4000;
+
         async function loadSituations() {
             const res = await fetch('/api/situations');
             const data = await res.json();
-            const grid = document.getElementById('situationGrid');
-            data.situations.forEach(s => {
-                const card = document.createElement('div');
-                card.className = 'situation-card border-2 border-gray-200 rounded-lg p-3 text-center hover:border-blue-400';
-                card.dataset.key = s.key;
-                card.innerHTML = `
-                    <div class="situation-emoji text-3xl mb-1">${s.emoji}</div>
-                    <div class="font-semibold text-sm">${s.label}</div>
-                `;
-                card.addEventListener('click', () => selectSituation(s));
-                grid.appendChild(card);
-            });
+            allSituations = data.situations;
+            renderSituationChipBatch();
+            setInterval(renderSituationChipBatch, SITUATION_CHIP_INTERVAL_MS);
+        }
+
+        function renderSituationChipBatch() {
+            const container = document.getElementById('situationChipFlow');
+            if (!container || allSituations.length === 0) return;
+
+            const existingChips = [...container.children];
+            existingChips.forEach(chip => chip.classList.add('chip-leaving'));
+
+            const buildNextBatch = () => {
+                container.innerHTML = '';
+                const count = Math.min(SITUATION_CHIPS_VISIBLE, allSituations.length);
+                for (let i = 0; i < count; i++) {
+                    const s = allSituations[situationChipCursor % allSituations.length];
+                    situationChipCursor++;
+
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'situation-chip';
+                    chip.dataset.key = s.key;
+                    chip.innerHTML = `<span class="situation-chip-emoji">${s.emoji}</span><span>${s.label}</span>`;
+                    chip.addEventListener('click', () => selectSituation(s));
+                    container.appendChild(chip);
+                }
+            };
+
+            if (existingChips.length > 0) {
+                setTimeout(buildNextBatch, 350);
+            } else {
+                buildNextBatch();
+            }
         }
 
         // 対象機関一覧を取得しておき、必要に応じてカテゴリで絞り込んで <select> を組み立てる
@@ -1298,7 +1292,7 @@
             const hint = document.getElementById('authorityFilterHint');
             if (hint) {
                 hint.textContent = filterCategory
-                    ? `「${filterCategory}」のみ表示中（STEP 0の選択に基づく絞り込み）`
+                    ? `「${filterCategory}」のみ表示中（選択したシチュエーションに基づく絞り込み）`
                     : '';
                 hint.classList.toggle('hidden', !filterCategory);
             }
@@ -1469,11 +1463,6 @@
 
         function selectSituation(s) {
             selectedSituation = s;
-            document.querySelectorAll('.situation-card').forEach(c => {
-                c.classList.remove('selected');
-                if (c.dataset.key === s.key) c.classList.add('selected');
-            });
-
             renderAuthorityOptions(s.category);
 
             // シチュエーションに応じたサンプルテキストを自動入力
@@ -1481,47 +1470,6 @@
                 document.getElementById('userInput').value = detail.sample_anger_text;
             });
         }
-
-        // すでに常時表示されているチャット欄まで滑らかにスクロールしてフォーカスする
-        document.getElementById('useFreeInputBtn').addEventListener('click', () => {
-            selectedSituation = null;
-            renderAuthorityOptions(null);
-            const userInput = document.getElementById('userInput');
-            userInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            userInput.focus();
-        });
-
-        // 💡 入力のヒント（サジェストチップ） — チャットのプロンプト例のように、タップで即入力
-        const PROMPT_SUGGESTIONS = [
-            '町内会館の建設費が高すぎる気がする。内訳を知りたい。',
-            '生活保護の申請を窓口で門前払いされた。記録を確認したい。',
-            '近所の道路工事がずっと終わらない。工程表を見たい。',
-            '議員の政務活動費の使い道が不透明で納得できない。',
-            '保育園の待機児童数の実態が公表されている数字と違う気がする。',
-            'ゴミ収集の民間委託費用が高すぎるのでは？契約内容を知りたい。',
-        ];
-
-        function renderPromptSuggestions() {
-            const container = document.getElementById('promptSuggestions');
-            if (!container) return;
-            container.innerHTML = '';
-            PROMPT_SUGGESTIONS.forEach(text => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'prompt-chip px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-medium hover:bg-indigo-100 hover:border-indigo-300';
-                chip.textContent = text.length > 24 ? text.slice(0, 24) + '…' : text;
-                chip.title = text;
-                chip.addEventListener('click', () => {
-                    selectedSituation = null;
-                    renderAuthorityOptions(null);
-                    const userInput = document.getElementById('userInput');
-                    userInput.value = text;
-                    userInput.focus();
-                });
-                container.appendChild(chip);
-            });
-        }
-        renderPromptSuggestions();
 
         // カメラ起動
         document.getElementById('startCamera').addEventListener('click', async () => {
