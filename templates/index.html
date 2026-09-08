@@ -110,6 +110,12 @@
             background: #eff6ff;
             transform: translateY(-1px);
         }
+        .situation-chip.selected {
+            border-color: #6366f1;
+            background: #eef2ff;
+            color: #4338ca;
+            font-weight: 600;
+        }
         .situation-chip-emoji {
             display: inline-block;
             font-size: 1.05rem;
@@ -420,14 +426,29 @@
             </div>
         </section>
 
-        <!-- 自治体選択 -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-1 text-gray-800">🏛️ 対象機関</h2>
-            <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium mb-2"></p>
-            <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
+        <!-- 対象機関選択（プロンプト入力と同じ見た目・同じレベルの、独立した入口） -->
+        <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-2xl">🏛️</span>
+                <h2 class="text-2xl font-semibold text-gray-800">対象機関</h2>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">先にこちらから選んでもかまいません。下から近いものをタップしてください</p>
+
+            <div id="selectedAuthorityBadge" class="inline-flex items-center gap-2 mb-3 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm font-medium">
+                <span id="selectedAuthorityIcon">🏛️</span>
+                <span id="selectedAuthorityLabel">読み込み中...</span>
+            </div>
+
+            <!-- 実際の選択状態はこの<select>が保持する（他の全機能はこの値を参照する）。
+                 表示は下の流れるチップに置き換えたため、画面上には出さない -->
+            <select id="targetAuthority" class="hidden">
                 <option value="">読み込み中...</option>
             </select>
-            <button id="detectMunicipalityBtn" type="button" class="mt-2 text-sm text-indigo-600 hover:underline">
+
+            <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium mb-2"></p>
+            <div id="authorityChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem] mb-3"></div>
+
+            <button id="detectMunicipalityBtn" type="button" class="text-sm text-indigo-600 hover:underline">
                 📍 現在地から自治体を特定する
             </button>
             <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
@@ -1284,6 +1305,7 @@
             const data = await res.json();
             allAuthorities = data.authorities;
             renderAuthorityOptions(null);
+            setInterval(renderAuthorityChipBatch, SITUATION_CHIP_INTERVAL_MS);
         }
 
         // Geolocationのバックグラウンド調査で新たに判明した自治体（data/authorities/*.json
@@ -1341,6 +1363,81 @@
                     ? `「${filterCategory}」のみ表示中（選択したシチュエーションに基づく絞り込み）`
                     : '';
                 hint.classList.toggle('hidden', !filterCategory);
+            }
+
+            updateSelectedAuthorityBadge();
+            renderAuthorityChipBatch();
+        }
+
+        // 対象機関を選択する唯一の入口。<select>の値を更新し、選択中バッジと
+        // チップの見た目を同期させる（シチュエーションチップ・位置情報検出のどちらから来ても同じ経路を通す）
+        function setSelectedAuthority(key) {
+            const select = document.getElementById('targetAuthority');
+            if (![...select.options].some(o => o.value === key)) return;
+            select.value = key;
+            updateSelectedAuthorityBadge();
+        }
+
+        function updateSelectedAuthorityBadge() {
+            const select = document.getElementById('targetAuthority');
+            const icon = document.getElementById('selectedAuthorityIcon');
+            const label = document.getElementById('selectedAuthorityLabel');
+            if (!select || !icon || !label) return;
+
+            const current = allAuthorities.find(a => a.key === select.value);
+            if (!current) {
+                label.textContent = '未選択';
+                return;
+            }
+            icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
+            const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
+            label.textContent = `${current.name}（${current.type}${autoTag}）`;
+        }
+
+        // 対象機関も、シチュエーションと同じ「流れるチップ」で選ぶ。<select>は状態保持専用で非表示。
+        let authorityChipCursor = 0;
+        const AUTHORITY_CHIPS_VISIBLE = 6;
+
+        function renderAuthorityChipBatch() {
+            const container = document.getElementById('authorityChipFlow');
+            if (!container || allAuthorities.length === 0) return;
+
+            const pool = currentAuthorityFilter
+                ? allAuthorities.filter(a => a.category === currentAuthorityFilter)
+                : allAuthorities;
+            if (pool.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const existingChips = [...container.children];
+            existingChips.forEach(chip => chip.classList.add('chip-leaving'));
+
+            const buildNextBatch = () => {
+                container.innerHTML = '';
+                const selectedKey = document.getElementById('targetAuthority').value;
+                const count = Math.min(AUTHORITY_CHIPS_VISIBLE, pool.length);
+                for (let i = 0; i < count; i++) {
+                    const a = pool[authorityChipCursor % pool.length];
+                    authorityChipCursor++;
+
+                    const icon = a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'situation-chip' + (a.key === selectedKey ? ' selected' : '');
+                    chip.dataset.key = a.key;
+                    chip.innerHTML = `<span class="situation-chip-emoji">${icon}</span><span>${a.name}（${a.type}${autoTag}）</span>`;
+                    chip.addEventListener('click', () => setSelectedAuthority(a.key));
+                    container.appendChild(chip);
+                }
+            };
+
+            if (existingChips.length > 0) {
+                setTimeout(buildNextBatch, 350);
+            } else {
+                buildNextBatch();
             }
         }
 
@@ -1425,11 +1522,8 @@
 
             listEl.querySelectorAll('.municipality-candidate-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const select = document.getElementById('targetAuthority');
                     const key = btn.dataset.authorityKey;
-                    if ([...select.options].some(o => o.value === key)) {
-                        select.value = key;
-                    }
+                    setSelectedAuthority(key);
                     renderMunicipalityCandidates(candidates, key);
                 });
             });
@@ -1440,10 +1534,7 @@
             renderMunicipalityCandidates(data.candidates, data.authority_key);
 
             if (data.status === 'found') {
-                const select = document.getElementById('targetAuthority');
-                if ([...select.options].some(o => o.value === data.authority_key)) {
-                    select.value = data.authority_key;
-                }
+                setSelectedAuthority(data.authority_key);
                 statusEl.textContent = `✅ ${loc.full_name} 周辺の候補を${(data.candidates || []).length}件見つけました。下から対象機関を選んでください`;
                 return;
             }
@@ -1451,7 +1542,7 @@
                 // 未収録の自治体はサーバー側で調査が完了してから返ってくる（同期処理）ため、
                 // このレスポンスの時点で対象機関プルダウンに即座に反映できる
                 addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
-                document.getElementById('targetAuthority').value = data.authority_key;
+                setSelectedAuthority(data.authority_key);
                 renderMunicipalityCandidates(data.candidates, data.authority_key);
                 statusEl.textContent = `✅ ${loc.full_name}（${data.authority_name}）を対象機関に反映しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
                 return;
@@ -1459,10 +1550,7 @@
             // failed: 調査に失敗した場合は、最も近い既知の候補を暫定的に選んでおく
             const nearestKnown = (data.candidates || [])[0];
             if (nearestKnown) {
-                const select = document.getElementById('targetAuthority');
-                if ([...select.options].some(o => o.value === nearestKnown.key)) {
-                    select.value = nearestKnown.key;
-                }
+                setSelectedAuthority(nearestKnown.key);
                 renderMunicipalityCandidates(data.candidates, nearestKnown.key);
             }
             statusEl.textContent = `⚠️ ${loc.full_name} の情報公開制度の調査に失敗しました。近隣の候補（${nearestKnown ? nearestKnown.name : '一覧'}）から選択してください`;
@@ -1599,7 +1687,7 @@
                 document.getElementById('actionSection').classList.remove('hidden');
 
                 if (data.anger_analysis.target_authority_key) {
-                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
+                    setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
             } catch (err) {
                 alert('エラー: ' + err.message);
