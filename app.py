@@ -176,10 +176,16 @@ async def detect_municipality_from_location(
     matched_key = match_authority_by_text(location.municipality, default="")
     exact_match = AUTHORITIES[matched_key] if matched_key else None
 
+    # プール参照・バックグラウンド調査・履歴保存はFirestoreに依存する拡張機能であり、
+    # Firebase未設定/接続失敗時でも候補一覧（静的データのみで完結）は必ず返す
     pooled = None
     research_status = None
     if not exact_match:
-        pooled = get_pooled(location.muni_code)
+        try:
+            pooled = get_pooled(location.muni_code)
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（Firestore未設定の可能性）: {e}")
+
         if pooled and pooled.get("status") == "ready":
             research_status = "found_pooled"
         elif pooled and pooled.get("status") == "researching":
@@ -194,20 +200,23 @@ async def detect_municipality_from_location(
             )
             research_status = "researching"
 
-    create_municipality_history_record(
-        muni_code=location.muni_code,
-        prefecture=location.prefecture,
-        municipality=location.municipality,
-        full_name=location.full_name,
-        lat=location.lat,
-        lon=location.lon,
-        status="found" if exact_match else (research_status or "researching"),
-        authority_key=matched_key or None,
-        authority_name=exact_match.authority if exact_match else None,
-        candidates=[c["name"] for c in candidates],
-        session_id=session_id,
-        user_id=user_id,
-    )
+    try:
+        create_municipality_history_record(
+            muni_code=location.muni_code,
+            prefecture=location.prefecture,
+            municipality=location.municipality,
+            full_name=location.full_name,
+            lat=location.lat,
+            lon=location.lon,
+            status="found" if exact_match else (research_status or "researching"),
+            authority_key=matched_key or None,
+            authority_name=exact_match.authority if exact_match else None,
+            candidates=[c["name"] for c in candidates],
+            session_id=session_id,
+            user_id=user_id,
+        )
+    except Exception as e:
+        print(f"municipality_history 保存エラー（Firestore未設定の可能性）: {e}")
 
     return {
         "status": "found" if exact_match else research_status,
@@ -222,7 +231,11 @@ async def detect_municipality_from_location(
 @app.get("/api/municipality/status/{muni_code}")
 async def get_municipality_research_status(muni_code: str):
     """バックグラウンド調査の進捗をポーリングするためのエンドポイント"""
-    pooled = get_pooled(muni_code)
+    try:
+        pooled = get_pooled(muni_code)
+    except Exception as e:
+        print(f"municipality_pool 参照エラー（Firestore未設定の可能性）: {e}")
+        pooled = None
     if pooled is None:
         raise HTTPException(status_code=404, detail="調査タスクが見つかりません")
     return {"status": pooled.get("status", "researching"), "pooled": pooled}
@@ -235,7 +248,11 @@ async def get_municipality_detection_history(
 ):
     """自治体特定の実行履歴（ログイン中は user_id、未ログインは session_id で紐付け）"""
     user_id = current_user.user_id if current_user else None
-    records = get_municipality_history(session_id=session_id, user_id=user_id)
+    try:
+        records = get_municipality_history(session_id=session_id, user_id=user_id)
+    except Exception as e:
+        print(f"municipality_history 参照エラー（Firestore未設定の可能性）: {e}")
+        records = []
     return {"records": [r.model_dump() for r in records]}
 
 
