@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -64,7 +64,7 @@ from web3_sbt import (
 from auth import (
     User, register_user, authenticate_password, authenticate_wallet,
     create_session_token, verify_session_token, get_user_by_id,
-    generate_siwe_nonce
+    generate_siwe_nonce, request_magic_link, verify_magic_link
 )
 
 
@@ -1097,6 +1097,42 @@ async def api_login_wallet(
         "user": user.model_dump(exclude={"password_hash"}),
         "token": token,
     }
+
+
+@app.post("/api/auth/magic-link/request")
+async def api_request_magic_link(email: str = Form(...)):
+    """マジックリンク（パスワード不要のワンタイムログインURL）をメールで送信"""
+    try:
+        request_magic_link(email=email)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（magic-link/request）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+    return {"success": True, "message": "ログイン用のリンクをメールで送信しました（15分間有効）"}
+
+
+@app.get("/api/auth/magic-link/verify")
+async def api_verify_magic_link(token: str):
+    """メールのマジックリンクを検証し、セッションを発行してトップページへリダイレクト"""
+    try:
+        user = verify_magic_link(token=token)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（magic-link/verify）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+
+    session_token = create_session_token(user.user_id)
+    response = RedirectResponse(url="/")
+    response.set_cookie(
+        key="auth_token",
+        value=session_token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @app.get("/api/auth/me")

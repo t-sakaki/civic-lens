@@ -956,6 +956,9 @@
                 <button id="tabWalletBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     🦊 Web3 ウォレット
                 </button>
+                <button id="tabMagicLinkBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                    ✨ マジックリンク
+                </button>
             </div>
 
             <!-- パネル 1: パスワード認証 -->
@@ -1000,6 +1003,24 @@
                 </button>
 
                 <div id="walletStatusMsg" class="text-xs text-center text-gray-500"></div>
+            </div>
+
+            <!-- パネル 3: マジックリンク（パスワード不要のメールログイン） -->
+            <div id="panelMagicLink" class="hidden space-y-3 py-2">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-900 leading-relaxed">
+                    ✨ <strong>マジックリンクログイン</strong><br>
+                    パスワード不要。メールアドレス宛にログイン用リンクを送信します（15分間有効・1回限り）。
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">メールアドレス</label>
+                    <input type="email" id="magicLinkEmailInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="taro@example.com">
+                </div>
+
+                <button id="submitMagicLinkBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-md text-sm shadow transition mt-2">
+                    ログイン用リンクを送信する
+                </button>
+                <div id="magicLinkStatusMsg" class="text-xs text-center mt-2"></div>
             </div>
         </div>
     </div>
@@ -2570,22 +2591,30 @@
         // タブ切り替え（パスワード vs Web3）
         const tabPasswordBtn = document.getElementById('tabPasswordBtn');
         const tabWalletBtn = document.getElementById('tabWalletBtn');
+        const tabMagicLinkBtn = document.getElementById('tabMagicLinkBtn');
         const panelPassword = document.getElementById('panelPassword');
         const panelWallet = document.getElementById('panelWallet');
+        const panelMagicLink = document.getElementById('panelMagicLink');
+        const authTabInactiveClass = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
 
-        tabPasswordBtn.addEventListener('click', () => {
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600';
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelPassword.classList.remove('hidden');
-            panelWallet.classList.add('hidden');
-        });
+        function showAuthPanel(panel) {
+            panelPassword.classList.toggle('hidden', panel !== 'password');
+            panelWallet.classList.toggle('hidden', panel !== 'wallet');
+            panelMagicLink.classList.toggle('hidden', panel !== 'magic');
+            tabPasswordBtn.className = panel === 'password'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+            tabWalletBtn.className = panel === 'wallet'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600'
+                : authTabInactiveClass;
+            tabMagicLinkBtn.className = panel === 'magic'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+        }
 
-        tabWalletBtn.addEventListener('click', () => {
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600';
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelWallet.classList.remove('hidden');
-            panelPassword.classList.add('hidden');
-        });
+        tabPasswordBtn.addEventListener('click', () => showAuthPanel('password'));
+        tabWalletBtn.addEventListener('click', () => showAuthPanel('wallet'));
+        tabMagicLinkBtn.addEventListener('click', () => showAuthPanel('magic'));
 
         // ログイン / 新規登録切り替え
         const toggleAuthModeBtn = document.getElementById('toggleAuthModeBtn');
@@ -2705,6 +2734,35 @@
                 await checkAuthStatus();
             } catch (err) {
                 statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            }
+        });
+
+        // マジックリンクログイン（パスワード不要のメールログイン）
+        document.getElementById('submitMagicLinkBtn').addEventListener('click', async () => {
+            const email = document.getElementById('magicLinkEmailInput').value.trim();
+            const statusMsg = document.getElementById('magicLinkStatusMsg');
+            const submitBtn = document.getElementById('submitMagicLinkBtn');
+
+            if (!email) {
+                statusMsg.innerHTML = '<span class="text-red-500">メールアドレスを入力してください</span>';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusMsg.textContent = '送信中...';
+
+            try {
+                const formData = new FormData();
+                formData.append('email', email);
+                const res = await fetch('/api/auth/magic-link/request', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'リンクの送信に失敗しました');
+
+                statusMsg.innerHTML = '<span class="text-green-600">✅ ' + email + ' 宛にログイン用リンクを送信しました。メール内のリンクをクリックしてログインしてください（15分間有効）。</span>';
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                submitBtn.disabled = false;
             }
         });
 
