@@ -253,6 +253,24 @@
             }
         }
 
+        /* --- 見出し「何に怒りを感じていますか？」のタイプライター演出 --- */
+        #mainQuestionHeading .heading-caret {
+            display: inline-block;
+            width: 2px;
+            margin-left: 2px;
+            background: currentColor;
+            animation: caretBlink 0.9s steps(1) infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #mainQuestionHeading .heading-caret {
+                animation: none;
+            }
+        }
+        @keyframes caretBlink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+
         /* --- 思考中インジケーター (Thinking Indicator) --- */
         .thinking-box {
             display: flex;
@@ -419,7 +437,7 @@
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
             <div class="flex items-center gap-2 mb-1">
                 <span class="text-2xl">🎯</span>
-                <h2 class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
+                <h2 id="mainQuestionHeading" class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
             </div>
             <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
@@ -1300,6 +1318,58 @@
                         return;
                     }
                     setTimeout(tick, 20);
+                }
+            };
+            tick();
+        }
+
+        // 見出し「何に怒りを感じていますか？」を、いくつかの問いかけの間でタイプライター風に切り替える
+        const HEADING_QUESTIONS = [
+            '何に怒りを感じていますか？',
+            'どんな不満を抱えていますか？',
+            '納得できないこと、ありませんか？',
+            '誰に説明を求めたいですか？',
+            'モヤモヤの原因は何ですか？',
+        ];
+
+        function startHeadingSuggestionAnimation() {
+            const el = document.getElementById('mainQuestionHeading');
+            if (!el) return;
+
+            let questionIndex = 0;
+            let charIndex = 0;
+            let deleting = false;
+
+            const render = (text) => {
+                el.textContent = text;
+                const caret = document.createElement('span');
+                caret.className = 'heading-caret';
+                caret.textContent = ' ';
+                el.appendChild(caret);
+            };
+
+            const tick = () => {
+                const current = HEADING_QUESTIONS[questionIndex % HEADING_QUESTIONS.length];
+
+                if (!deleting) {
+                    charIndex++;
+                    render(current.slice(0, charIndex));
+                    if (charIndex >= current.length) {
+                        deleting = true;
+                        setTimeout(tick, 2600); // 全文表示後、少し静止して読ませる
+                        return;
+                    }
+                    setTimeout(tick, 70);
+                } else {
+                    charIndex--;
+                    render(current.slice(0, charIndex));
+                    if (charIndex <= 0) {
+                        deleting = false;
+                        questionIndex++;
+                        setTimeout(tick, 400);
+                        return;
+                    }
+                    setTimeout(tick, 30);
                 }
             };
             tick();
@@ -2912,6 +2982,7 @@
         loadPublicFeed();
         loadMunicipalityHistory();
         startPromptSuggestionAnimation();
+        startHeadingSuggestionAnimation();
 
         (async () => {
             // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
