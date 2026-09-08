@@ -237,8 +237,14 @@ async def get_municipality_detection_history(
 async def analyze_anger(
     user_input: str = Form(...),
     image_data: Optional[str] = Form(None),
+    target_authority: Optional[str] = Form(None),
 ):
-    """市民の怒りを分析"""
+    """市民の怒りを分析
+
+    target_authority: フロントエンドの対象機関<select>の現在値（Geolocationによる
+    自動特定結果を含む）。請求内容から対象機関を判別できない場合のデフォルト候補として使う。
+    """
+    hint_authority_key = target_authority if target_authority in AUTHORITIES else None
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
@@ -264,19 +270,21 @@ async def analyze_anger(
     # 3. Geminiエージェントで詳細分析
     agent = get_agent()
     try:
-        anger_analysis = agent.analyze_anger(user_input)
+        anger_analysis = agent.analyze_anger(user_input, hint_authority_key)
         anger_analysis.anger_level = anger_level
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        # フォールバック
+        # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
+        fallback_key = hint_authority_key or "anjo-city"
+        fallback_authority = AUTHORITIES[fallback_key]
         anger_analysis = AngerAnalysis(
             anger_level=anger_level,
             emotion_keywords=["怒り", "不信"],
-            target_authority="安城市",
-            target_authority_key="anjo-city",
+            target_authority=fallback_authority.authority,
+            target_authority_key=fallback_key,
             pain_summary=user_input[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
-            legal_basis="安城市情報公開条例第7条",
+            legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",
