@@ -264,8 +264,13 @@ def perform_meta_cognitive_critique(
     }
 
 
-def analyze_user_anger(user_input: str) -> Dict:
-    """市民の入力から怒りを構造化分析する（ADK Function Tool / DAG & メタ認知批評対応）"""
+def analyze_user_anger(user_input: str, hint_authority_key: Optional[str] = None) -> Dict:
+    """市民の入力から怒りを構造化分析する（ADK Function Tool / DAG & メタ認知批評対応）
+
+    hint_authority_key: 請求文に対象機関を判別できる記述がない場合に使うデフォルト値。
+    Geolocationで特定済みの自治体キー等、呼び出し元が把握している最有力候補を渡す。
+    未指定時は安城市（ハッカソンのデフォルト対象機関）にフォールバックする。
+    """
     # キーワードベースの怒りレベル推定
     anger_keywords = [
         "許せない", "ふざけるな", "怒り", "腹立つ", "最悪",
@@ -280,7 +285,7 @@ def analyze_user_anger(user_input: str) -> Dict:
     # 対象機関の推定（data/authorities/*.json の aliases を長い順にマッチ）
     from ordinance_data import match_authority_by_text, get_ordinance
 
-    auth_key = match_authority_by_text(user_input, default="anjo-city")
+    auth_key = match_authority_by_text(user_input, default=hint_authority_key or "anjo-city")
     ordinance = get_ordinance(auth_key)
     auth_name = ordinance.authority if ordinance else "安城市"
 
@@ -532,8 +537,13 @@ class CivicLensAgent:
                 print(f"Failed to initialize google-genai client: {e}")
         return self._genai_client
 
-    def analyze_anger(self, user_input: str) -> AngerAnalysis:
-        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）"""
+    def analyze_anger(self, user_input: str, hint_authority_key: Optional[str] = None) -> AngerAnalysis:
+        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）
+
+        hint_authority_key: 請求文だけでは対象機関を判別できない場合のデフォルト候補
+        （例: ブラウザGeolocationで特定済みの自治体）。Gemini・ルールベースいずれも
+        本文からの判定を優先し、判定できない場合にのみこの値を採用する。
+        """
         if self.genai_client:
             try:
                 prompt = f"""
@@ -578,7 +588,7 @@ JSONのみを返してください。
                 if "critique" not in data or not data["critique"]:
                     data["critique"] = perform_meta_cognitive_critique(
                         user_input,
-                        data.get("target_authority_key", "anjo-city"),
+                        data.get("target_authority_key", hint_authority_key or "anjo-city"),
                         data.get("target_authority", "安城市"),
                         data.get("specific_documents_requested", [])
                     )
@@ -590,7 +600,7 @@ JSONのみを返してください。
                 print(f"Gemini API analysis error: {e}, falling back to rule-based analysis")
 
         # フォールバック: ルールベースの Function Tool 結果を使用
-        tool_result = analyze_user_anger(user_input)
+        tool_result = analyze_user_anger(user_input, hint_authority_key)
         return AngerAnalysis(**tool_result)
 
     def build_counter_argument(

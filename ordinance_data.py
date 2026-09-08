@@ -7,6 +7,7 @@ JSONファイルを1つ追加するだけでよく、Pythonコードの変更は
 ハッカソン用にコンパクトに、本番では条例全文をCloud Storageに格納してRAG。
 """
 import json
+import math
 from pathlib import Path
 from typing import Dict, List, Optional
 from pydantic import BaseModel
@@ -114,6 +115,44 @@ def get_office_info(authority_key: str) -> Dict:
     """対象機関の窓口・アクセス情報（station_guide.py から利用）"""
     info = AUTHORITIES.get(authority_key) or AUTHORITIES.get("anjo-city")
     return info.office.model_dump()
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """2点間の距離（km）をハーバーサイン公式で概算する"""
+    r = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def list_nearby_authorities(
+    lat: float, lon: float, radius_km: float = 40.0, max_results: int = 8
+) -> List[Dict]:
+    """現在地の近くにある対象機関を距離順に列挙する
+
+    自治体は1つに絞り込まず、都道府県（県庁等）や周辺の市区町村・警察・裁判所を
+    候補として複数返す。半径内に候補が1件もない場合は、最も近い1件だけを返す。
+    """
+    ranked = sorted(
+        (
+            {
+                "key": key,
+                "name": info.authority,
+                "type": info.authority_type,
+                "category": info.category,
+                "distance_km": round(_haversine_km(lat, lon, info.office.lat, info.office.lon), 1),
+            }
+            for key, info in AUTHORITIES.items()
+        ),
+        key=lambda c: c["distance_km"],
+    )
+
+    within_radius = [c for c in ranked if c["distance_km"] <= radius_km]
+    if within_radius:
+        return within_radius[:max_results]
+    return ranked[:1]
 
 
 def match_authority_by_text(text: str, default: str = "anjo-city") -> str:

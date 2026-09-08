@@ -30,6 +30,7 @@ from ordinance_data import (
     is_court_authority,
     is_police_authority,
     match_authority_by_text,
+    list_nearby_authorities,
 )
 from station_guide import find_nearest_government_office, get_office_info
 from geolocation import detect_municipality
@@ -155,12 +156,14 @@ async def detect_municipality_from_location(
     session_id: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """ブラウザの現在地（緯度経度）から自治体を特定する
+    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
 
-    data/authorities/*.json に収録済みの自治体ならそのキーを即座に返す。
-    未収録の自治体は municipality_pool（Firestore）を確認し、無ければ
-    バックグラウンドで情報公開制度を調査してプールに保存しつつ
-    status="researching" を返す（クライアントは /api/municipality/status で結果をポーリングする）。
+    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
+    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
+    機関をすべて候補として返す（`candidates`）。
+    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
+    無ければバックグラウンドで情報公開制度を調査してプールに保存しつつ
+    status に "researching" を含める（クライアントは /api/municipality/status で結果をポーリングする）。
     特定結果は毎回、履歴（municipality_detection_history）にも保存する。
     """
     location = detect_municipality(lat, lon)
@@ -168,49 +171,52 @@ async def detect_municipality_from_location(
         raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
 
     user_id = current_user.user_id if current_user else None
-
-    def _save_history(status: str, authority_key: Optional[str] = None, authority_name: Optional[str] = None):
-        create_municipality_history_record(
-            muni_code=location.muni_code,
-            prefecture=location.prefecture,
-            municipality=location.municipality,
-            full_name=location.full_name,
-            lat=location.lat,
-            lon=location.lon,
-            status=status,
-            authority_key=authority_key,
-            authority_name=authority_name,
-            session_id=session_id,
-            user_id=user_id,
-        )
+    candidates = list_nearby_authorities(location.lat, location.lon)
 
     matched_key = match_authority_by_text(location.municipality, default="")
-    if matched_key:
-        _save_history("found", matched_key, AUTHORITIES[matched_key].authority)
-        return {
-            "status": "found",
-            "location": location.model_dump(),
-            "authority_key": matched_key,
-            "authority_name": AUTHORITIES[matched_key].authority,
-        }
+    exact_match = AUTHORITIES[matched_key] if matched_key else None
 
-    pooled = get_pooled(location.muni_code)
-    if pooled and pooled.get("status") == "ready":
-        _save_history("found_pooled", authority_name=pooled.get("ordinance_name"))
-        return {"status": "found_pooled", "location": location.model_dump(), "pooled": pooled}
-    if pooled and pooled.get("status") == "researching":
-        _save_history("researching")
-        return {"status": "researching", "location": location.model_dump()}
+    pooled = None
+    research_status = None
+    if not exact_match:
+        pooled = get_pooled(location.muni_code)
+        if pooled and pooled.get("status") == "ready":
+            research_status = "found_pooled"
+        elif pooled and pooled.get("status") == "researching":
+            research_status = "researching"
+        else:
+            background_tasks.add_task(
+                research_and_pool_municipality,
+                location.muni_code,
+                location.prefecture,
+                location.municipality,
+                location.full_name,
+            )
+            research_status = "researching"
 
-    background_tasks.add_task(
-        research_and_pool_municipality,
-        location.muni_code,
-        location.prefecture,
-        location.municipality,
-        location.full_name,
+    create_municipality_history_record(
+        muni_code=location.muni_code,
+        prefecture=location.prefecture,
+        municipality=location.municipality,
+        full_name=location.full_name,
+        lat=location.lat,
+        lon=location.lon,
+        status="found" if exact_match else (research_status or "researching"),
+        authority_key=matched_key or None,
+        authority_name=exact_match.authority if exact_match else None,
+        candidates=[c["name"] for c in candidates],
+        session_id=session_id,
+        user_id=user_id,
     )
-    _save_history("researching")
-    return {"status": "researching", "location": location.model_dump()}
+
+    return {
+        "status": "found" if exact_match else research_status,
+        "location": location.model_dump(),
+        "authority_key": matched_key or None,
+        "authority_name": exact_match.authority if exact_match else None,
+        "candidates": candidates,
+        "pooled": pooled,
+    }
 
 
 @app.get("/api/municipality/status/{muni_code}")
@@ -237,8 +243,14 @@ async def get_municipality_detection_history(
 async def analyze_anger(
     user_input: str = Form(...),
     image_data: Optional[str] = Form(None),
+    target_authority: Optional[str] = Form(None),
 ):
-    """市民の怒りを分析"""
+    """市民の怒りを分析
+
+    target_authority: フロントエンドの対象機関<select>の現在値（Geolocationによる
+    自動特定結果を含む）。請求内容から対象機関を判別できない場合のデフォルト候補として使う。
+    """
+    hint_authority_key = target_authority if target_authority in AUTHORITIES else None
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
@@ -264,19 +276,21 @@ async def analyze_anger(
     # 3. Geminiエージェントで詳細分析
     agent = get_agent()
     try:
-        anger_analysis = agent.analyze_anger(user_input)
+        anger_analysis = agent.analyze_anger(user_input, hint_authority_key)
         anger_analysis.anger_level = anger_level
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        # フォールバック
+        # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
+        fallback_key = hint_authority_key or "anjo-city"
+        fallback_authority = AUTHORITIES[fallback_key]
         anger_analysis = AngerAnalysis(
             anger_level=anger_level,
             emotion_keywords=["怒り", "不信"],
-            target_authority="安城市",
-            target_authority_key="anjo-city",
+            target_authority=fallback_authority.authority,
+            target_authority_key=fallback_key,
             pain_summary=user_input[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
-            legal_basis="安城市情報公開条例第7条",
+            legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",

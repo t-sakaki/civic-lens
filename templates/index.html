@@ -372,6 +372,7 @@
                 📍 現在地から自治体を特定する
             </button>
             <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+            <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
             <div id="municipalityHistoryWrap" class="mt-2 hidden">
                 <button id="toggleMunicipalityHistoryBtn" type="button" class="text-xs text-gray-500 hover:underline">
                     🕒 特定履歴を表示
@@ -1261,22 +1262,61 @@
             });
         }
 
+        // 対象機関は1つに絞り込まず、都道府県・周辺市区町村を含む候補を一覧表示し、
+        // ユーザーがクリックした候補だけを <select> に反映する
+        function renderMunicipalityCandidates(candidates, selectedKey) {
+            const listEl = document.getElementById('municipalityCandidateList');
+            if (!listEl) return;
+            if (!candidates || candidates.length === 0) {
+                listEl.classList.add('hidden');
+                listEl.innerHTML = '';
+                return;
+            }
+            const categoryIcon = { '警察': '🚔', '裁判所': '⚖️' };
+            listEl.innerHTML = candidates.map(c => {
+                const icon = categoryIcon[c.category] || '🏛️';
+                const active = c.key === selectedKey;
+                return `
+                    <li>
+                        <button type="button" data-authority-key="${c.key}"
+                            class="municipality-candidate-btn text-xs px-2 py-1 rounded-md border ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'}">
+                            ${icon} ${c.name}（${c.type}）・約${c.distance_km}km
+                        </button>
+                    </li>
+                `;
+            }).join('');
+            listEl.classList.remove('hidden');
+
+            listEl.querySelectorAll('.municipality-candidate-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const select = document.getElementById('targetAuthority');
+                    const key = btn.dataset.authorityKey;
+                    if ([...select.options].some(o => o.value === key)) {
+                        select.value = key;
+                    }
+                    renderMunicipalityCandidates(candidates, key);
+                });
+            });
+        }
+
         async function handleMunicipalityDetectResult(data, statusEl) {
             const loc = data.location;
+            renderMunicipalityCandidates(data.candidates, data.authority_key);
+
             if (data.status === 'found') {
                 const select = document.getElementById('targetAuthority');
                 if ([...select.options].some(o => o.value === data.authority_key)) {
                     select.value = data.authority_key;
                 }
-                statusEl.textContent = `✅ ${loc.full_name} を特定しました（${data.authority_name}）`;
+                statusEl.textContent = `✅ ${loc.full_name} 周辺の候補を${(data.candidates || []).length}件見つけました。下から対象機関を選んでください`;
                 return;
             }
             if (data.status === 'found_pooled') {
-                statusEl.textContent = `✅ ${loc.full_name} を特定しました（${data.pooled.ordinance_name || '情報公開条例'}・調査済み）`;
+                statusEl.textContent = `✅ ${loc.full_name} は調査済みです（${data.pooled.ordinance_name || '情報公開条例'}）。周辺の候補からも選べます`;
                 return;
             }
             // researching: バックグラウンドエージェントが調査中なのでポーリングする
-            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...`;
+            statusEl.textContent = `🔎 ${loc.full_name} の情報公開制度をバックグラウンドで調査中...（周辺の候補からも選べます）`;
             pollMunicipalityStatus(loc.muni_code, loc.full_name, statusEl);
         }
 
