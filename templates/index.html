@@ -689,10 +689,35 @@
         @keyframes toastOut {
             to { transform: translateY(-6px); opacity: 0; }
         }
+        .cl-project-item {
+            cursor: pointer;
+        }
+        .cl-project-item.cl-project-item-active {
+            background: rgba(242, 169, 59, 0.16);
+        }
+        .cl-project-item.cl-project-item-active .cl-history-item-main {
+            color: var(--cl-amber, #F2A93B);
+        }
+        .cl-sidebar-new-project-btn {
+            width: calc(100% - 16px);
+            margin: 4px 8px 10px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--cl-amber, #F2A93B);
+            background: transparent;
+            border: 1px solid rgba(242, 169, 59, 0.35);
+            border-radius: 8px;
+            padding: 7px 0;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .cl-sidebar-new-project-btn:hover {
+            background: rgba(242, 169, 59, 0.1);
+        }
     </style>
 </head>
 <body class="min-h-screen has-minna-ticker">
-    <!-- 左サイドメニュー（履歴一覧）。ハンバーガーボタンで開閉。Claude Codeの履歴パネルを参考にしたUI -->
+    <!-- 左サイドメニュー（プロジェクト・履歴一覧）。ハンバーガーボタンで開閉。Claude Codeの履歴パネルを参考にしたUI -->
     <div id="sidebarOverlay" class="cl-sidebar-overlay"></div>
     <aside id="historySidebar" class="cl-sidebar" aria-hidden="true">
         <div class="cl-sidebar-header">
@@ -705,6 +730,11 @@
             <button type="button" class="cl-theme-btn" data-theme-value="golden" aria-pressed="false">ゴールド</button>
             <button type="button" class="cl-theme-btn" data-theme-value="light" aria-pressed="false">ライト</button>
         </div>
+        <p class="cl-sidebar-section-title">📁 プロジェクト</p>
+        <div id="projectList" class="cl-sidebar-body" style="flex: none; max-height: 220px;">
+            <p class="cl-sidebar-empty">ログインするとプロジェクトが表示されます</p>
+        </div>
+        <button id="newProjectBtn" type="button" class="cl-sidebar-new-project-btn hidden">＋ 新規プロジェクト</button>
         <p class="cl-sidebar-section-title">🕒 履歴</p>
         <div id="sidebarHistoryBody" class="cl-sidebar-body">
             <p class="cl-sidebar-empty">まだ履歴はありません</p>
@@ -732,6 +762,26 @@
                 </button>
             </div>
         </header>
+
+        <!-- 現在のプロジェクト表示バー -->
+        <div id="currentProjectBar" class="hidden mb-4 flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 text-sm">
+            <div>
+                <span class="text-indigo-500">現在のプロジェクト:</span>
+                <span id="currentProjectName" class="font-bold text-indigo-800"></span>
+            </div>
+            <button id="openProjectMembersBtn" type="button" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 transition">
+                👥 メンバー・招待
+            </button>
+        </div>
+
+        <!-- プロジェクトの請求一覧 & コメント -->
+        <section id="projectRecordsSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+            <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
+                <span>🗂️</span> プロジェクトの請求一覧
+            </h2>
+            <p class="text-xs text-gray-500 mb-4">このプロジェクトに保存された開示請求・不服審査請求と、メンバー間のコメントです。</p>
+            <div id="projectRecordsList" class="space-y-3"></div>
+        </section>
 
         <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける（ダーク/ライトテーマ） -->
         <div class="mb-6 relative cl-hero-slim-extra">
@@ -1415,6 +1465,59 @@
 
             <div id="myRecordsList" class="flex-1 overflow-y-auto space-y-3 pr-1 text-sm">
                 <div class="text-center text-gray-400 py-8">読み込み中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📁 新規プロジェクト作成モーダル -->
+    <div id="newProjectModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+            <button id="closeNewProjectModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+            <h3 class="text-lg font-bold text-gray-800 mb-1">＋ 新規プロジェクト作成</h3>
+            <p class="text-xs text-gray-500 mb-4">複数人で情報公開請求・不服審査請求を共同で進めるための作業スペースです。</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">プロジェクト名</label>
+                    <input id="newProjectNameInput" type="text" placeholder="例: 〇〇市 情報公開プロジェクト" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">説明（任意）</label>
+                    <textarea id="newProjectDescInput" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                </div>
+                <button id="submitNewProjectBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-sm shadow transition">
+                    作成する
+                </button>
+                <div id="newProjectStatusMsg" class="text-xs text-center text-gray-500"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 👥 プロジェクトメンバー・招待モーダル -->
+    <div id="projectMembersModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+            <button id="closeProjectMembersModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+            <h3 class="text-lg font-bold text-gray-800 mb-3">👥 メンバー・招待</h3>
+            <div id="projectMembersList" class="space-y-2 mb-4 text-sm"></div>
+            <div class="border-t pt-4">
+                <label class="block text-xs font-semibold text-gray-600 mb-1">招待リンクを発行</label>
+                <div class="flex gap-2">
+                    <select id="inviteRoleSelect" class="border border-gray-300 rounded-lg px-2 py-2 text-xs">
+                        <option value="editor">編集者（editor）</option>
+                        <option value="viewer">閲覧者（viewer）</option>
+                    </select>
+                    <button id="createInviteBtn" type="button" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs shadow transition">
+                        招待リンクを発行
+                    </button>
+                </div>
+                <div id="inviteLinkResult" class="mt-2 text-xs break-all"></div>
+            </div>
+            <div id="projectOwnerActions" class="hidden border-t pt-4 mt-4 flex gap-2">
+                <button id="archiveProjectBtn" type="button" class="flex-1 text-xs font-semibold text-amber-700 border border-amber-300 hover:bg-amber-50 rounded-lg py-2 transition">
+                    📦 アーカイブ
+                </button>
+                <button id="deleteProjectBtn" type="button" class="flex-1 text-xs font-semibold text-red-600 border border-red-300 hover:bg-red-50 rounded-lg py-2 transition">
+                    🗑️ 削除
+                </button>
             </div>
         </div>
     </div>
@@ -2546,6 +2649,7 @@
                 formData.append('visibility', visibility);
                 if (situationKey) formData.append('situation_key', situationKey);
                 if (currentUser && currentUser.user_id) formData.append('user_id', currentUser.user_id);
+                if (currentProjectId) formData.append('project_id', currentProjectId);
 
                 const res = await fetch('/api/visibility/create', { method: 'POST', body: formData });
                 const data = await res.json();
@@ -3178,6 +3282,9 @@
 
                     document.getElementById('openMyRecordsBtn').addEventListener('click', openMyRecordsModal);
                     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+                    document.getElementById('newProjectBtn').classList.remove('hidden');
+                    await loadProjects();
                 } else {
                     currentUser = null;
                     navArea.innerHTML = `
@@ -3188,11 +3295,309 @@
                     document.getElementById('openAuthModalBtn').addEventListener('click', () => {
                         document.getElementById('authModal').classList.remove('hidden');
                     });
+
+                    document.getElementById('newProjectBtn').classList.add('hidden');
+                    document.getElementById('projectList').innerHTML = '<p class="cl-sidebar-empty">ログインするとプロジェクトが表示されます</p>';
+                    document.getElementById('currentProjectBar').classList.add('hidden');
+                    document.getElementById('projectRecordsSection').classList.add('hidden');
+                    currentProjectId = null;
+                    projects = [];
                 }
             } catch (err) {
                 console.error('Auth check error:', err);
             }
         }
+
+        // =====================================================
+        // 📁 プロジェクト（共同作業スペース）
+        // =====================================================
+        let currentProjectId = null;
+        let projects = [];
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
+        function selectProject(projectId) {
+            currentProjectId = projectId;
+            const project = projects.find(p => p.project_id === projectId);
+            renderProjectList();
+
+            const bar = document.getElementById('currentProjectBar');
+            const recordsSection = document.getElementById('projectRecordsSection');
+            if (project && project.type !== 'personal') {
+                bar.classList.remove('hidden');
+                document.getElementById('currentProjectName').textContent = project.name;
+                recordsSection.classList.remove('hidden');
+                loadProjectRecords();
+            } else {
+                bar.classList.add('hidden');
+                recordsSection.classList.add('hidden');
+            }
+        }
+
+        function renderProjectList() {
+            const listEl = document.getElementById('projectList');
+            if (projects.length === 0) {
+                listEl.innerHTML = '<p class="cl-sidebar-empty">プロジェクトがありません</p>';
+                return;
+            }
+            listEl.innerHTML = projects.map(p => `
+                <div class="cl-history-item cl-project-item ${p.project_id === currentProjectId ? 'cl-project-item-active' : ''}" data-project-id="${p.project_id}">
+                    <span class="cl-history-item-main">${p.type === 'personal' ? '👤' : '👥'} ${escapeHtml(p.name)}</span>
+                    <span class="cl-history-item-meta">${p.type === 'personal' ? '個人' : `メンバー ${p.member_ids.length}人`}</span>
+                </div>
+            `).join('');
+            listEl.querySelectorAll('.cl-project-item').forEach(el => {
+                el.addEventListener('click', () => selectProject(el.dataset.projectId));
+            });
+        }
+
+        async function loadProjects() {
+            try {
+                const res = await fetch('/api/projects');
+                if (!res.ok) return;
+                const data = await res.json();
+                projects = data.projects || [];
+                if (!currentProjectId && projects.length > 0) {
+                    selectProject(projects[0].project_id); // 個人プロジェクトが先頭
+                } else {
+                    renderProjectList();
+                }
+            } catch (err) {
+                console.error('Load projects error:', err);
+            }
+        }
+
+        document.getElementById('newProjectBtn').addEventListener('click', () => {
+            document.getElementById('newProjectNameInput').value = '';
+            document.getElementById('newProjectDescInput').value = '';
+            document.getElementById('newProjectStatusMsg').textContent = '';
+            document.getElementById('newProjectModal').classList.remove('hidden');
+        });
+        document.getElementById('closeNewProjectModalBtn').addEventListener('click', () => {
+            document.getElementById('newProjectModal').classList.add('hidden');
+        });
+        document.getElementById('submitNewProjectBtn').addEventListener('click', async () => {
+            const name = document.getElementById('newProjectNameInput').value.trim();
+            const description = document.getElementById('newProjectDescInput').value.trim();
+            const statusMsg = document.getElementById('newProjectStatusMsg');
+            if (!name) {
+                statusMsg.innerHTML = '<span class="text-red-500">プロジェクト名を入力してください</span>';
+                return;
+            }
+            statusMsg.textContent = '作成中...';
+            try {
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('description', description);
+                const res = await fetch('/api/projects', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '作成に失敗しました');
+                }
+                const project = await res.json();
+                await loadProjects();
+                selectProject(project.project_id);
+                document.getElementById('newProjectModal').classList.add('hidden');
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">${err.message}</span>`;
+            }
+        });
+
+        document.getElementById('openProjectMembersBtn').addEventListener('click', () => {
+            renderProjectMembers();
+            document.getElementById('inviteLinkResult').textContent = '';
+            document.getElementById('projectMembersModal').classList.remove('hidden');
+        });
+        document.getElementById('closeProjectMembersModalBtn').addEventListener('click', () => {
+            document.getElementById('projectMembersModal').classList.add('hidden');
+        });
+
+        function renderProjectMembers() {
+            const project = projects.find(p => p.project_id === currentProjectId);
+            const listEl = document.getElementById('projectMembersList');
+            const ownerActions = document.getElementById('projectOwnerActions');
+            if (!project) {
+                listEl.innerHTML = '';
+                ownerActions.classList.add('hidden');
+                return;
+            }
+            const roleLabel = { owner: 'オーナー', editor: '編集者', viewer: '閲覧者' };
+            listEl.innerHTML = project.member_ids.map(uid => `
+                <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                    <span class="font-mono text-xs text-gray-600">${uid === currentUser.user_id ? '自分' : uid}</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">${roleLabel[project.member_roles[uid]] || project.member_roles[uid]}</span>
+                </div>
+            `).join('');
+
+            if (project.type === 'team' && project.owner_id === currentUser.user_id) {
+                ownerActions.classList.remove('hidden');
+            } else {
+                ownerActions.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('archiveProjectBtn').addEventListener('click', async () => {
+            if (!currentProjectId || !confirm('このプロジェクトをアーカイブしますか？')) return;
+            try {
+                const formData = new FormData();
+                formData.append('status', 'archived');
+                const res = await fetch(`/api/projects/${currentProjectId}`, { method: 'PATCH', body: formData });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'アーカイブに失敗しました');
+                }
+                document.getElementById('projectMembersModal').classList.add('hidden');
+                await loadProjects();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        document.getElementById('deleteProjectBtn').addEventListener('click', async () => {
+            if (!currentProjectId || !confirm('このプロジェクトを削除しますか？この操作は取り消せません。')) return;
+            try {
+                const res = await fetch(`/api/projects/${currentProjectId}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '削除に失敗しました');
+                }
+                document.getElementById('projectMembersModal').classList.add('hidden');
+                currentProjectId = null;
+                await loadProjects();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        // プロジェクト内の請求一覧 & コメント
+        async function loadProjectRecords() {
+            const listEl = document.getElementById('projectRecordsList');
+            listEl.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">読み込み中...</div>';
+            try {
+                const res = await fetch(`/api/projects/${currentProjectId}/records`);
+                if (!res.ok) throw new Error('取得に失敗しました');
+                const data = await res.json();
+                const records = data.records || [];
+                if (records.length === 0) {
+                    listEl.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">まだこのプロジェクトに保存された請求書はありません</div>';
+                    return;
+                }
+                listEl.innerHTML = records.map(r => `
+                    <div class="border border-gray-200 rounded-lg p-4" data-record-id="${r.id}">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-sm font-semibold text-gray-800">${escapeHtml(r.target_authority_name)}</span>
+                            <span class="text-[11px] text-gray-400">${new Date(r.created_at).toLocaleString('ja-JP')}</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mb-2">${escapeHtml((r.user_input || '').slice(0, 120))}${(r.user_input || '').length > 120 ? '…' : ''}</p>
+                        <button type="button" class="toggle-comments-btn text-xs text-indigo-600 hover:text-indigo-800 font-semibold" data-record-id="${r.id}">
+                            💬 コメントを表示
+                        </button>
+                        <div class="comments-container hidden mt-3 border-t border-gray-100 pt-3" data-record-id="${r.id}">
+                            <div class="comments-list space-y-2 mb-2 text-xs"></div>
+                            <div class="flex gap-2">
+                                <input type="text" class="comment-input flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs" placeholder="コメントを入力...">
+                                <button type="button" class="submit-comment-btn bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">送信</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+                listEl.querySelectorAll('.toggle-comments-btn').forEach(btn => {
+                    btn.addEventListener('click', () => toggleComments(btn.dataset.recordId));
+                });
+            } catch (err) {
+                listEl.innerHTML = `<div class="text-red-500 text-center py-6 text-sm">エラー: ${err.message}</div>`;
+            }
+        }
+
+        async function toggleComments(recordId) {
+            const container = document.querySelector(`.comments-container[data-record-id="${recordId}"]`);
+            const isHidden = container.classList.contains('hidden');
+            if (!isHidden) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            await loadComments(recordId);
+
+            const submitBtn = container.querySelector('.submit-comment-btn');
+            const input = container.querySelector('.comment-input');
+            if (!submitBtn.dataset.wired) {
+                submitBtn.dataset.wired = '1';
+                const submit = async () => {
+                    const text = input.value.trim();
+                    if (!text) return;
+                    submitBtn.disabled = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('text', text);
+                        const res = await fetch(`/api/records/${recordId}/comments`, { method: 'POST', body: formData });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'コメントの投稿に失敗しました');
+                        }
+                        input.value = '';
+                        await loadComments(recordId);
+                    } catch (err) {
+                        alert(err.message);
+                    } finally {
+                        submitBtn.disabled = false;
+                    }
+                };
+                submitBtn.addEventListener('click', submit);
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+            }
+        }
+
+        async function loadComments(recordId) {
+            const container = document.querySelector(`.comments-container[data-record-id="${recordId}"]`);
+            const listEl = container.querySelector('.comments-list');
+            listEl.innerHTML = '<div class="text-gray-400">読み込み中...</div>';
+            try {
+                const res = await fetch(`/api/records/${recordId}/comments`);
+                if (!res.ok) throw new Error('取得に失敗しました');
+                const data = await res.json();
+                const comments = data.comments || [];
+                listEl.innerHTML = comments.length === 0
+                    ? '<div class="text-gray-400">まだコメントはありません</div>'
+                    : comments.map(c => `
+                        <div class="bg-gray-50 rounded-lg px-3 py-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-semibold text-gray-700">${escapeHtml(c.username)}</span>
+                                <span class="text-[10px] text-gray-400">${new Date(c.created_at).toLocaleString('ja-JP')}</span>
+                            </div>
+                            <p class="text-gray-600 mt-0.5">${escapeHtml(c.text)}</p>
+                        </div>
+                    `).join('');
+            } catch (err) {
+                listEl.innerHTML = `<div class="text-red-500">エラー: ${err.message}</div>`;
+            }
+        }
+
+        document.getElementById('createInviteBtn').addEventListener('click', async () => {
+            const role = document.getElementById('inviteRoleSelect').value;
+            const resultEl = document.getElementById('inviteLinkResult');
+            if (!currentProjectId) return;
+            resultEl.textContent = '発行中...';
+            try {
+                const formData = new FormData();
+                formData.append('role', role);
+                const res = await fetch(`/api/projects/${currentProjectId}/invites`, { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '招待の発行に失敗しました');
+                }
+                const invite = await res.json();
+                const inviteUrl = `${window.location.origin}/?invite=${invite.token}`;
+                resultEl.innerHTML = `招待リンク（7日間有効・1回限り）:<br><span class="font-mono text-indigo-700">${inviteUrl}</span>`;
+            } catch (err) {
+                resultEl.innerHTML = `<span class="text-red-500">${err.message}</span>`;
+            }
+        });
 
         // モーダル開閉
         const authModal = document.getElementById('authModal');
@@ -3444,13 +3849,40 @@
             }
         }
 
+        // プロジェクト招待リンクからの参加（?invite=token）
+        async function acceptInviteFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('invite');
+            if (!token) return;
+            history.replaceState(null, '', window.location.pathname);
+
+            if (!currentUser) {
+                alert('プロジェクトに参加するにはログインまたは新規登録が必要です。ログイン後、招待リンクをもう一度開いてください。');
+                document.getElementById('authModal').classList.remove('hidden');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/projects/invites/${token}/accept`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '招待の受け入れに失敗しました');
+                }
+                const project = await res.json();
+                await loadProjects();
+                selectProject(project.project_id);
+                alert(`プロジェクト「${project.name}」に参加しました！`);
+            } catch (err) {
+                alert(`招待エラー: ${err.message}`);
+            }
+        }
+
         const detectMunicipalityBtn = document.getElementById('detectMunicipalityBtn');
         if (detectMunicipalityBtn) {
             detectMunicipalityBtn.addEventListener('click', detectMunicipalityFromLocation);
         }
 
         // 起動
-        checkAuthStatus();
+        checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
         loadPublicFeed();
         loadMunicipalityHistory();
