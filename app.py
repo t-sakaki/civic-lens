@@ -37,8 +37,16 @@ from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
     get_public_records, get_my_records, get_public_stats, get_records_by_user,
+    get_records_by_project, get_record_by_id,
     DisclosureRequestRecord,
 )
+from project import (
+    Project, create_project, get_project, get_projects_for_user,
+    update_project, delete_project, create_invite, accept_invite,
+    remove_member, update_member_role, get_user_role,
+    ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER,
+)
+from record_comments import add_comment, get_comments
 from fork_star import (
     add_fork, add_star, remove_star,
     get_record_stats, get_user_actions, get_contributor_stats,
@@ -369,15 +377,23 @@ async def visibility_create(
     category: str = Form("自治体"),
     session_id: Optional[str] = Form(None),
     user_id: Optional[str] = Form(None),
+    project_id: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """新規開示請求を保存（Private/Public 選択、ログインユーザー自動紐付け）"""
+    """新規開示請求を保存（Private/Public 選択、ログインユーザー・プロジェクト自動紐付け）"""
     try:
         ordinance = get_ordinance(target_authority)
         if not ordinance:
             raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
 
         assigned_user_id = (current_user.user_id if current_user else None) or user_id
+
+        if project_id:
+            if not assigned_user_id:
+                raise HTTPException(401, "プロジェクトに保存するにはログインが必要です")
+            project = get_project(project_id)
+            if not project or get_user_role(project, assigned_user_id) not in (ROLE_OWNER, ROLE_EDITOR):
+                raise HTTPException(403, "このプロジェクトに保存する権限がありません")
 
         record = create_record(
             user_input=user_input,
@@ -389,6 +405,7 @@ async def visibility_create(
             category=ordinance.category,
             session_id=session_id,
             user_id=assigned_user_id,
+            project_id=project_id,
         )
 
         return {
@@ -397,6 +414,7 @@ async def visibility_create(
             "anonymous_user_id": record.anonymous_user_id,
             "created_at": record.created_at,
             "user_id": record.user_id,
+            "project_id": record.project_id,
         }
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -981,6 +999,214 @@ async def api_get_my_records(current_user: Optional[User] = Depends(get_current_
         raise HTTPException(401, "ログインが必要です")
     records = get_records_by_user(current_user.user_id)
     return {"records": [r.model_dump() for r in records]}
+
+
+def _require_login(current_user: Optional[User]) -> User:
+    if not current_user:
+        raise HTTPException(401, "ログインが必要です")
+    return current_user
+
+
+def _project_to_dict(project: Project) -> dict:
+    return {
+        "project_id": project.project_id,
+        "name": project.name,
+        "description": project.description,
+        "type": project.type,
+        "owner_id": project.owner_id,
+        "member_ids": project.member_ids,
+        "member_roles": project.member_roles,
+        "status": project.status,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# プロジェクト（共同作業スペース）API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/projects")
+async def api_list_projects(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """ログインユーザーが所属するプロジェクト一覧（左メニュー用）"""
+    user = _require_login(current_user)
+    projects = get_projects_for_user(user.user_id)
+    return {"projects": [_project_to_dict(p) for p in projects]}
+
+
+@app.post("/api/projects")
+async def api_create_project(
+    name: str = Form(...),
+    description: str = Form(""),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """新規（チーム）プロジェクトを作成"""
+    user = _require_login(current_user)
+    try:
+        project = create_project(owner_id=user.user_id, name=name, description=description, project_type="team")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _project_to_dict(project)
+
+
+@app.get("/api/projects/{project_id}")
+async def api_get_project(project_id: str, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """プロジェクト詳細"""
+    user = _require_login(current_user)
+    project = get_project(project_id)
+    if not project or get_user_role(project, user.user_id) is None:
+        raise HTTPException(404, "プロジェクトが見つかりません")
+    return _project_to_dict(project)
+
+
+@app.patch("/api/projects/{project_id}")
+async def api_update_project(
+    project_id: str,
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """プロジェクト情報を更新"""
+    user = _require_login(current_user)
+    try:
+        project = update_project(project_id, requester_id=user.user_id, name=name, description=description, status=status)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _project_to_dict(project)
+
+
+@app.delete("/api/projects/{project_id}")
+async def api_delete_project(project_id: str, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """プロジェクトを削除（オーナーのみ・個人プロジェクトは削除不可）"""
+    user = _require_login(current_user)
+    try:
+        delete_project(project_id, requester_id=user.user_id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"success": True}
+
+
+@app.get("/api/projects/{project_id}/records")
+async def api_get_project_records(project_id: str, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """プロジェクト内の開示請求・不服審査請求一覧"""
+    user = _require_login(current_user)
+    project = get_project(project_id)
+    if not project or get_user_role(project, user.user_id) is None:
+        raise HTTPException(404, "プロジェクトが見つかりません")
+    records = get_records_by_project(project_id)
+    return {"records": [r.model_dump() for r in records]}
+
+
+@app.post("/api/projects/{project_id}/invites")
+async def api_create_project_invite(
+    project_id: str,
+    role: str = Form(ROLE_EDITOR),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """プロジェクトへの招待リンクを発行"""
+    user = _require_login(current_user)
+    try:
+        invite = create_invite(project_id, invited_by=user.user_id, role=role)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return invite.model_dump()
+
+
+@app.post("/api/projects/invites/{token}/accept")
+async def api_accept_project_invite(token: str, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """招待リンクを使ってプロジェクトに参加"""
+    user = _require_login(current_user)
+    try:
+        project = accept_invite(token, user_id=user.user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _project_to_dict(project)
+
+
+@app.delete("/api/projects/{project_id}/members/{member_user_id}")
+async def api_remove_project_member(
+    project_id: str,
+    member_user_id: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """メンバーを除名（オーナーのみ）"""
+    user = _require_login(current_user)
+    try:
+        project = remove_member(project_id, requester_id=user.user_id, target_user_id=member_user_id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _project_to_dict(project)
+
+
+@app.patch("/api/projects/{project_id}/members/{member_user_id}")
+async def api_update_project_member_role(
+    project_id: str,
+    member_user_id: str,
+    role: str = Form(...),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """メンバーの役割を変更（オーナーのみ）"""
+    user = _require_login(current_user)
+    try:
+        project = update_member_role(project_id, requester_id=user.user_id, target_user_id=member_user_id, new_role=role)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _project_to_dict(project)
+
+
+def _can_access_record(record: DisclosureRequestRecord, user: User) -> bool:
+    """レコードへのアクセス権（コメント含む）があるか判定"""
+    if record.user_id == user.user_id:
+        return True
+    if record.project_id:
+        project = get_project(record.project_id)
+        if project and get_user_role(project, user.user_id) is not None:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# 開示請求・不服審査請求へのコメント（プロジェクトメンバー間の議論）
+# ---------------------------------------------------------------------------
+
+@app.get("/api/records/{record_id}/comments")
+async def api_get_record_comments(record_id: str, current_user: Optional[User] = Depends(get_current_user_optional)):
+    """特定レコードへのコメント一覧を取得"""
+    user = _require_login(current_user)
+    record = get_record_by_id(record_id)
+    if not record or not _can_access_record(record, user):
+        raise HTTPException(404, "レコードが見つかりません")
+    comments = get_comments(record_id)
+    return {"comments": [c.model_dump() for c in comments]}
+
+
+@app.post("/api/records/{record_id}/comments")
+async def api_add_record_comment(
+    record_id: str,
+    text: str = Form(...),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """特定レコードにコメントを追加"""
+    user = _require_login(current_user)
+    record = get_record_by_id(record_id)
+    if not record or not _can_access_record(record, user):
+        raise HTTPException(404, "レコードが見つかりません")
+    try:
+        comment = add_comment(record_id, user_id=user.user_id, username=user.username, text=text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return comment.model_dump()
 
 
 if __name__ == "__main__":

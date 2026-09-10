@@ -29,6 +29,7 @@ from eth_account.messages import encode_defunct
 from firebase_admin import auth as firebase_auth
 
 from firebase_client import get_firestore_client
+from project import create_personal_project
 
 FIREBASE_WEB_API_KEY = os.getenv("FIREBASE_WEB_API_KEY", "")
 
@@ -178,6 +179,7 @@ def register_user(username: str, password: str, email: Optional[str] = None) -> 
         "username_lower": clean_username.lower(),
         "auth_email": auth_email,
     })
+    create_personal_project(owner_id=user.user_id, display_name=clean_username)
     return user
 
 
@@ -306,6 +308,7 @@ def authenticate_wallet(wallet_address: str, signature: Optional[str] = None, no
         "username_lower": display_name.lower(),
         "auth_email": auth_email,
     })
+    create_personal_project(owner_id=user.user_id, display_name=display_name)
     return user
 
 

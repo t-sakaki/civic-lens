@@ -43,6 +43,7 @@ class DisclosureRequestRecord(BaseModel):
     tags: List[str] = []
     anonymous_user_id: Optional[str] = None  # "市民#0001" のような形式
     user_id: Optional[str] = None  # 認証ユーザーID (usr-...)
+    project_id: Optional[str] = None  # 紐付くプロジェクトID (proj-...)
 
 
 def _collection():
@@ -85,6 +86,7 @@ def create_record(
     session_id: Optional[str] = None,
     ip: Optional[str] = None,
     user_id: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> DisclosureRequestRecord:
     """新規開示請求記録を作成"""
     if visibility not in ("private", "public"):
@@ -110,6 +112,7 @@ def create_record(
         tags=tags or [],
         anonymous_user_id=anonymous_id,
         user_id=user_id,
+        project_id=project_id,
     )
 
     _save_one(record.model_dump())
@@ -224,6 +227,25 @@ def get_public_stats() -> Dict:
             stats["by_situation"][sit] = stats["by_situation"].get(sit, 0) + 1
 
     return stats
+
+
+def get_record_by_id(record_id: str) -> Optional[DisclosureRequestRecord]:
+    """IDから1件のレコードを取得"""
+    doc = _collection().document(record_id).get()
+    if not doc.exists:
+        return None
+    return DisclosureRequestRecord(**doc.to_dict())
+
+
+def get_records_by_project(project_id: str) -> List[DisclosureRequestRecord]:
+    """特定プロジェクトに紐付く請求記録一覧を取得"""
+    records = _load_all()
+    project_records = [
+        DisclosureRequestRecord(**r)
+        for r in records
+        if r.get("project_id") == project_id
+    ]
+    return sorted(project_records, key=lambda x: x.created_at, reverse=True)
 
 
 def get_records_by_user(user_id: str) -> List[DisclosureRequestRecord]:
