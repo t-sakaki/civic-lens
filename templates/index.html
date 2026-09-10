@@ -1,13 +1,326 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <script>
+        // 描画前にテーマを反映し、既定(ダーク)テーマへの一瞬の切り替わり(FOUC)を防ぐ
+        (function () {
+            try {
+                var theme = localStorage.getItem('cl-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Civic Lens — 市民の怒りを情報公開に変換する</title>
+    <meta name="description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
+
+    <!-- Favicon -->
+    <link rel="icon" href="/static/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/favicon-192x192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+
+    <!-- OGP (Facebook, LINE, Slack など) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Civic Lens">
+    <meta property="og:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
+    <meta property="og:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
+    <meta property="og:url" content="https://civic-lens-jp.vercel.app/">
+    <meta property="og:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="ja_JP">
+
+    <!-- Twitter Card (X) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
+    <meta name="twitter:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う。">
+    <meta name="twitter:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        :root,
+        html[data-theme="dark"] {
+            --cl-bg: #0b1120;
+            --cl-bg2: #141d33;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+            --cl-body-bg-image:
+                radial-gradient(circle at 15% 0%, rgba(99, 102, 241, 0.16), transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.14), transparent 45%);
+            --cl-title-grad: linear-gradient(90deg, #818cf8 0%, #67e8f9 50%, #818cf8 100%);
+            --cl-header-tagline: #94a3b8;
+            --cl-header-status: rgba(103, 232, 249, 0.8);
+            --cl-header-status-dot: #22d3ee;
+            --cl-authbtn-bg: rgba(255,255,255,0.05);
+            --cl-authbtn-border: rgba(255,255,255,0.1);
+            --cl-authbtn-text: #e2e8f0;
+            --cl-authbtn-hover-bg: rgba(255,255,255,0.1);
+            --cl-hamburger-bg: rgba(255,255,255,0.06);
+            --cl-hamburger-border: rgba(255,255,255,0.16);
+            --cl-hamburger-text: #EDEDF2;
+            --cl-hamburger-hover-bg: rgba(255,255,255,0.12);
+        }
+        /* --- ゴールドテーマ：旧デザイン（動画バナー・琥珀色アクセント） --- */
+        html[data-theme="golden"] {
+            --cl-bg: #0b1120;
+            --cl-bg2: #141d33;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+            --cl-body-bg-image:
+                linear-gradient(180deg, rgba(11,17,32,0.72) 0%, rgba(11,17,32,0.94) 620px, #0b1120 900px),
+                url('/static/brand/civic_lens_bg.png');
+            --cl-title-grad: linear-gradient(90deg, #f2a93b 0%, #ffbb55 50%, #f2a93b 100%);
+            --cl-header-tagline: #b8926a;
+            --cl-header-status: rgba(242, 169, 59, 0.85);
+            --cl-header-status-dot: #f2a93b;
+            --cl-authbtn-bg: rgba(242, 169, 59, 0.06);
+            --cl-authbtn-border: rgba(242, 169, 59, 0.3);
+            --cl-authbtn-text: #EDEDF2;
+            --cl-authbtn-hover-bg: rgba(242, 169, 59, 0.14);
+            --cl-hamburger-bg: rgba(242, 169, 59, 0.08);
+            --cl-hamburger-border: rgba(242, 169, 59, 0.3);
+            --cl-hamburger-text: #EDEDF2;
+            --cl-hamburger-hover-bg: rgba(242, 169, 59, 0.16);
+        }
+        /* --- ライトテーマ --- */
+        html[data-theme="light"] {
+            --cl-bg: #f5f6fa;
+            --cl-bg2: #ffffff;
+            --cl-amber: #d97e1c;
+            --cl-teal: #0f9c8c;
+            --cl-body-bg-image:
+                radial-gradient(circle at 15% 0%, rgba(99, 102, 241, 0.08), transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(15, 156, 140, 0.08), transparent 45%);
+            --cl-title-grad: linear-gradient(90deg, #4f46e5 0%, #0f9c8c 50%, #4f46e5 100%);
+            --cl-header-tagline: #475569;
+            --cl-header-status: rgba(15, 156, 140, 0.9);
+            --cl-header-status-dot: #0f9c8c;
+            --cl-authbtn-bg: rgba(15, 23, 42, 0.04);
+            --cl-authbtn-border: rgba(15, 23, 42, 0.14);
+            --cl-authbtn-text: #1e293b;
+            --cl-authbtn-hover-bg: rgba(15, 23, 42, 0.08);
+            --cl-hamburger-bg: rgba(15, 23, 42, 0.04);
+            --cl-hamburger-border: rgba(15, 23, 42, 0.14);
+            --cl-hamburger-text: #1e293b;
+            --cl-hamburger-hover-bg: rgba(15, 23, 42, 0.08);
+        }
         body {
             font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+            background-color: var(--cl-bg);
+            background-image: var(--cl-body-bg-image);
+            background-repeat: no-repeat;
+            background-position: top center;
+            background-size: 100% auto, 100% auto;
+            background-attachment: fixed;
+            transition: background-color 0.2s ease;
+        }
+        .luxury-title {
+            background: var(--cl-title-grad);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: luxuryShine 8s linear infinite;
+        }
+        @keyframes luxuryShine {
+            to { background-position: 200% center; }
+        }
+        /* 認容事例テロップ */
+        .win-ticker-track {
+            display: flex;
+            width: max-content;
+            animation: winTickerScroll 40s linear infinite;
+        }
+        .win-ticker-track:hover {
+            animation-play-state: paused;
+        }
+        @keyframes winTickerScroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+        .win-card {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+        /* エージェント自律ログ */
+        .agent-log-line {
+            opacity: 0;
+            animation: agentLineIn 0.4s ease forwards;
+        }
+        @keyframes agentLineIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .agent-cursor {
+            display: inline-block;
+            width: 6px;
+            height: 1em;
+            background: #67e8f9;
+            margin-left: 2px;
+            vertical-align: text-bottom;
+            animation: agentBlink 1s steps(1) infinite;
+        }
+        @keyframes agentBlink {
+            50% { opacity: 0; }
+        }
+        .cl-cta {
+            background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%);
+        }
+        .cl-cta:hover {
+            background: linear-gradient(90deg, #ffbb55 0%, #f2924c 100%);
+        }
+        /* --- 左サイドメニュー（履歴一覧）。ハンバーガーで開閉できる --- */
+        .cl-hamburger-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--cl-hamburger-bg);
+            border: 1px solid var(--cl-hamburger-border);
+            color: var(--cl-hamburger-text);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .cl-hamburger-btn:hover { background: var(--cl-hamburger-hover-bg); }
+        .cl-header-tagline { color: var(--cl-header-tagline); }
+        .cl-header-status { color: var(--cl-header-status); }
+        .cl-header-status-dot { background: var(--cl-header-status-dot); }
+        .cl-authbtn {
+            background: var(--cl-authbtn-bg);
+            border: 1px solid var(--cl-authbtn-border);
+            color: var(--cl-authbtn-text);
+        }
+        .cl-authbtn:hover { background: var(--cl-authbtn-hover-bg); }
+        /* ゴールドテーマ専用の旧デザイン要素。テーマ選択時のみ表示 */
+        .cl-hero-golden {
+            display: none;
+            background: radial-gradient(120% 160% at 50% 0%, var(--cl-bg2) 0%, var(--cl-bg) 70%);
+            border: 1px solid rgba(242, 169, 59, 0.18);
+        }
+        html[data-theme="golden"] .cl-hero-golden { display: block; }
+        html[data-theme="golden"] .cl-hero-slim-extra { display: none; }
+        /* --- テーマ切り替えUI（ハンバーガーメニュー内） --- */
+        .cl-theme-options {
+            display: flex;
+            gap: 6px;
+            padding: 0 8px 12px;
+        }
+        .cl-theme-btn {
+            flex: 1;
+            font-size: 0.72rem;
+            padding: 6px 4px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.04);
+            color: #C7CCDA;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .cl-theme-btn:hover { background: rgba(255,255,255,0.09); }
+        .cl-theme-btn-active {
+            border-color: var(--cl-amber);
+            color: #fff;
+            background: rgba(255,255,255,0.12);
+        }
+        .cl-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 300px;
+            max-width: 84vw;
+            height: 100vh;
+            background: var(--cl-bg2);
+            border-right: 1px solid rgba(242, 169, 59, 0.18);
+            z-index: 60;
+            transform: translateX(-100%);
+            transition: transform 0.22s ease;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+        }
+        .cl-sidebar.cl-sidebar-open {
+            transform: translateX(0);
+        }
+        .cl-sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
+        }
+        .cl-sidebar-title {
+            color: #EDEDF2;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+        .cl-sidebar-close-btn {
+            background: transparent;
+            border: none;
+            color: #9CA3AF;
+            font-size: 1.1rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 4px 6px;
+            border-radius: 6px;
+        }
+        .cl-sidebar-close-btn:hover { background: rgba(255,255,255,0.08); color: #EDEDF2; }
+        .cl-sidebar-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 8px;
+        }
+        .cl-sidebar-section-title {
+            color: #8B93A7;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            padding: 10px 12px 4px;
+        }
+        .cl-sidebar-empty {
+            color: #6B7280;
+            font-size: 0.78rem;
+            padding: 10px 8px;
+        }
+        .cl-history-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            margin-bottom: 2px;
+            cursor: default;
+        }
+        .cl-history-item:hover { background: rgba(255,255,255,0.06); }
+        .cl-history-item-main {
+            color: #EDEDF2;
+            font-size: 0.8rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .cl-history-item-meta {
+            color: #8B93A7;
+            font-size: 0.7rem;
+        }
+        .cl-sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease;
+        }
+        .cl-sidebar-overlay.cl-sidebar-overlay-open {
+            opacity: 1;
+            pointer-events: auto;
         }
         .anger-meter {
             background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
@@ -19,64 +332,407 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .situation-card {
-            transition: all 0.2s;
+        /* --- アイコンの「呼吸」アニメーション（エージェントが生きている感を演出） --- */
+        @keyframes emojiBreathe {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(1.18) translateY(-3px); }
+        }
+
+        /* --- シチュエーションのチップ流れ（数秒おきにフェード入れ替え。悩んでいる人が読むより先に「押す」を選べるように） --- */
+        .situation-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 0.8rem;
+            color: #374151;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s, transform 0.15s;
+            animation: chipFadeIn 0.5s ease-out;
+        }
+        .situation-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+        .situation-chip.selected {
+            border-color: #6366f1;
+            background: #eef2ff;
+            color: #4338ca;
+            font-weight: 600;
+        }
+        .situation-chip-emoji {
+            display: inline-block;
+            font-size: 1.05rem;
+            transform-origin: center;
+        }
+        .situation-chip:hover .situation-chip-emoji {
+            animation: emojiBreathe 1.4s ease-in-out infinite;
+        }
+        @keyframes chipFadeIn {
+            from { opacity: 0; transform: translateY(4px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .situation-chip.chip-leaving {
+            animation: chipFadeOut 0.35s ease-in forwards;
+            pointer-events: none;
+        }
+        @keyframes chipFadeOut {
+            to { opacity: 0; transform: translateY(-4px) scale(0.95); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .situation-chip, .situation-chip.chip-leaving, .situation-chip:hover .situation-chip-emoji {
+                animation: none;
+            }
+        }
+        /* --- プロンプトを主役にした、チャット風コンポーザー --- */
+        .composer-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 1rem;
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+        .composer-card:focus-within {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+        }
+        .composer-textarea {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            resize: vertical;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .composer-textarea:focus {
+            outline: none;
+        }
+        .composer-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid #f3f4f6;
+        }
+        .composer-tool-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .composer-tool-btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+        .composer-tool-btn.active {
+            border-color: #f87171;
+            background: #fee2e2;
+        }
+
+        /* --- 対象機関タグ（チャットボックス内蔵）: ホバー/タップでポップオーバーのサジェストが動的に開く --- */
+        .composer-tool-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 2.1rem;
+            padding: 0 0.85rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #374151;
+            cursor: pointer;
+            transition: all 0.15s;
+            max-width: 12rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .composer-tool-tag:hover,
+        .composer-tool-tag.open {
+            border-color: #818cf8;
+            background: #eef2ff;
+            color: #4338ca;
+        }
+        /* タイプライター例文の切り替えに合わせて対象機関タグが自動で変わったことを軽く知らせる */
+        @keyframes authorityTagFlash {
+            0% { background: #e0e7ff; border-color: #818cf8; }
+            100% { background: #f9fafb; border-color: #e5e7eb; }
+        }
+        .authority-tag-flash {
+            animation: authorityTagFlash 0.9s ease-out;
+        }
+        .authority-popover {
+            position: absolute;
+            z-index: 30;
+            top: calc(100% + 8px);
+            left: 0;
+            width: min(360px, 88vw);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+            padding: 0.9rem;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
+        #userInput::placeholder {
+            color: #4b5563; /* ダークグレイ */
+            opacity: 1;
+        }
+        .suggestion-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: #9ca3af;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .suggestion-hint .thinking-dots span {
+                animation: none;
+            }
+        }
+
+        /* --- 見出し「何に怒りを感じていますか？」のタイプライター演出 --- */
+        #mainQuestionHeading .heading-caret {
+            display: inline-block;
+            width: 2px;
+            margin-left: 2px;
+            background: currentColor;
+            animation: caretBlink 0.9s steps(1) infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #mainQuestionHeading .heading-caret {
+                animation: none;
+            }
+        }
+        @keyframes caretBlink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+
+        /* --- 思考中インジケーター (Thinking Indicator) --- */
+        .thinking-box {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            margin-top: 0.75rem;
+            border-radius: 0.5rem;
+            background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+            border: 1px solid #e0e7ff;
+            animation: fadeIn 0.3s ease-out;
+            overflow: hidden;
+            position: relative;
+        }
+        .thinking-dots {
+            display: flex;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .thinking-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #6366f1;
+            animation: thinkingBounce 1.1s ease-in-out infinite;
+        }
+        .thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes thinkingBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+            30% { transform: translateY(-4px); opacity: 1; }
+        }
+        .thinking-text {
+            flex: 1;
+            font-size: 0.8rem;
+            color: #4338ca;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .thinking-timer {
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            color: #6366f1;
+            background: rgba(99, 102, 241, 0.1);
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+        }
+        .thinking-box::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            width: 40%;
+            background: linear-gradient(90deg, transparent, #6366f1, transparent);
+            animation: thinkingSweep 1.4s linear infinite;
+        }
+        @keyframes thinkingSweep {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(350%); }
+        }
+
+        /* --- スターのふわふわアニメーション --- */
+        @keyframes starFly {
+            0% {
+                transform: translate(0, 0) scale(1) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--dx), var(--dy)) scale(0.3) rotate(var(--rot));
+                opacity: 0;
+            }
+        }
+        .star-particle {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            font-size: 1.1rem;
+            animation: starFly 0.9s cubic-bezier(0.15, 0.6, 0.4, 1) forwards;
+        }
+        @keyframes starPop {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.35); }
+            60% { transform: scale(0.9); }
+            100% { transform: scale(1); }
+        }
+        .star-pop {
+            animation: starPop 0.4s ease-out;
+        }
+        @keyframes floatUpFade {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-18px); opacity: 0; }
+        }
+        .star-plus-one {
+            position: absolute;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #eab308;
+            pointer-events: none;
+            animation: floatUpFade 0.7s ease-out forwards;
+        }
+
+        /* --- トースト通知 --- */
+        #toastContainer {
+            position: fixed;
+            bottom: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .toast {
+            background: #1f2937;
+            color: white;
+            padding: 0.65rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: toastIn 0.25s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+            max-width: 300px;
+        }
+        @keyframes toastIn {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes toastOut {
+            to { transform: translateY(-6px); opacity: 0; }
+        }
+        .cl-project-item {
             cursor: pointer;
         }
-        .situation-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        .cl-project-item.cl-project-item-active {
+            background: rgba(242, 169, 59, 0.16);
         }
-        .situation-card.selected {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            color: white;
+        .cl-project-item.cl-project-item-active .cl-history-item-main {
+            color: var(--cl-amber, #F2A93B);
         }
-        #projectSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            width: 240px;
-            overflow-y: auto;
-            z-index: 30;
+        .cl-sidebar-new-project-btn {
+            width: calc(100% - 16px);
+            margin: 4px 8px 10px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--cl-amber, #F2A93B);
+            background: transparent;
+            border: 1px solid rgba(242, 169, 59, 0.35);
+            border-radius: 8px;
+            padding: 7px 0;
+            cursor: pointer;
+            transition: background 0.15s ease;
         }
-        body.has-sidebar .main-content {
-            margin-left: 240px;
-        }
-        @media (max-width: 768px) {
-            body.has-sidebar .main-content {
-                margin-left: 0;
-            }
-            #projectSidebar {
-                width: 200px;
-            }
-        }
-        .project-item.active {
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            color: white;
-        }
-        .project-item.active .project-item-meta {
-            color: rgba(255,255,255,0.8);
+        .cl-sidebar-new-project-btn:hover {
+            background: rgba(242, 169, 59, 0.1);
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <!-- 📁 プロジェクトサイドバー（ログイン時のみ表示） -->
-    <aside id="projectSidebar" class="hidden bg-white border-r border-gray-200 flex-col">
-        <div class="p-4 border-b border-gray-100">
-            <span class="font-bold text-gray-800 text-sm">📁 プロジェクト</span>
+<body class="min-h-screen">
+    <!-- 左サイドメニュー（プロジェクト・履歴一覧）。ハンバーガーボタンで開閉。Claude Codeの履歴パネルを参考にしたUI -->
+    <div id="sidebarOverlay" class="cl-sidebar-overlay"></div>
+    <aside id="historySidebar" class="cl-sidebar" aria-hidden="true">
+        <div class="cl-sidebar-header">
+            <span class="cl-sidebar-title">メニュー</span>
+            <button id="closeSidebarBtn" type="button" class="cl-sidebar-close-btn" aria-label="履歴メニューを閉じる">✕</button>
         </div>
-        <div id="projectList" class="flex-1 overflow-y-auto py-2 px-2 space-y-1">
-            <div class="text-xs text-gray-400 px-2 py-4 text-center">読み込み中...</div>
+        <p class="cl-sidebar-section-title">🎨 デザインテーマ</p>
+        <div class="cl-theme-options" role="radiogroup" aria-label="デザインテーマ">
+            <button type="button" class="cl-theme-btn" data-theme-value="dark" aria-pressed="false">ダーク</button>
+            <button type="button" class="cl-theme-btn" data-theme-value="golden" aria-pressed="false">ゴールド</button>
+            <button type="button" class="cl-theme-btn" data-theme-value="light" aria-pressed="false">ライト</button>
         </div>
-        <div class="p-3 border-t border-gray-100">
-            <button id="newProjectBtn" type="button" class="w-full text-xs font-semibold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded-lg py-2 transition">
-                ＋ 新規プロジェクト
-            </button>
+        <p class="cl-sidebar-section-title">📁 プロジェクト</p>
+        <div id="projectList" class="cl-sidebar-body" style="flex: none; max-height: 220px;">
+            <p class="cl-sidebar-empty">ログインするとプロジェクトが表示されます</p>
+        </div>
+        <button id="newProjectBtn" type="button" class="cl-sidebar-new-project-btn hidden">＋ 新規プロジェクト</button>
+        <p class="cl-sidebar-section-title">🕒 履歴</p>
+        <div id="sidebarHistoryBody" class="cl-sidebar-body">
+            <p class="cl-sidebar-empty">まだ履歴はありません</p>
         </div>
     </aside>
 
-    <div class="container mx-auto px-4 py-6 max-w-4xl main-content">
+    <div class="container mx-auto px-4 py-6 max-w-4xl">
+        <!-- ヘッダー（スリムなタイトルバー + 認証） -->
+        <header class="flex items-center justify-between gap-3 mb-4 px-1 py-2.5">
+            <div class="flex items-center gap-3 min-w-0">
+                <button id="openSidebarBtn" type="button" class="cl-hamburger-btn shrink-0" aria-label="履歴メニューを開く" aria-expanded="false" aria-controls="historySidebar">
+                    <span aria-hidden="true">☰</span>
+                </button>
+                <a href="/" aria-label="Civic Lens トップページへ" class="luxury-title text-lg sm:text-xl font-extrabold tracking-tight shrink-0">🔍 Civic Lens</a>
+                <span class="hidden sm:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
+                <a href="/precedent-cases" class="hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">📚 認容事例DB</a>
+                <span class="hidden md:flex items-center gap-1.5 text-[10px] cl-header-status font-mono shrink-0">
+                    <span class="w-1.5 h-1.5 rounded-full cl-header-status-dot animate-pulse"></span>
+                    <span id="agentLogInline">起動中...</span>
+                </span>
+            </div>
+            <div id="authNavArea" class="shrink-0">
+                <button id="openAuthModalBtn" type="button" class="cl-authbtn inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition">
+                    <span>👤</span><span class="hidden sm:inline">ログイン / 新規登録</span>
+                </button>
+            </div>
+        </header>
+
         <!-- 現在のプロジェクト表示バー -->
         <div id="currentProjectBar" class="hidden mb-4 flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 text-sm">
             <div>
@@ -96,101 +752,116 @@
             <p class="text-xs text-gray-500 mb-4">このプロジェクトに保存された開示請求・不服審査請求と、メンバー間のコメントです。</p>
             <div id="projectRecordsList" class="space-y-3"></div>
         </section>
-        <!-- ナビゲーション & 認証ステータスバー (NEW!) -->
-        <div class="flex items-center justify-between mb-8 pb-3 border-b border-gray-200">
-            <div class="flex items-center gap-2">
-                <span class="font-bold text-gray-800 text-sm tracking-wide">🔍 Civic Lens</span>
-                <span class="text-xs bg-indigo-50 text-indigo-700 font-mono px-2 py-0.5 rounded border border-indigo-200">Web & Web3 Auth</span>
+
+        <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける（ダーク/ライトテーマ） -->
+        <div class="mb-6 relative cl-hero-slim-extra">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg overflow-hidden">
+                <div class="flex items-center">
+                    <div class="shrink-0 bg-black/20 px-3 py-2 text-white text-xs font-bold flex items-center gap-1.5 z-10">
+                        <span>🏆</span><span>認容実績</span>
+                    </div>
+                    <div class="relative overflow-hidden py-2 flex-1">
+                        <div id="winTicker" class="win-ticker-track gap-3 px-3"></div>
+                    </div>
+                </div>
             </div>
-            <div id="authNavArea" class="flex items-center gap-2">
-                <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 px-3.5 py-1.5 rounded-full hover:bg-gray-100 shadow-sm transition">
-                    <span>👤</span> ログイン / 新規登録
-                </button>
-            </div>
+            <p class="text-center text-[10px] text-gray-400 mt-1">
+                ※ 総務省「行政不服審査裁決・答申検索データベース」に掲載された実際の認容事例です（<a href="/precedent-cases" class="underline hover:text-amber-300">一覧・検索はこちら</a>）。個別事案の結果を保証するものではありません。
+            </p>
         </div>
 
-        <!-- ヘッダー -->
-        <header class="text-center mb-12">
-            <h1 class="text-5xl font-bold text-gray-900 mb-4">🔍 Civic Lens</h1>
-            <p class="text-xl text-gray-600">市民の怒りを情報公開に変換するAIエージェント</p>
-            <p class="text-sm text-gray-500 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
-            <p class="text-xs text-gray-400 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+        <!-- ゴールドテーマ選択時のみ表示する旧デザインの動画バナー -->
+        <header class="cl-hero-golden text-center mb-12 rounded-2xl overflow-hidden">
+            <a href="/" aria-label="Civic Lens トップページへ" class="block">
+                <video class="w-full h-auto block" style="aspect-ratio: 1600 / 360;" autoplay loop muted playsinline poster="/static/brand/civic_lens_banner_poster.png">
+                    <source src="/static/brand/civic_lens_banner.mp4" type="video/mp4">
+                </video>
+            </a>
+            <div class="px-6 pb-8 pt-2 -mt-1">
+                <p class="text-sm text-gray-400 mt-2">Powered by Gemini × GMI Cloud × 駅すぱあと × YouCam API</p>
+                <p class="text-xs text-gray-500 mt-1">情報公開請求サポートエージェント（5自治体 + 4警察本部対応）</p>
+            </div>
         </header>
 
-        <!-- STEP 0: シチュエーション選択（NEW!） -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🎯 STEP 0: 何に怒りを感じていますか？</h2>
-            <p class="text-sm text-gray-600 mb-4">シチュエーションを選ぶと、請求すべき行政文書を自動でリストアップします</p>
-
-            <div id="situationGrid" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <!-- 動的に生成 -->
+        <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
+        <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-2xl">🎯</span>
+                <h2 id="mainQuestionHeading" class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
             </div>
+            <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
 
-            <div class="mt-4 flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-gray-100">
-                <button id="useFreeInputBtn" class="text-sm text-blue-600 hover:underline">
-                    ↑ どれも違う / 具体的な不満を直接入力 →
-                </button>
-                <button id="globalVoiceBtn" type="button" class="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow hover:from-red-600 hover:to-rose-700 transition transform hover:scale-105">
-                    <span class="text-base">🎙️</span>
-                    <span>声で話しかける（音声入力）</span>
-                </button>
-            </div>
-        </section>
+            <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
+            <div class="composer-card">
+                <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
 
-        <!-- STEP 1: 感情入力 -->
-        <section id="freeInputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
+                <div class="composer-toolbar">
+                    <div class="flex items-center gap-1.5">
+                        <!-- 対象機関はチャットボックス内のタグ。ホバー（タッチ端末はタップ）で
+                             候補チップが動的に表示されるポップオーバーが開く -->
+                        <div class="relative inline-block" id="authorityTagWrap">
+                            <button type="button" id="authorityTag" class="composer-tool-tag">
+                                <span id="selectedAuthorityIcon">🏛️</span>
+                                <span id="selectedAuthorityLabel">読み込み中...</span>
+                            </button>
+                            <div id="authorityPopover" class="hidden authority-popover">
+                                <p class="text-xs text-gray-500 mb-2">タップして対象機関を選択</p>
+                                <div id="authorityChipFlow" class="flex flex-wrap gap-2 min-h-[2.5rem] mb-2"></div>
+                                <button id="detectMunicipalityBtn" type="button" class="text-xs text-indigo-600 hover:underline">
+                                    📍 現在地から自治体を特定する
+                                </button>
+                                <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+                                <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
+                                <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
+                            </div>
+                        </div>
+                        <select id="targetAuthority" class="hidden">
+                            <option value="">読み込み中...</option>
+                        </select>
+                        <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium"></p>
 
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- テキスト入力 -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-sm font-medium text-gray-700">言葉で伝える</label>
-                        <button id="voiceInputBtn" type="button" class="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition-all font-medium">
+                        <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
                             <span id="voiceIcon">🎙️</span>
-                            <span id="voiceStatusText">音声入力（話して入力）</span>
                         </button>
-                    </div>
-                    <textarea id="userInput" rows="6" class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
-                    <div id="voiceIndicator" class="hidden mt-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
-                        <span class="relative flex h-2.5 w-2.5">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）">📷</button>
+                        <span class="suggestion-hint">
+                            <span class="thinking-dots"><span></span><span></span><span></span></span>
+                            ヒントを提案中
                         </span>
-                        <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
                     </div>
+                    <span id="voiceStatusText" class="text-xs text-gray-400"></span>
                 </div>
 
-                <!-- カメラ入力（YouCam API） -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">表情で伝える（YouCam API）</label>
-                    <div class="bg-gray-100 rounded-md p-4 text-center">
-                        <video id="cameraPreview" class="w-full rounded-md mb-2 hidden" autoplay playsinline></video>
-                        <canvas id="cameraCanvas" class="hidden"></canvas>
-                        <button id="startCamera" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷 カメラ起動</button>
-                        <button id="captureImage" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 hidden">📸 撮影</button>
-                        <p id="cameraStatus" class="text-sm text-gray-500 mt-2"></p>
-                    </div>
+                <div id="voiceIndicator" class="hidden mx-3 mb-3 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                    </span>
+                    <span class="font-medium">音声を認識中... お話しください（もう一度ボタンを押すと停止）</span>
+                </div>
+
+                <!-- カメラ（YouCam API）: 📷 を押したときだけ展開する、コンポーザーに付属する小さなパネル -->
+                <div id="cameraPanel" class="hidden mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <video id="cameraPreview" class="w-full max-w-[220px] mx-auto rounded-md mb-2 hidden" autoplay playsinline></video>
+                    <canvas id="cameraCanvas" class="hidden"></canvas>
+                    <button id="captureImage" class="bg-green-500 text-white px-4 py-1.5 rounded-md hover:bg-green-600 hidden text-sm">📸 撮影</button>
+                    <p id="cameraStatus" class="text-xs text-gray-500 mt-1"></p>
                 </div>
             </div>
 
-            <button id="backToSituationsBtn" class="mt-4 text-sm text-blue-600 hover:underline">
-                ← シチュエーション選択に戻る
-            </button>
-        </section>
-
-        <!-- 自治体選択 -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">🏛️ 対象機関</h2>
-            <select id="targetAuthority" class="w-full p-2 border border-gray-300 rounded-md">
-                <option value="">読み込み中...</option>
-            </select>
+            <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
+                 押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
+            <div class="mt-3">
+                <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
+                <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
+            </div>
         </section>
 
         <!-- 解析ボタン -->
-        <button id="analyzeBtn" class="mb-6 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-md font-semibold hover:from-blue-600 hover:to-purple-700">
+        <button id="analyzeBtn" class="cl-cta mb-0 w-full text-white px-6 py-3 rounded-md font-semibold shadow-md transition">
             🚀 怒りを分析する
         </button>
+        <div id="analyzeThinking" class="mb-6"></div>
 
         <!-- STEP 2: 結果表示 -->
         <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
@@ -310,6 +981,7 @@
                     <div class="text-sm mt-1 opacity-90">不開示決定への反論</div>
                 </button>
             </div>
+            <div id="actionThinking"></div>
         </section>
 
         <!-- STEP 5: 生成結果 -->
@@ -680,6 +1352,9 @@
                 <button id="tabWalletBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                     🦊 Web3 ウォレット
                 </button>
+                <button id="tabMagicLinkBtn" class="flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                    ✨ マジックリンク
+                </button>
             </div>
 
             <!-- パネル 1: パスワード認証 -->
@@ -724,6 +1399,24 @@
                 </button>
 
                 <div id="walletStatusMsg" class="text-xs text-center text-gray-500"></div>
+            </div>
+
+            <!-- パネル 3: マジックリンク（パスワード不要のメールログイン） -->
+            <div id="panelMagicLink" class="hidden space-y-3 py-2">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-xs text-indigo-900 leading-relaxed">
+                    ✨ <strong>マジックリンクログイン</strong><br>
+                    パスワード不要。メールアドレス宛にログイン用リンクを送信します（15分間有効・1回限り）。
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">メールアドレス</label>
+                    <input type="email" id="magicLinkEmailInput" class="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="taro@example.com">
+                </div>
+
+                <button id="submitMagicLinkBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-md text-sm shadow transition mt-2">
+                    ログイン用リンクを送信する
+                </button>
+                <div id="magicLinkStatusMsg" class="text-xs text-center mt-2"></div>
             </div>
         </div>
     </div>
@@ -799,11 +1492,171 @@
         </div>
     </div>
 
+    <div id="toastContainer"></div>
+
     <script>
         let currentUser = null;
         let selectedSituation = null;
+
+        // --- トースト通知 ---
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // --- 「思考中」インジケーター (Claude Code風: 経過秒数 + 現在のステップ表示) ---
+        function startThinking(containerId, steps) {
+            const container = document.getElementById(containerId);
+            if (!container) return null;
+
+            container.innerHTML = `
+                <div class="thinking-box">
+                    <div class="thinking-dots"><span></span><span></span><span></span></div>
+                    <div class="thinking-text" id="${containerId}-text">${steps[0]}</div>
+                    <div class="thinking-timer" id="${containerId}-timer">0.0s</div>
+                </div>
+            `;
+
+            const startTime = performance.now();
+            const textEl = document.getElementById(`${containerId}-text`);
+            const timerEl = document.getElementById(`${containerId}-timer`);
+
+            let stepIndex = 0;
+            const stepInterval = setInterval(() => {
+                stepIndex = (stepIndex + 1) % steps.length;
+                if (textEl) textEl.textContent = steps[stepIndex];
+            }, 1600);
+
+            const timerInterval = setInterval(() => {
+                const elapsed = (performance.now() - startTime) / 1000;
+                if (timerEl) timerEl.textContent = `${elapsed.toFixed(1)}s`;
+            }, 100);
+
+            return { containerId, stepInterval, timerInterval };
+        }
+
+        function stopThinking(handle) {
+            if (!handle) return;
+            clearInterval(handle.stepInterval);
+            clearInterval(handle.timerInterval);
+            const container = document.getElementById(handle.containerId);
+            if (container) container.innerHTML = '';
+        }
+
+        // --- スターのふわふわ飛んでいくアニメーション ---
+        function flyStars(originEl) {
+            const rect = originEl.getBoundingClientRect();
+            const originX = rect.left + rect.width / 2;
+            const originY = rect.top + rect.height / 2;
+            const count = 5 + Math.floor(Math.random() * 3);
+
+            for (let i = 0; i < count; i++) {
+                const particle = document.createElement('span');
+                particle.className = 'star-particle';
+                particle.textContent = '⭐';
+                particle.style.left = `${originX}px`;
+                particle.style.top = `${originY}px`;
+
+                const angle = (Math.random() * Math.PI) + Math.PI; // 上半分方向へ散らす
+                const distance = 60 + Math.random() * 70;
+                const dx = Math.cos(angle) * distance;
+                const dy = Math.sin(angle) * distance - 30;
+                const rot = (Math.random() - 0.5) * 360;
+
+                particle.style.setProperty('--dx', `${dx}px`);
+                particle.style.setProperty('--dy', `${dy}px`);
+                particle.style.setProperty('--rot', `${rot}deg`);
+
+                document.body.appendChild(particle);
+                particle.addEventListener('animationend', () => particle.remove());
+            }
+        }
         let cameraStream = null;
         let capturedImageData = null;
+
+        // 🏆 認容事例テロップ：総務省「行政不服審査裁決・答申検索データベース」由来の実データ
+        // （フォールバック用の一般化した代表例。APIが利用できない場合のみ使用）
+        const disclosureWinExamplesFallback = [
+            { authority: '〇〇市', doc: '市長海外視察の復命書・支出関係文書', result: '全部開示（認容）' },
+            { authority: '〇〇県警', doc: '交通事故の実況見分調書', result: '一部開示（認容）' },
+            { authority: '〇〇区', doc: '議員政務活動費の領収書一式', result: '全部開示（認容）' },
+            { authority: '〇〇市教育委員会', doc: 'いじめ重大事態調査報告書', result: '一部開示（認容）' },
+            { authority: '〇〇県', doc: '補助金交付先の選定議事録', result: '全部開示（認容）' },
+            { authority: '〇〇市', doc: '公共工事の入札関係文書', result: '全部開示（認容）' },
+        ];
+
+        function renderWinTicker(examples, isReal) {
+            const track = document.getElementById('winTicker');
+            if (!track) return;
+            track.innerHTML = '';
+            const makeCard = (w) => {
+                const el = isReal ? document.createElement('a') : document.createElement('div');
+                el.className = 'win-card bg-white/95 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm flex items-center gap-2';
+                if (isReal) {
+                    el.href = w.source_url || '/precedent-cases';
+                    el.target = '_blank';
+                    el.rel = 'noopener noreferrer';
+                }
+                el.innerHTML = `
+                    <span class="font-bold text-emerald-700">✅ ${w.result || '認容'}</span>
+                    <span class="text-gray-500">${w.authority}</span>
+                    <span class="font-medium">${w.doc}</span>
+                    ${w.decision_date ? `<span class="text-gray-400">（${w.decision_date}）</span>` : ''}
+                `;
+                return el;
+            };
+            // 無限スクロールのため2周分レンダリング
+            [...examples, ...examples].forEach(w => track.appendChild(makeCard(w)));
+        }
+
+        async function loadWinTicker() {
+            try {
+                const res = await fetch('/api/precedent-cases?result=認容&limit=30');
+                if (!res.ok) throw new Error('failed to fetch precedent cases');
+                const data = await res.json();
+                const cases = (data.cases || []).map(c => ({
+                    authority: c.authority || c.council_name || '',
+                    doc: c.basis_laws || (c.summary ? c.summary.slice(0, 40) + '…' : ''),
+                    result: c.result || '認容',
+                    decision_date: c.decision_date || '',
+                    source_url: c.source_url || '/precedent-cases',
+                }));
+                if (cases.length === 0) throw new Error('no precedent cases');
+                renderWinTicker(cases, true);
+            } catch (e) {
+                renderWinTicker(disclosureWinExamplesFallback, false);
+            }
+        }
+        loadWinTicker();
+
+        // 🤖 エージェント自律稼働ログ（タイプライター風ループ）— AIエージェントであることの可視化
+        const agentLogMessages = [
+            '🔍 類似の開示請求事例を照合中...',
+            '📊 過去の認容率データを分析中...',
+            '🧠 不開示逃げ道パターンを検知中...',
+            '📜 適用可能な法的根拠を確認中...',
+            '⚖️ 審査請求の勝ち筋を検討中...',
+            '✅ 分析完了。あなたの入力をお待ちしています。',
+        ];
+        let agentLogIndex = 0;
+        function runAgentLogLoop() {
+            const panel = document.getElementById('agentLogInline');
+            if (!panel) return;
+            const msg = agentLogMessages[agentLogIndex % agentLogMessages.length];
+            agentLogIndex++;
+
+            panel.classList.remove('agent-log-line');
+            void panel.offsetWidth;
+            panel.classList.add('agent-log-line');
+            panel.textContent = msg;
+
+            setTimeout(runAgentLogLoop, 2200);
+        }
+        runAgentLogLoop();
 
         // 🎙️ 音声入力 (Web Speech API) 実装
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -847,26 +1700,17 @@
             const text = document.getElementById('voiceStatusText');
             const btn = document.getElementById('voiceInputBtn');
             const indicator = document.getElementById('voiceIndicator');
-            const globalBtn = document.getElementById('globalVoiceBtn');
 
             if (recording) {
                 if (icon) icon.textContent = '🔴';
                 if (text) text.textContent = '聞き取り中...（完了時はクリック）';
-                if (btn) {
-                    btn.classList.remove('bg-red-50', 'text-red-600');
-                    btn.classList.add('bg-red-600', 'text-white', 'shadow');
-                }
+                if (btn) btn.classList.add('active');
                 if (indicator) indicator.classList.remove('hidden');
-                if (globalBtn) globalBtn.classList.add('animate-pulse');
             } else {
                 if (icon) icon.textContent = '🎙️';
-                if (text) text.textContent = '音声入力（話して入力）';
-                if (btn) {
-                    btn.classList.add('bg-red-50', 'text-red-600');
-                    btn.classList.remove('bg-red-600', 'text-white', 'shadow');
-                }
+                if (text) text.textContent = '';
+                if (btn) btn.classList.remove('active');
                 if (indicator) indicator.classList.add('hidden');
-                if (globalBtn) globalBtn.classList.remove('animate-pulse');
             }
         }
 
@@ -874,11 +1718,6 @@
             if (!SpeechRecognition) {
                 alert('お使いのブラウザは音声入力（Web Speech API）に対応していません。Google Chromeなどのブラウザでお試しください。');
                 return;
-            }
-            // 入力セクションを開く
-            const freeSection = document.getElementById('freeInputSection');
-            if (freeSection.classList.contains('hidden')) {
-                freeSection.classList.remove('hidden');
             }
             const userInput = document.getElementById('userInput');
             userInput.focus();
@@ -910,41 +1749,211 @@
         }
 
         document.getElementById('voiceInputBtn').addEventListener('click', toggleVoiceRecognition);
-        document.getElementById('globalVoiceBtn').addEventListener('click', () => {
-            if (!isVoiceRecording) {
-                startVoiceRecognition();
-            } else {
-                stopVoiceRecognition();
-            }
-        });
 
-        // シチュエーション一覧を取得
+        // プロンプト入力欄のプレースホルダーをタイプライター風に動かし続け、
+        // 「AIが常に動いている・生きている」感覚を演出する（入力中は止める）
+        const SUGGESTION_PROMPTS = [
+            { text: '市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。', category: '自治体' },
+            { text: '近所の道路工事、入札額が不自然に高い気がする。設計書と積算根拠を見てみたい。', category: '自治体' },
+            { text: '補助金をもらった団体の実績報告書が公開されていない。使い道を確認したい。', category: '自治体' },
+            { text: '警察に相談したのに何も対応してくれなかった。当時の対応記録を開示してほしい。', category: '警察' },
+            { text: '議会で審議された予算の内訳がよく分からない。詳しい資料がほしい。', category: '自治体' },
+        ];
+
+        // プレースホルダーの例文と一緒に対象機関タグも切り替える。ただし一度でも
+        // ユーザーが自分で対象機関を選んだ後は、その選択を尊重して自動切り替えをやめる
+        function syncAuthorityToPrompt(category) {
+            if (userManuallySelectedAuthority || allAuthorities.length === 0) return;
+            const match = allAuthorities.find(a => a.category === category);
+            if (!match) return;
+            setSelectedAuthority(match.key, { auto: true });
+
+            const tag = document.getElementById('authorityTag');
+            if (tag) {
+                tag.classList.remove('authority-tag-flash');
+                // リフローを挟んでクラスを付け直すことでアニメーションを再トリガーする
+                void tag.offsetWidth;
+                tag.classList.add('authority-tag-flash');
+            }
+        }
+
+        function startPromptSuggestionAnimation() {
+            const el = document.getElementById('userInput');
+            if (!el) return;
+
+            let promptIndex = 0;
+            let charIndex = 0;
+            let deleting = false;
+            let authoritySynced = false;
+
+            const tick = () => {
+                // ユーザーが何か入力している間は邪魔をせず、空になったら自動的に再開する
+                if (el.value.trim() !== '' || document.activeElement === el) {
+                    setTimeout(tick, 600);
+                    return;
+                }
+
+                const current = SUGGESTION_PROMPTS[promptIndex % SUGGESTION_PROMPTS.length];
+
+                if (!authoritySynced) {
+                    authoritySynced = true;
+                    syncAuthorityToPrompt(current.category);
+                }
+
+                if (!deleting) {
+                    charIndex++;
+                    el.placeholder = current.text.slice(0, charIndex);
+                    if (charIndex >= current.text.length) {
+                        deleting = true;
+                        setTimeout(tick, 2200); // 全文表示後、少し静止して読ませる
+                        return;
+                    }
+                    setTimeout(tick, 45);
+                } else {
+                    charIndex--;
+                    el.placeholder = current.text.slice(0, charIndex);
+                    if (charIndex <= 0) {
+                        deleting = false;
+                        promptIndex++;
+                        authoritySynced = false;
+                        setTimeout(tick, 500);
+                        return;
+                    }
+                    setTimeout(tick, 20);
+                }
+            };
+            tick();
+        }
+
+        // 見出し「何に怒りを感じていますか？」を、いくつかの問いかけの間でタイプライター風に切り替える
+        const HEADING_QUESTIONS = [
+            '何に怒りを感じていますか？',
+            'どんな不満を抱えていますか？',
+            '納得できないこと、ありませんか？',
+            '誰に説明を求めたいですか？',
+            'モヤモヤの原因は何ですか？',
+        ];
+
+        function startHeadingSuggestionAnimation() {
+            const el = document.getElementById('mainQuestionHeading');
+            if (!el) return;
+
+            let questionIndex = 0;
+            let charIndex = 0;
+            let deleting = false;
+
+            const render = (text) => {
+                el.textContent = text;
+                const caret = document.createElement('span');
+                caret.className = 'heading-caret';
+                caret.textContent = ' ';
+                el.appendChild(caret);
+            };
+
+            const tick = () => {
+                const current = HEADING_QUESTIONS[questionIndex % HEADING_QUESTIONS.length];
+
+                if (!deleting) {
+                    charIndex++;
+                    render(current.slice(0, charIndex));
+                    if (charIndex >= current.length) {
+                        deleting = true;
+                        setTimeout(tick, 2600); // 全文表示後、少し静止して読ませる
+                        return;
+                    }
+                    setTimeout(tick, 70);
+                } else {
+                    charIndex--;
+                    render(current.slice(0, charIndex));
+                    if (charIndex <= 0) {
+                        deleting = false;
+                        questionIndex++;
+                        setTimeout(tick, 400);
+                        return;
+                    }
+                    setTimeout(tick, 30);
+                }
+            };
+            tick();
+        }
+
+        // シチュエーション一覧を取得し、チップとして数秒おきにフェードで流し続ける
+        let allSituations = [];
+        let situationChipCursor = 0;
+        const SITUATION_CHIPS_VISIBLE = 6;
+        const SITUATION_CHIP_INTERVAL_MS = 4000;
+
         async function loadSituations() {
             const res = await fetch('/api/situations');
             const data = await res.json();
-            const grid = document.getElementById('situationGrid');
-            data.situations.forEach(s => {
-                const card = document.createElement('div');
-                card.className = 'situation-card border-2 border-gray-200 rounded-lg p-3 text-center hover:border-blue-400';
-                card.dataset.key = s.key;
-                card.innerHTML = `
-                    <div class="text-3xl mb-1">${s.emoji}</div>
-                    <div class="font-semibold text-sm">${s.label}</div>
-                `;
-                card.addEventListener('click', () => selectSituation(s));
-                grid.appendChild(card);
-            });
+            allSituations = data.situations;
+            renderSituationChipBatch();
+            setInterval(renderSituationChipBatch, SITUATION_CHIP_INTERVAL_MS);
         }
 
-        // 対象機関一覧を取得し、カテゴリ別にグループ化して <select> を組み立てる
+        function renderSituationChipBatch() {
+            const container = document.getElementById('situationChipFlow');
+            if (!container || allSituations.length === 0) return;
+
+            const existingChips = [...container.children];
+            existingChips.forEach(chip => chip.classList.add('chip-leaving'));
+
+            const buildNextBatch = () => {
+                container.innerHTML = '';
+                const count = Math.min(SITUATION_CHIPS_VISIBLE, allSituations.length);
+                for (let i = 0; i < count; i++) {
+                    const s = allSituations[situationChipCursor % allSituations.length];
+                    situationChipCursor++;
+
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'situation-chip';
+                    chip.dataset.key = s.key;
+                    chip.innerHTML = `<span class="situation-chip-emoji">${s.emoji}</span><span>${s.label}</span>`;
+                    chip.addEventListener('click', () => selectSituation(s));
+                    container.appendChild(chip);
+                }
+            };
+
+            if (existingChips.length > 0) {
+                setTimeout(buildNextBatch, 350);
+            } else {
+                buildNextBatch();
+            }
+        }
+
+        // 対象機関一覧を取得しておき、必要に応じてカテゴリで絞り込んで <select> を組み立てる
+        let allAuthorities = [];
+        let currentAuthorityFilter = null;
+
         async function loadAuthorities() {
             const res = await fetch('/authorities');
             const data = await res.json();
+            allAuthorities = data.authorities;
+            renderAuthorityOptions(null);
+            setInterval(renderAuthorityChipBatch, SITUATION_CHIP_INTERVAL_MS);
+        }
+
+        // Geolocationのバックグラウンド調査で新たに判明した自治体（data/authorities/*.json
+        // 未収録）を "pool:<muni_code>" キーの候補として<select>に追加する
+        function addDynamicAuthorityOption(key, name, type) {
+            if (allAuthorities.some(a => a.key === key)) return;
+            allAuthorities.push({ key, name, type: type || '市長', category: '自治体' });
+            renderAuthorityOptions(currentAuthorityFilter);
+        }
+
+        function renderAuthorityOptions(filterCategory) {
+            currentAuthorityFilter = filterCategory;
             const select = document.getElementById('targetAuthority');
+            const previousValue = select.value;
             select.innerHTML = '';
 
+            const authorities = filterCategory
+                ? allAuthorities.filter(a => a.category === filterCategory)
+                : allAuthorities;
+
             const groups = {};
-            data.authorities.forEach(a => {
+            authorities.forEach(a => {
                 if (!groups[a.category]) groups[a.category] = [];
                 groups[a.category].push(a);
             });
@@ -962,19 +1971,338 @@
                     const option = document.createElement('option');
                     option.value = a.key;
                     const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
-                    option.textContent = `${icon}${a.name}（${a.type}）`;
+                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    option.textContent = `${icon}${a.name}（${a.type}${autoTag}）`;
                     optgroup.appendChild(option);
                 });
                 select.appendChild(optgroup);
             });
+
+            // 直前の選択がまだ選択肢に残っていれば維持する
+            if ([...select.options].some(o => o.value === previousValue)) {
+                select.value = previousValue;
+            }
+
+            const hint = document.getElementById('authorityFilterHint');
+            if (hint) {
+                hint.textContent = filterCategory
+                    ? `「${filterCategory}」のみ表示中（選択したシチュエーションに基づく絞り込み）`
+                    : '';
+                hint.classList.toggle('hidden', !filterCategory);
+            }
+
+            updateSelectedAuthorityBadge();
+            renderAuthorityChipBatch();
         }
+
+        // 対象機関を選択する唯一の入口。<select>の値を更新し、選択中バッジと
+        // チップの見た目を同期させる（シチュエーションチップ・位置情報検出のどちらから来ても同じ経路を通す）
+        let userManuallySelectedAuthority = false;
+
+        function setSelectedAuthority(key, { auto = false } = {}) {
+            if (auto && userManuallySelectedAuthority) return;
+            const select = document.getElementById('targetAuthority');
+            if (![...select.options].some(o => o.value === key)) return;
+            select.value = key;
+            if (!auto) userManuallySelectedAuthority = true;
+            updateSelectedAuthorityBadge();
+        }
+
+        function updateSelectedAuthorityBadge() {
+            const select = document.getElementById('targetAuthority');
+            const icon = document.getElementById('selectedAuthorityIcon');
+            const label = document.getElementById('selectedAuthorityLabel');
+            if (!select || !icon || !label) return;
+
+            const current = allAuthorities.find(a => a.key === select.value);
+            if (!current) {
+                label.textContent = '未選択';
+                return;
+            }
+            icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
+            const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
+            label.textContent = `${current.name}（${current.type}${autoTag}）`;
+        }
+
+        // 対象機関も、シチュエーションと同じ「流れるチップ」で選ぶ。<select>は状態保持専用で非表示。
+        let authorityChipCursor = 0;
+        const AUTHORITY_CHIPS_VISIBLE = 6;
+
+        function renderAuthorityChipBatch() {
+            const container = document.getElementById('authorityChipFlow');
+            if (!container || allAuthorities.length === 0) return;
+
+            const pool = currentAuthorityFilter
+                ? allAuthorities.filter(a => a.category === currentAuthorityFilter)
+                : allAuthorities;
+            if (pool.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const existingChips = [...container.children];
+            existingChips.forEach(chip => chip.classList.add('chip-leaving'));
+
+            const buildNextBatch = () => {
+                container.innerHTML = '';
+                const selectedKey = document.getElementById('targetAuthority').value;
+                const count = Math.min(AUTHORITY_CHIPS_VISIBLE, pool.length);
+                for (let i = 0; i < count; i++) {
+                    const a = pool[authorityChipCursor % pool.length];
+                    authorityChipCursor++;
+
+                    const icon = a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'situation-chip' + (a.key === selectedKey ? ' selected' : '');
+                    chip.dataset.key = a.key;
+                    chip.innerHTML = `<span class="situation-chip-emoji">${icon}</span><span>${a.name}（${a.type}${autoTag}）</span>`;
+                    chip.addEventListener('click', () => {
+                        setSelectedAuthority(a.key);
+                        closeAuthorityPopover();
+                    });
+                    container.appendChild(chip);
+                }
+            };
+
+            if (existingChips.length > 0) {
+                setTimeout(buildNextBatch, 350);
+            } else {
+                buildNextBatch();
+            }
+        }
+
+        // 対象機関タグのポップオーバー: PCはホバーで開閉、タッチ端末はタップで開閉する
+        const authorityTagWrap = document.getElementById('authorityTagWrap');
+        const authorityTag = document.getElementById('authorityTag');
+        const authorityPopover = document.getElementById('authorityPopover');
+        let authorityPopoverCloseTimer = null;
+
+        function openAuthorityPopover() {
+            clearTimeout(authorityPopoverCloseTimer);
+            authorityPopover.classList.remove('hidden');
+            authorityTag.classList.add('open');
+            renderAuthorityChipBatch();
+        }
+
+        function closeAuthorityPopover() {
+            authorityPopover.classList.add('hidden');
+            authorityTag.classList.remove('open');
+        }
+
+        authorityTag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (authorityPopover.classList.contains('hidden')) {
+                openAuthorityPopover();
+            } else {
+                closeAuthorityPopover();
+            }
+        });
+        authorityTag.addEventListener('mouseenter', openAuthorityPopover);
+        authorityTagWrap.addEventListener('mouseleave', () => {
+            authorityPopoverCloseTimer = setTimeout(closeAuthorityPopover, 300);
+        });
+        authorityPopover.addEventListener('mouseenter', () => clearTimeout(authorityPopoverCloseTimer));
+        authorityPopover.addEventListener('click', (e) => e.stopPropagation());
+        document.addEventListener('click', () => closeAuthorityPopover());
+
+        // 未ログイン時でも履歴を紐付けられるよう、匿名IDをlocalStorageに永続化する
+        function getOrCreateSessionId() {
+            try {
+                let id = localStorage.getItem('civicLensSessionId');
+                if (!id) {
+                    id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+                    localStorage.setItem('civicLensSessionId', id);
+                }
+                return id;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // 現在地（Geolocation API）から自治体を特定し、対象機関の <select> に反映する。
+        // ページ読み込み時にバックグラウンドで自動実行される（silent: true）ほか、
+        // 「📍 現在地から自治体を特定する」ボタンからも手動で再実行できる。
+        async function detectMunicipalityFromLocation(options = {}) {
+            const silent = options.silent === true;
+            const statusEl = document.getElementById('detectMunicipalityStatus');
+            if (!navigator.geolocation) {
+                if (!silent) statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
+                return;
+            }
+
+            if (!silent) statusEl.textContent = '📍 現在地を取得中...';
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                try {
+                    const formData = new FormData();
+                    formData.append('lat', lat);
+                    formData.append('lon', lon);
+                    const sessionId = getOrCreateSessionId();
+                    if (sessionId) formData.append('session_id', sessionId);
+                    // 未収録の自治体はサーバー側で調査してから応答するため、数秒かかることがある
+                    statusEl.textContent = '🔎 対象機関を特定中...（未収録の自治体は情報公開制度の調査に数秒かかる場合があります）';
+                    const res = await fetch('/api/municipality/detect', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error('自治体の特定に失敗しました');
+                    const data = await res.json();
+                    await handleMunicipalityDetectResult(data, statusEl);
+                    loadMunicipalityHistory();
+                } catch (e) {
+                    statusEl.textContent = `❌ ${e.message}`;
+                }
+            }, (err) => {
+                // silent時（自動判定）は、位置情報が許可されていないだけの状況が大半のため
+                // ❌表示で不安を与えず、手動ボタンを促す穏やかな文言にとどめる
+                statusEl.textContent = silent
+                    ? '📍 位置情報が利用できません（ボタンから手動で特定できます）'
+                    : `❌ 位置情報を取得できませんでした（${err.message}）`;
+            }, silent ? { timeout: 8000 } : undefined);
+        }
+
+        // 対象機関は1つに絞り込まず、都道府県・周辺市区町村を含む候補を一覧表示し、
+        // ユーザーがクリックした候補だけを <select> に反映する
+        function renderMunicipalityCandidates(candidates, selectedKey) {
+            const listEl = document.getElementById('municipalityCandidateList');
+            if (!listEl) return;
+            if (!candidates || candidates.length === 0) {
+                listEl.classList.add('hidden');
+                listEl.innerHTML = '';
+                return;
+            }
+            const categoryIcon = { '警察': '🚔', '裁判所': '⚖️' };
+            listEl.innerHTML = candidates.map(c => {
+                const icon = categoryIcon[c.category] || '🏛️';
+                const active = c.key === selectedKey;
+                return `
+                    <li>
+                        <button type="button" data-authority-key="${c.key}"
+                            class="municipality-candidate-btn text-xs px-2 py-1 rounded-md border ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'}">
+                            ${icon} ${c.name}（${c.type}）・約${c.distance_km}km
+                        </button>
+                    </li>
+                `;
+            }).join('');
+            listEl.classList.remove('hidden');
+
+            listEl.querySelectorAll('.municipality-candidate-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.dataset.authorityKey;
+                    setSelectedAuthority(key);
+                    renderMunicipalityCandidates(candidates, key);
+                });
+            });
+        }
+
+        async function handleMunicipalityDetectResult(data, statusEl) {
+            const loc = data.location;
+            renderMunicipalityCandidates(data.candidates, data.authority_key);
+
+            if (data.status === 'found') {
+                setSelectedAuthority(data.authority_key);
+                statusEl.textContent = `✅ ${loc.full_name} 周辺の候補を${(data.candidates || []).length}件見つけました。下から対象機関を選んでください`;
+                return;
+            }
+            if (data.status === 'found_pooled') {
+                // 未収録の自治体はサーバー側で調査が完了してから返ってくる（同期処理）ため、
+                // このレスポンスの時点で対象機関プルダウンに即座に反映できる
+                addDynamicAuthorityOption(data.authority_key, data.authority_name, data.pooled.authority_type);
+                setSelectedAuthority(data.authority_key);
+                renderMunicipalityCandidates(data.candidates, data.authority_key);
+                statusEl.textContent = `✅ ${loc.full_name}（${data.authority_name}）を対象機関に反映しました（${data.pooled.ordinance_name || '情報公開条例'}）`;
+                return;
+            }
+            // failed: 調査に失敗した場合は、最も近い既知の候補を暫定的に選んでおく
+            const nearestKnown = (data.candidates || [])[0];
+            if (nearestKnown) {
+                setSelectedAuthority(nearestKnown.key);
+                renderMunicipalityCandidates(data.candidates, nearestKnown.key);
+            }
+            statusEl.textContent = `⚠️ ${loc.full_name} の情報公開制度の調査に失敗しました。近隣の候補（${nearestKnown ? nearestKnown.name : '一覧'}）から選択してください`;
+        }
+
+        const municipalityHistoryStatusLabels = {
+            found: '✅ 特定済み',
+            found_pooled: '✅ 特定済み（調査済み）',
+            researching: '🔎 調査中',
+            failed: '❌ 失敗',
+        };
+
+        async function loadMunicipalityHistory() {
+            const body = document.getElementById('sidebarHistoryBody');
+            if (!body) return;
+            try {
+                const sessionId = getOrCreateSessionId();
+                const url = sessionId
+                    ? `/api/municipality/history?session_id=${encodeURIComponent(sessionId)}`
+                    : '/api/municipality/history';
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) return;
+                const data = await res.json();
+                const records = data.records || [];
+                if (records.length === 0) {
+                    body.innerHTML = '<p class="cl-sidebar-empty">まだ履歴はありません</p>';
+                    return;
+                }
+                body.innerHTML = records.map(r => {
+                    const label = municipalityHistoryStatusLabels[r.status] || r.status;
+                    const when = new Date(r.created_at).toLocaleString('ja-JP');
+                    const authority = r.authority_name ? `（${r.authority_name}）` : '';
+                    return `
+                        <div class="cl-history-item">
+                            <span class="cl-history-item-main">${r.full_name}${authority}</span>
+                            <span class="cl-history-item-meta">${when} ・ ${label}</span>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
+            }
+        }
+
+        // --- 左サイドメニュー（履歴一覧）の開閉。Claude Codeのようにハンバーガーで開閉できる ---
+        const historySidebar = document.getElementById('historySidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const openSidebarBtn = document.getElementById('openSidebarBtn');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+
+        function setSidebarOpen(open) {
+            if (!historySidebar || !sidebarOverlay) return;
+            historySidebar.classList.toggle('cl-sidebar-open', open);
+            historySidebar.setAttribute('aria-hidden', open ? 'false' : 'true');
+            sidebarOverlay.classList.toggle('cl-sidebar-overlay-open', open);
+            if (openSidebarBtn) openSidebarBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) loadMunicipalityHistory();
+        }
+
+        if (openSidebarBtn) openSidebarBtn.addEventListener('click', () => setSidebarOpen(true));
+        if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => setSidebarOpen(false));
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => setSidebarOpen(false));
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') setSidebarOpen(false);
+        });
+
+        // 🎨 デザインテーマ切り替え（ダーク / ゴールド / ライト）。選択はlocalStorageに保存して次回訪問時にも反映
+        const THEME_STORAGE_KEY = 'cl-theme';
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) {}
+            document.querySelectorAll('.cl-theme-btn').forEach((btn) => {
+                const active = btn.dataset.themeValue === theme;
+                btn.classList.toggle('cl-theme-btn-active', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        }
+        document.querySelectorAll('.cl-theme-btn').forEach((btn) => {
+            btn.addEventListener('click', () => applyTheme(btn.dataset.themeValue));
+        });
+        applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
 
         function selectSituation(s) {
             selectedSituation = s;
-            document.querySelectorAll('.situation-card').forEach(c => {
-                c.classList.remove('selected');
-                if (c.dataset.key === s.key) c.classList.add('selected');
-            });
+            renderAuthorityOptions(s.category);
 
             // シチュエーションに応じたサンプルテキストを自動入力
             fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
@@ -982,18 +2310,24 @@
             });
         }
 
-        document.getElementById('useFreeInputBtn').addEventListener('click', () => {
-            document.getElementById('freeInputSection').classList.remove('hidden');
-            selectedSituation = null;
-        });
-
-        document.getElementById('backToSituationsBtn').addEventListener('click', () => {
-            document.getElementById('freeInputSection').classList.add('hidden');
-            selectedSituation = null;
-        });
-
-        // カメラ起動
+        // カメラ起動（コンポーザーのツールバーアイコンを押すと、その場でパネルが展開する）
         document.getElementById('startCamera').addEventListener('click', async () => {
+            const panel = document.getElementById('cameraPanel');
+            const startBtn = document.getElementById('startCamera');
+
+            // すでに起動中なら閉じる（トグル）
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+                panel.classList.add('hidden');
+                startBtn.classList.remove('active');
+                document.getElementById('cameraPreview').classList.add('hidden');
+                document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('cameraStatus').textContent = '';
+                return;
+            }
+
+            panel.classList.remove('hidden');
             try {
                 cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 const video = document.getElementById('cameraPreview');
@@ -1001,6 +2335,7 @@
                 video.classList.remove('hidden');
                 document.getElementById('captureImage').classList.remove('hidden');
                 document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+                startBtn.classList.add('active');
             } catch (err) {
                 document.getElementById('cameraStatus').textContent = 'カメラアクセス拒否';
             }
@@ -1017,8 +2352,10 @@
 
             if (cameraStream) {
                 cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
                 video.classList.add('hidden');
                 document.getElementById('captureImage').classList.add('hidden');
+                document.getElementById('startCamera').classList.remove('active');
             }
         });
 
@@ -1039,6 +2376,12 @@
 
             document.getElementById('analyzeBtn').textContent = '🔄 分析中...';
             document.getElementById('analyzeBtn').disabled = true;
+            const thinkingHandle = startThinking('analyzeThinking', [
+                '🧠 怒りのレベルを分析中…',
+                '🏛️ 対象機関を照合中…',
+                '📜 法的根拠を検索中…',
+                '📄 開示請求すべき文書を洗い出し中…',
+            ]);
 
             try {
                 const res = await fetch('/api/analyze', { method: 'POST', body: formData });
@@ -1049,11 +2392,12 @@
                 document.getElementById('actionSection').classList.remove('hidden');
 
                 if (data.anger_analysis.target_authority_key) {
-                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
+                    setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
             } catch (err) {
                 alert('エラー: ' + err.message);
             } finally {
+                stopThinking(thinkingHandle);
                 document.getElementById('analyzeBtn').textContent = '🚀 怒りを分析する';
                 document.getElementById('analyzeBtn').disabled = false;
             }
@@ -1171,6 +2515,11 @@
 
             document.getElementById('disclosureBtn').disabled = true;
             document.getElementById('disclosureBtn').textContent = '📝 生成中...';
+            const thinkingHandle = startThinking('actionThinking', [
+                '📝 開示請求書の文面を組み立て中…',
+                '⚖️ 適用条文を照合中…',
+                '🚉 提出先窓口までのルートを計算中…',
+            ]);
 
             try {
                 const res = await fetch('/api/disclosure-request', { method: 'POST', body: formData });
@@ -1188,6 +2537,7 @@
             } catch (err) {
                 alert('エラー: ' + err.message);
             } finally {
+                stopThinking(thinkingHandle);
                 document.getElementById('disclosureBtn').disabled = false;
                 document.getElementById('disclosureBtn').innerHTML = '<div class="text-3xl mb-2">📝</div><div class="font-bold">開示請求書を作成</div><div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>';
             }
@@ -1803,14 +3153,27 @@
                     await fetch(`/api/github/unstar/${recordId}`, { method: 'POST' });
                 } else {
                     await fetch(`/api/github/star/${recordId}`, { method: 'POST' });
+                    flyStars(starBtn);
+
+                    const plusOne = document.createElement('span');
+                    plusOne.className = 'star-plus-one';
+                    plusOne.textContent = '+1';
+                    starBtn.style.position = 'relative';
+                    starBtn.appendChild(plusOne);
+                    plusOne.addEventListener('animationend', () => plusOne.remove());
                 }
+
+                starBtn.classList.remove('star-pop');
+                void starBtn.offsetWidth; // reflow でアニメーションを再トリガー
+                starBtn.classList.add('star-pop');
+
                 await loadRecordGitHubStats(recordId);
             }
 
             if (forkBtn) {
                 const recordId = forkBtn.dataset.recordId;
                 await fetch(`/api/github/fork/${recordId}`, { method: 'POST' });
-                alert('✅ フォークしました！\n\nこの請求書を参考にした、新たな開示請求を作成できます。');
+                showToast('✅ フォークしました！この請求書を参考に新たな開示請求を作成できます。');
                 await loadRecordGitHubStats(recordId);
             }
 
@@ -1871,15 +3234,15 @@
                     currentUser = data.user;
                     navArea.innerHTML = `
                         <div class="flex items-center gap-2">
-                            <span class="text-xs bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                            <span class="cl-authbtn text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
                                 <span>👤</span> <span>${currentUser.username}</span>
-                                <span class="text-gray-400 font-normal">|</span>
-                                <span class="text-indigo-600 font-mono text-[11px]">${currentUser.civic_id}</span>
+                                <span class="cl-header-tagline font-normal">|</span>
+                                <span class="cl-header-status font-mono text-[11px]">${currentUser.civic_id}</span>
                             </span>
-                            <button id="openMyRecordsBtn" type="button" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 rounded hover:bg-indigo-50 transition">
+                            <button id="openMyRecordsBtn" type="button" class="cl-authbtn text-xs font-semibold px-2 py-1 rounded transition">
                                 📂 マイ請求
                             </button>
-                            <button id="logoutBtn" type="button" class="text-xs text-gray-500 hover:text-red-600 px-2 py-1 rounded hover:bg-gray-100 transition">
+                            <button id="logoutBtn" type="button" class="cl-authbtn text-xs px-2 py-1 rounded transition">
                                 ログアウト
                             </button>
                         </div>
@@ -1888,25 +3251,23 @@
                     document.getElementById('openMyRecordsBtn').addEventListener('click', openMyRecordsModal);
                     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 
-                    document.body.classList.add('has-sidebar');
-                    document.getElementById('projectSidebar').classList.remove('hidden');
-                    document.getElementById('projectSidebar').classList.add('flex');
+                    document.getElementById('newProjectBtn').classList.remove('hidden');
                     await loadProjects();
                 } else {
                     currentUser = null;
                     navArea.innerHTML = `
-                        <button id="openAuthModalBtn" type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 px-3.5 py-1.5 rounded-full hover:bg-gray-100 shadow-sm transition">
-                            <span>👤</span> ログイン / 新規登録
+                        <button id="openAuthModalBtn" type="button" class="cl-authbtn inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full transition">
+                            <span>👤</span><span class="hidden sm:inline">ログイン / 新規登録</span>
                         </button>
                     `;
                     document.getElementById('openAuthModalBtn').addEventListener('click', () => {
                         document.getElementById('authModal').classList.remove('hidden');
                     });
 
-                    document.body.classList.remove('has-sidebar');
-                    document.getElementById('projectSidebar').classList.add('hidden');
-                    document.getElementById('projectSidebar').classList.remove('flex');
+                    document.getElementById('newProjectBtn').classList.add('hidden');
+                    document.getElementById('projectList').innerHTML = '<p class="cl-sidebar-empty">ログインするとプロジェクトが表示されます</p>';
                     document.getElementById('currentProjectBar').classList.add('hidden');
+                    document.getElementById('projectRecordsSection').classList.add('hidden');
                     currentProjectId = null;
                     projects = [];
                 }
@@ -1948,16 +3309,16 @@
         function renderProjectList() {
             const listEl = document.getElementById('projectList');
             if (projects.length === 0) {
-                listEl.innerHTML = '<div class="text-xs text-gray-400 px-2 py-4 text-center">プロジェクトがありません</div>';
+                listEl.innerHTML = '<p class="cl-sidebar-empty">プロジェクトがありません</p>';
                 return;
             }
             listEl.innerHTML = projects.map(p => `
-                <div class="project-item ${p.project_id === currentProjectId ? 'active' : ''} cursor-pointer rounded-lg px-3 py-2 hover:bg-gray-100 transition" data-project-id="${p.project_id}">
-                    <div class="text-sm font-semibold truncate">${p.type === 'personal' ? '👤' : '👥'} ${escapeHtml(p.name)}</div>
-                    <div class="project-item-meta text-[11px] text-gray-400">${p.type === 'personal' ? '個人' : `メンバー ${p.member_ids.length}人`}</div>
+                <div class="cl-history-item cl-project-item ${p.project_id === currentProjectId ? 'cl-project-item-active' : ''}" data-project-id="${p.project_id}">
+                    <span class="cl-history-item-main">${p.type === 'personal' ? '👤' : '👥'} ${escapeHtml(p.name)}</span>
+                    <span class="cl-history-item-meta">${p.type === 'personal' ? '個人' : `メンバー ${p.member_ids.length}人`}</span>
                 </div>
             `).join('');
-            listEl.querySelectorAll('.project-item').forEach(el => {
+            listEl.querySelectorAll('.cl-project-item').forEach(el => {
                 el.addEventListener('click', () => selectProject(el.dataset.projectId));
             });
         }
@@ -2216,22 +3577,30 @@
         // タブ切り替え（パスワード vs Web3）
         const tabPasswordBtn = document.getElementById('tabPasswordBtn');
         const tabWalletBtn = document.getElementById('tabWalletBtn');
+        const tabMagicLinkBtn = document.getElementById('tabMagicLinkBtn');
         const panelPassword = document.getElementById('panelPassword');
         const panelWallet = document.getElementById('panelWallet');
+        const panelMagicLink = document.getElementById('panelMagicLink');
+        const authTabInactiveClass = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
 
-        tabPasswordBtn.addEventListener('click', () => {
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600';
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelPassword.classList.remove('hidden');
-            panelWallet.classList.add('hidden');
-        });
+        function showAuthPanel(panel) {
+            panelPassword.classList.toggle('hidden', panel !== 'password');
+            panelWallet.classList.toggle('hidden', panel !== 'wallet');
+            panelMagicLink.classList.toggle('hidden', panel !== 'magic');
+            tabPasswordBtn.className = panel === 'password'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+            tabWalletBtn.className = panel === 'wallet'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600'
+                : authTabInactiveClass;
+            tabMagicLinkBtn.className = panel === 'magic'
+                ? 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600'
+                : authTabInactiveClass;
+        }
 
-        tabWalletBtn.addEventListener('click', () => {
-            tabWalletBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-orange-500 text-orange-600';
-            tabPasswordBtn.className = 'flex-1 py-2 text-center text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700';
-            panelWallet.classList.remove('hidden');
-            panelPassword.classList.add('hidden');
-        });
+        tabPasswordBtn.addEventListener('click', () => showAuthPanel('password'));
+        tabWalletBtn.addEventListener('click', () => showAuthPanel('wallet'));
+        tabMagicLinkBtn.addEventListener('click', () => showAuthPanel('magic'));
 
         // ログイン / 新規登録切り替え
         const toggleAuthModeBtn = document.getElementById('toggleAuthModeBtn');
@@ -2354,6 +3723,35 @@
             }
         });
 
+        // マジックリンクログイン（パスワード不要のメールログイン）
+        document.getElementById('submitMagicLinkBtn').addEventListener('click', async () => {
+            const email = document.getElementById('magicLinkEmailInput').value.trim();
+            const statusMsg = document.getElementById('magicLinkStatusMsg');
+            const submitBtn = document.getElementById('submitMagicLinkBtn');
+
+            if (!email) {
+                statusMsg.innerHTML = '<span class="text-red-500">メールアドレスを入力してください</span>';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusMsg.textContent = '送信中...';
+
+            try {
+                const formData = new FormData();
+                formData.append('email', email);
+                const res = await fetch('/api/auth/magic-link/request', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'リンクの送信に失敗しました');
+
+                statusMsg.innerHTML = '<span class="text-green-600">✅ ' + email + ' 宛にログイン用リンクを送信しました。メール内のリンクをクリックしてログインしてください（15分間有効）。</span>';
+            } catch (err) {
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
         // ログアウト
         async function handleLogout() {
             if (!confirm('ログアウトしますか？')) return;
@@ -2446,11 +3844,25 @@
             }
         }
 
+        const detectMunicipalityBtn = document.getElementById('detectMunicipalityBtn');
+        if (detectMunicipalityBtn) {
+            detectMunicipalityBtn.addEventListener('click', detectMunicipalityFromLocation);
+        }
+
         // 起動
         checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
-        loadAuthorities();
         loadPublicFeed();
+        loadMunicipalityHistory();
+        startPromptSuggestionAnimation();
+        startHeadingSuggestionAnimation();
+
+        (async () => {
+            // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
+            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定を行う
+            await loadAuthorities();
+            detectMunicipalityFromLocation({ silent: true });
+        })();
     </script>
 </body>
 </html>

@@ -6,6 +6,7 @@ from auth import (
     create_session_token, verify_session_token,
     register_user, authenticate_password, authenticate_wallet,
     generate_siwe_nonce, build_siwe_message,
+    request_magic_link, verify_magic_link, _magic_links_ref, _hash_magic_token,
 )
 
 
@@ -111,6 +112,58 @@ def test_web3_wallet_login_rejects_replayed_nonce():
 
     with pytest.raises(ValueError):
         authenticate_wallet(wallet_address=wallet, signature=signature, nonce=nonce)
+
+
+def test_magic_link_login():
+    import uuid
+    email = f"magic_{uuid.uuid4().hex[:6]}@example.com"
+
+    token = request_magic_link(email)
+    assert token
+
+    user = verify_magic_link(token)
+    assert user.email == email
+    assert user.civic_id.startswith("市民#")
+
+    # 同じユーザーで再度リクエストすると同一アカウントに紐づく
+    token2 = request_magic_link(email)
+    user2 = verify_magic_link(token2)
+    assert user2.user_id == user.user_id
+
+
+def test_magic_link_is_single_use():
+    import uuid
+    email = f"magic_{uuid.uuid4().hex[:6]}@example.com"
+    token = request_magic_link(email)
+
+    verify_magic_link(token)
+    with pytest.raises(ValueError):
+        verify_magic_link(token)
+
+
+def test_magic_link_rejects_unknown_token():
+    with pytest.raises(ValueError):
+        verify_magic_link("not-a-real-token")
+
+
+def test_magic_link_rejects_invalid_email():
+    with pytest.raises(ValueError):
+        request_magic_link("not-an-email")
+
+
+def test_magic_link_expiry_is_enforced():
+    import uuid
+    import time as _time
+    email = f"magic_{uuid.uuid4().hex[:6]}@example.com"
+    token = request_magic_link(email)
+
+    # 期限切れを模擬するため、Firestore上のexpires_atを過去に書き換える
+    doc_ref = _magic_links_ref().document(_hash_magic_token(token))
+    data = doc_ref.get().to_dict()
+    doc_ref.set({**data, "expires_at": _time.time() - 1})
+
+    with pytest.raises(ValueError):
+        verify_magic_link(token)
 
 
 def test_web3_wallet_login_rejects_unknown_nonce():

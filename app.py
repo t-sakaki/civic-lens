@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,10 +29,17 @@ from ordinance_data import (
     get_ordinance,
     is_court_authority,
     is_police_authority,
+    match_authority_by_text,
+    list_nearby_authorities,
 )
 from station_guide import find_nearest_government_office, get_office_info
+from geolocation import detect_municipality
+from municipality_pool import get_pooled
+from municipality_agent import research_municipality_now
+from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from gmi_client import search_ordinances, search_precedents
+from precedent_cases import search_cases, get_case as get_precedent_case
 from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
@@ -66,7 +73,7 @@ from web3_sbt import (
 from auth import (
     User, register_user, authenticate_password, authenticate_wallet,
     create_session_token, verify_session_token, get_user_by_id,
-    generate_siwe_nonce
+    generate_siwe_nonce, request_magic_link, verify_magic_link
 )
 
 
@@ -150,12 +157,147 @@ async def get_authorities():
     }
 
 
+@app.post("/api/municipality/detect")
+async def detect_municipality_from_location(
+    lat: float = Form(...),
+    lon: float = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
+
+    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
+    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
+    機関をすべて候補として返す（`candidates`）。
+    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
+    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
+    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
+    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
+    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
+    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    """
+    location = detect_municipality(lat, lon)
+    if location is None:
+        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
+
+    user_id = current_user.user_id if current_user else None
+    candidates = list_nearby_authorities(location.lat, location.lon)
+
+    matched_key = match_authority_by_text(location.municipality, default="")
+    exact_match = AUTHORITIES[matched_key] if matched_key else None
+
+    # プール参照・調査・履歴保存はFirestoreに依存する部分があるが、候補一覧（静的データの
+    # みで完結）は Firebase未設定/接続失敗時でも必ず返す
+    pooled = None
+    research_status = None
+    if not exact_match:
+        try:
+            pooled = get_pooled(location.muni_code)
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（Firestore未設定の可能性）: {e}")
+
+        if pooled and pooled.get("status") == "ready":
+            research_status = "found_pooled"
+        else:
+            pooled = research_municipality_now(
+                location.muni_code,
+                location.prefecture,
+                location.municipality,
+                location.full_name,
+                location.lat,
+                location.lon,
+            )
+            research_status = "found_pooled" if pooled.get("status") == "ready" else "failed"
+
+    # 調査済みプールの自治体を "pool:<muni_code>" キーの候補として先頭に追加し、
+    # 対象機関プルダウンに反映できるようにする（現在地そのものなので距離0扱い）
+    pool_authority_key = None
+    if research_status == "found_pooled" and pooled:
+        pool_authority_key = f"pool:{location.muni_code}"
+        candidates = [{
+            "key": pool_authority_key,
+            "name": pooled.get("municipality") or location.municipality,
+            "type": pooled.get("authority_type") or "市長",
+            "category": "自治体",
+            "distance_km": 0.0,
+        }] + candidates
+
+    try:
+        create_municipality_history_record(
+            muni_code=location.muni_code,
+            prefecture=location.prefecture,
+            municipality=location.municipality,
+            full_name=location.full_name,
+            lat=location.lat,
+            lon=location.lon,
+            status="found" if exact_match else (research_status or "researching"),
+            authority_key=matched_key or pool_authority_key,
+            authority_name=exact_match.authority if exact_match else (pooled.get("municipality") if pooled else None),
+            candidates=[c["name"] for c in candidates],
+            session_id=session_id,
+            user_id=user_id,
+        )
+    except Exception as e:
+        print(f"municipality_history 保存エラー（Firestore未設定の可能性）: {e}")
+
+    return {
+        "status": "found" if exact_match else research_status,
+        "location": location.model_dump(),
+        "authority_key": matched_key or pool_authority_key,
+        "authority_name": exact_match.authority if exact_match else (pooled.get("municipality") if pooled else None),
+        "candidates": candidates,
+        "pooled": pooled,
+    }
+
+
+@app.get("/api/municipality/status/{muni_code}")
+async def get_municipality_research_status(muni_code: str):
+    """バックグラウンド調査の進捗をポーリングするためのエンドポイント"""
+    try:
+        pooled = get_pooled(muni_code)
+    except Exception as e:
+        print(f"municipality_pool 参照エラー（Firestore未設定の可能性）: {e}")
+        pooled = None
+    if pooled is None:
+        raise HTTPException(status_code=404, detail="調査タスクが見つかりません")
+
+    status = pooled.get("status", "researching")
+    authority_key = f"pool:{muni_code}" if status == "ready" else None
+    return {
+        "status": status,
+        "pooled": pooled,
+        "authority_key": authority_key,
+        "authority_name": pooled.get("municipality") if status == "ready" else None,
+    }
+
+
+@app.get("/api/municipality/history")
+async def get_municipality_detection_history(
+    session_id: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """自治体特定の実行履歴（ログイン中は user_id、未ログインは session_id で紐付け）"""
+    user_id = current_user.user_id if current_user else None
+    try:
+        records = get_municipality_history(session_id=session_id, user_id=user_id)
+    except Exception as e:
+        print(f"municipality_history 参照エラー（Firestore未設定の可能性）: {e}")
+        records = []
+    return {"records": [r.model_dump() for r in records]}
+
+
 @app.post("/api/analyze")
 async def analyze_anger(
     user_input: str = Form(...),
     image_data: Optional[str] = Form(None),
+    target_authority: Optional[str] = Form(None),
 ):
-    """市民の怒りを分析"""
+    """市民の怒りを分析
+
+    target_authority: フロントエンドの対象機関<select>の現在値（Geolocationによる
+    自動特定結果を含む）。請求内容から対象機関を判別できない場合のデフォルト候補として使う。
+    """
+    hint_authority_key = target_authority if target_authority in AUTHORITIES else None
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
@@ -181,19 +323,21 @@ async def analyze_anger(
     # 3. Geminiエージェントで詳細分析
     agent = get_agent()
     try:
-        anger_analysis = agent.analyze_anger(user_input)
+        anger_analysis = agent.analyze_anger(user_input, hint_authority_key)
         anger_analysis.anger_level = anger_level
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        # フォールバック
+        # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
+        fallback_key = hint_authority_key or "anjo-city"
+        fallback_authority = AUTHORITIES[fallback_key]
         anger_analysis = AngerAnalysis(
             anger_level=anger_level,
             emotion_keywords=["怒り", "不信"],
-            target_authority="安城市",
-            target_authority_key="anjo-city",
+            target_authority=fallback_authority.authority,
+            target_authority_key=fallback_key,
             pain_summary=user_input[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
-            legal_basis="安城市情報公開条例第7条",
+            legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",
@@ -325,6 +469,35 @@ async def get_route(
         "office": office,
         "route": route,
     }
+
+
+@app.get("/precedent-cases", response_class=HTMLResponse)
+async def precedent_cases_page():
+    """認容事例（裁決・答申）の閲覧・検索ページ"""
+    template_file = BASE_DIR / "templates" / "precedent_cases.html"
+    with open(template_file, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/api/precedent-cases")
+async def api_precedent_cases(
+    q: str = "",
+    category: str = "",
+    result: str = "",
+    limit: int = 50,
+):
+    """認容事例の一覧・検索API（総務省 行政不服審査裁決・答申検索データベース由来）"""
+    cases = search_cases(query=q, category=category, result=result, limit=limit)
+    return {"count": len(cases), "cases": cases}
+
+
+@app.get("/api/precedent-cases/{case_id}")
+async def api_precedent_case_detail(case_id: str):
+    """認容事例の詳細（1件）"""
+    case = get_precedent_case(case_id)
+    if not case:
+        raise HTTPException(404, f"事例が見つかりません: {case_id}")
+    return case
 
 
 @app.get("/api/situations")
@@ -972,6 +1145,42 @@ async def api_login_wallet(
         "user": user.model_dump(exclude={"password_hash"}),
         "token": token,
     }
+
+
+@app.post("/api/auth/magic-link/request")
+async def api_request_magic_link(email: str = Form(...)):
+    """マジックリンク（パスワード不要のワンタイムログインURL）をメールで送信"""
+    try:
+        request_magic_link(email=email)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（magic-link/request）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+    return {"success": True, "message": "ログイン用のリンクをメールで送信しました（15分間有効）"}
+
+
+@app.get("/api/auth/magic-link/verify")
+async def api_verify_magic_link(token: str):
+    """メールのマジックリンクを検証し、セッションを発行してトップページへリダイレクト"""
+    try:
+        user = verify_magic_link(token=token)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        print(f"認証バックエンドエラー（magic-link/verify）: {e}")
+        raise HTTPException(503, "認証サービスが一時的に利用できません。しばらくしてからお試しください。")
+
+    session_token = create_session_token(user.user_id)
+    response = RedirectResponse(url="/")
+    response.set_cookie(
+        key="auth_token",
+        value=session_token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @app.get("/api/auth/me")

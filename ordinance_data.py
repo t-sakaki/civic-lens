@@ -7,6 +7,7 @@ JSONファイルを1つ追加するだけでよく、Pythonコードの変更は
 ハッカソン用にコンパクトに、本番では条例全文をCloud Storageに格納してRAG。
 """
 import json
+import math
 from pathlib import Path
 from typing import Dict, List, Optional
 from pydantic import BaseModel
@@ -90,8 +91,63 @@ COURT_AUTHORITIES: Dict[str, AuthorityInfo] = {
 }
 
 
+POOL_KEY_PREFIX = "pool:"
+
+
+def _authority_info_from_pool(pooled: Optional[dict]) -> Optional[AuthorityInfo]:
+    """municipality_pool（Firestore）の調査済みレコードから AuthorityInfo を組み立てる
+
+    バックグラウンドエージェントが調査した自治体（data/authorities/*.json 未収録）を、
+    静的データの自治体と同じインターフェースで扱えるようにする。正式な条例番号・制定日・
+    最寄り駅等はまだ調査していないため「自動調査のため不明」のプレースホルダとする。
+    """
+    if not pooled or pooled.get("status") != "ready":
+        return None
+
+    municipality = pooled["municipality"]
+    grounds = [DisclosureGround(**g) for g in pooled.get("non_disclosure_grounds", [])]
+
+    return AuthorityInfo(
+        key=f"{POOL_KEY_PREFIX}{pooled['muni_code']}",
+        category="自治体",
+        authority=municipality,
+        authority_type=pooled.get("authority_type") or "市長",
+        ordinance_name=pooled.get("ordinance_name") or f"{municipality}情報公開条例",
+        ordinance_id="（自動調査のため不明）",
+        enacted="（自動調査のため不明）",
+        request_form=f"{municipality}情報公開請求書",
+        request_deadline_days=pooled.get("request_deadline_days") or 30,
+        extension_days=pooled.get("extension_days") or 30,
+        review_period_days=pooled.get("review_period_days") or 90,
+        non_disclosure_grounds=grounds,
+        review_authority=pooled.get("review_authority") or f"{municipality}情報公開審査会",
+        contact=pooled.get("contact") or f"{municipality}役所",
+        office=OfficeInfo(
+            name=f"{municipality}役所",
+            address=pooled.get("full_name") or municipality,
+            lat=pooled.get("lat") or 0.0,
+            lon=pooled.get("lon") or 0.0,
+            nearest_station="不明（自動調査のため未特定）",
+        ),
+        aliases=[municipality],
+    )
+
+
 def get_ordinance(authority_key: str) -> Optional[AuthorityInfo]:
-    """条例・取扱要綱を取得（自治体・警察・裁判所すべて）"""
+    """条例・取扱要綱を取得（自治体・警察・裁判所すべて）
+
+    "pool:<muni_code>" 形式のキーは、Geolocationのバックグラウンド調査で
+    municipality_pool に保存された未収録自治体を指す。
+    """
+    if authority_key and authority_key.startswith(POOL_KEY_PREFIX):
+        from municipality_pool import get_pooled
+        muni_code = authority_key[len(POOL_KEY_PREFIX):]
+        try:
+            pooled = get_pooled(muni_code)
+        except Exception:
+            return None
+        return _authority_info_from_pool(pooled)
+
     return AUTHORITIES.get(authority_key)
 
 
@@ -114,6 +170,44 @@ def get_office_info(authority_key: str) -> Dict:
     """対象機関の窓口・アクセス情報（station_guide.py から利用）"""
     info = AUTHORITIES.get(authority_key) or AUTHORITIES.get("anjo-city")
     return info.office.model_dump()
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """2点間の距離（km）をハーバーサイン公式で概算する"""
+    r = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+
+def list_nearby_authorities(
+    lat: float, lon: float, radius_km: float = 40.0, max_results: int = 8
+) -> List[Dict]:
+    """現在地の近くにある対象機関を距離順に列挙する
+
+    自治体は1つに絞り込まず、都道府県（県庁等）や周辺の市区町村・警察・裁判所を
+    候補として複数返す。半径内に候補が1件もない場合は、最も近い1件だけを返す。
+    """
+    ranked = sorted(
+        (
+            {
+                "key": key,
+                "name": info.authority,
+                "type": info.authority_type,
+                "category": info.category,
+                "distance_km": round(_haversine_km(lat, lon, info.office.lat, info.office.lon), 1),
+            }
+            for key, info in AUTHORITIES.items()
+        ),
+        key=lambda c: c["distance_km"],
+    )
+
+    within_radius = [c for c in ranked if c["distance_km"] <= radius_km]
+    if within_radius:
+        return within_radius[:max_results]
+    return ranked[:1]
 
 
 def match_authority_by_text(text: str, default: str = "anjo-city") -> str:

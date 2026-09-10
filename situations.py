@@ -270,6 +270,29 @@ SITUATION_TEMPLATES = {
 }
 
 
+# シチュエーションごとに、対象機関を絞り込むためのカテゴリ（自治体・警察・裁判所）。
+# STEP 0 でシチュエーションを選んだ時点で、請求先の性質は決まっているため、
+# 🏛️ 対象機関 の選択肢をこのカテゴリで絞り込む。
+SITUATION_CATEGORY = {
+    "overseas_trip": "自治体",
+    "public_works": "自治体",
+    "subsidy": "自治体",
+    "environment": "自治体",
+    "contract": "自治体",
+    "regulation": "自治体",
+    "disaster": "自治体",
+    "police_complaint": "警察",
+    "police_discipline": "警察",
+    "police_stop": "警察",
+    "lost_found": "警察",
+    "koban": "警察",
+    "traffic": "警察",
+    "police_safety": "警察",
+    "court_admin": "裁判所",
+    "court_budget_facility": "裁判所",
+}
+
+
 def get_situation_list():
     """シチュエーション一覧を取得（UI表示用）"""
     return [
@@ -278,6 +301,7 @@ def get_situation_list():
             "label": s["label"],
             "emoji": s["emoji"],
             "description": s["description"],
+            "category": SITUATION_CATEGORY.get(s["key"]),
         }
         for s in SITUATION_TEMPLATES.values()
     ]
@@ -285,7 +309,10 @@ def get_situation_list():
 
 def get_situation(key: str):
     """シチュエーションを取得"""
-    return SITUATION_TEMPLATES.get(key)
+    situation = SITUATION_TEMPLATES.get(key)
+    if situation is None:
+        return None
+    return {**situation, "category": SITUATION_CATEGORY.get(key)}
 
 
 def get_situation_by_label(label: str):

@@ -1,0 +1,81 @@
+name: 認容事例 自動収集エージェント
+
+# 総務省「行政不服審査裁決・答申検索データベース」から認容事例を定期収集し、
+# Gemini Embeddingsでベクトル化するAIエージェント。
+# サーバー負荷に配慮し、実行頻度は週1回程度とする。
+# mainブランチへの直接pushは行わず、差分がある場合のみプルリクエストを作成する
+# （人間のレビュー・マージを介するため）。
+
+on:
+  schedule:
+    - cron: "0 18 * * 0" # 毎週日曜 18:00 UTC (日本時間 月曜 3:00)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  collect-precedents:
+    name: 認容事例 自動収集エージェント
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Scrape 総務省 行政不服審査裁決・答申検索データベース
+        run: python scripts/scrape_gyofuku_cases.py
+
+      - name: Build precedent embeddings (Gemini Embeddings)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/build_precedent_embeddings.py
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet -- data/gyofuku_cases.json data/gyofuku_cases_embeddings.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: 認容事例 自動収集エージェントによるデータ更新"
+          title: "🤖 認容事例 自動収集エージェント: 総務省DBからの新規データ取り込み"
+          body: |
+            総務省「行政不服審査裁決・答申検索データベース」を定期巡回するAIエージェント
+            （`.github/workflows/scrape-precedents.yml`）による自動収集結果です。
+
+            - `data/gyofuku_cases.json`: 新規・更新された認容事例（概要スニペットのみ、PDL1.0準拠）
+            - `data/gyofuku_cases_embeddings.json`: Gemini Embeddingsによる検索用ベクトル
+
+            マージ前に内容をご確認ください。
+          branch: bot/gyofuku-precedent-update
+          delete-branch: true
+          add-paths: |
+            data/gyofuku_cases.json
+            data/gyofuku_cases_embeddings.json
+          labels: |
+            automated
+            precedent-data

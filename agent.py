@@ -11,6 +11,12 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
+from precedent_cases import (
+    find_relevant_precedents,
+    find_relevant_precedents_by_embedding,
+    format_precedent_case_for_prompt,
+)
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Google GenAI SDK (Vertex AI / Gemini API 統合)
@@ -264,8 +270,13 @@ def perform_meta_cognitive_critique(
     }
 
 
-def analyze_user_anger(user_input: str) -> Dict:
-    """市民の入力から怒りを構造化分析する（ADK Function Tool / DAG & メタ認知批評対応）"""
+def analyze_user_anger(user_input: str, hint_authority_key: Optional[str] = None) -> Dict:
+    """市民の入力から怒りを構造化分析する（ADK Function Tool / DAG & メタ認知批評対応）
+
+    hint_authority_key: 請求文に対象機関を判別できる記述がない場合に使うデフォルト値。
+    Geolocationで特定済みの自治体キー等、呼び出し元が把握している最有力候補を渡す。
+    未指定時は安城市（ハッカソンのデフォルト対象機関）にフォールバックする。
+    """
     # キーワードベースの怒りレベル推定
     anger_keywords = [
         "許せない", "ふざけるな", "怒り", "腹立つ", "最悪",
@@ -280,7 +291,7 @@ def analyze_user_anger(user_input: str) -> Dict:
     # 対象機関の推定（data/authorities/*.json の aliases を長い順にマッチ）
     from ordinance_data import match_authority_by_text, get_ordinance
 
-    auth_key = match_authority_by_text(user_input, default="anjo-city")
+    auth_key = match_authority_by_text(user_input, default=hint_authority_key or "anjo-city")
     ordinance = get_ordinance(auth_key)
     auth_name = ordinance.authority if ordinance else "安城市"
 
@@ -532,8 +543,13 @@ class CivicLensAgent:
                 print(f"Failed to initialize google-genai client: {e}")
         return self._genai_client
 
-    def analyze_anger(self, user_input: str) -> AngerAnalysis:
-        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）"""
+    def analyze_anger(self, user_input: str, hint_authority_key: Optional[str] = None) -> AngerAnalysis:
+        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）
+
+        hint_authority_key: 請求文だけでは対象機関を判別できない場合のデフォルト候補
+        （例: ブラウザGeolocationで特定済みの自治体）。Gemini・ルールベースいずれも
+        本文からの判定を優先し、判定できない場合にのみこの値を採用する。
+        """
         if self.genai_client:
             try:
                 prompt = f"""
@@ -578,7 +594,7 @@ JSONのみを返してください。
                 if "critique" not in data or not data["critique"]:
                     data["critique"] = perform_meta_cognitive_critique(
                         user_input,
-                        data.get("target_authority_key", "anjo-city"),
+                        data.get("target_authority_key", hint_authority_key or "anjo-city"),
                         data.get("target_authority", "安城市"),
                         data.get("specific_documents_requested", [])
                     )
@@ -590,7 +606,7 @@ JSONのみを返してください。
                 print(f"Gemini API analysis error: {e}, falling back to rule-based analysis")
 
         # フォールバック: ルールベースの Function Tool 結果を使用
-        tool_result = analyze_user_anger(user_input)
+        tool_result = analyze_user_anger(user_input, hint_authority_key)
         return AngerAnalysis(**tool_result)
 
     def build_counter_argument(
@@ -599,9 +615,37 @@ JSONのみを返してください。
         ordinance,
         alleged_ground: str,
     ) -> CounterArgument:
-        """反論ロジック構築（Gemini Vertex AI優先）"""
+        """反論ロジック構築（Gemini Vertex AI優先）
+
+        precedent_cases（類似の裁決・答申例）は、Geminiに創作させるのではなく、
+        総務省「行政不服審査裁決・答申検索データベース」から収集・蓄積した実在の
+        認容事例（precedent_cases.py, data/gyofuku_cases.json）から関連度の高いものを
+        検索して使用する。適合する実データが見つからない場合に限り、Geminiによる
+        生成（フォールバック）を利用する。
+
+        検索はGemini Embeddingsによるコサイン類似度検索を優先し、埋め込みデータ未生成・
+        API未設定・呼び出し失敗の場合はNgramヒューリスティック検索に自動フォールバックする
+        （find_relevant_precedents_by_embedding内部で処理）。
+        """
+        real_precedents = find_relevant_precedents_by_embedding(
+            ordinance_name=getattr(ordinance, "ordinance_name", ""),
+            alleged_ground=alleged_ground,
+            authority=getattr(ordinance, "authority", ""),
+        )
+        real_precedent_texts = [format_precedent_case_for_prompt(c) for c in real_precedents]
+
         if self.genai_client:
             try:
+                precedent_instruction = (
+                    "- precedent_cases: 以下の実在する認容事例（総務省 行政不服審査裁決・"
+                    "答申検索データベースより収集）から、本件に関連が深い順にそのまま列挙してください。"
+                    "件数が少ない場合はある分だけで構いません。事例を創作しないでください。\n"
+                    + "\n".join(f"  - {t}" for t in real_precedent_texts)
+                ) if real_precedent_texts else (
+                    "- precedent_cases: 類似の裁判例・審査会答申例のリスト (2〜3件)。"
+                    "実在の蓄積データに該当がなかったため、一般的な知見に基づき推定して構いません"
+                    "（実在性を保証できない旨は呼び出し側で扱います）。"
+                )
                 prompt = f"""
 あなたは情報公開・審査請求の実務専門家AIです。
 自治体（{ordinance.authority}）からの不開示決定に対する反論ロジックと勝訴・開示見込みを検討してください。
@@ -614,7 +658,7 @@ JSONのみを返してください。
 - ground_number: 不開示事由の番号 (例: "第7条第2号")
 - ground_name: 不開示事由の名称 (例: "個人情報" または "法人情報" 等)
 - counter_arguments: 不開示決定を覆すための法的反論ポイントのリスト (3つ以上、具体的かつ説得力のある論理)
-- precedent_cases: 類似の裁判例・審査会答申例のリスト (2〜3件)
+{precedent_instruction}
 - winning_probability: 審査請求で一部開示以上を勝ち取れる推定確率 (0.0 〜 1.0)
 
 JSONのみを出力してください。
@@ -639,7 +683,12 @@ JSONのみを出力してください。
 
                 if isinstance(data.get("counter_arguments"), list):
                     data["counter_arguments"] = [_to_str(x) for x in data["counter_arguments"]]
-                if isinstance(data.get("precedent_cases"), list):
+
+                # precedent_cases は実データがあれば必ず実データで上書きする
+                # （Geminiが指示に反して創作・改変するリスクを排除するため）
+                if real_precedent_texts:
+                    data["precedent_cases"] = real_precedent_texts
+                elif isinstance(data.get("precedent_cases"), list):
                     data["precedent_cases"] = [_to_str(x) for x in data["precedent_cases"]]
 
                 return CounterArgument(**data)
@@ -648,12 +697,14 @@ JSONのみを出力してください。
 
         tool_result = get_counter_argument(alleged_ground)
         if "error" not in tool_result:
+            if real_precedent_texts:
+                tool_result["precedent_cases"] = real_precedent_texts
             return CounterArgument(**tool_result, is_mock=True)
         return CounterArgument(
             ground_number=alleged_ground,
             ground_name="不開示事由",
             counter_arguments=["反論ロジックを構築中"],
-            precedent_cases=[],
+            precedent_cases=real_precedent_texts,
             winning_probability=0.5,
             is_mock=True,
         )
