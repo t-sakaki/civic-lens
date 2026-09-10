@@ -145,6 +145,36 @@
             flex: 0 0 auto;
             white-space: nowrap;
         }
+        /* みんなの請求：下部固定テロップ */
+        .minna-ticker-bar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 40;
+            overflow: hidden;
+            background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .minna-ticker-track {
+            display: flex;
+            width: max-content;
+            animation: minnaTickerScroll 55s linear infinite;
+        }
+        .minna-ticker-track:hover {
+            animation-play-state: paused;
+        }
+        @keyframes minnaTickerScroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+        .minna-card {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+        body.has-minna-ticker {
+            padding-bottom: 40px;
+        }
         /* エージェント自律ログ */
         .agent-log-line {
             opacity: 0;
@@ -661,7 +691,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen has-minna-ticker">
     <!-- 左サイドメニュー（履歴一覧）。ハンバーガーボタンで開閉。Claude Codeの履歴パネルを参考にしたUI -->
     <div id="sidebarOverlay" class="cl-sidebar-overlay"></div>
     <aside id="historySidebar" class="cl-sidebar" aria-hidden="true">
@@ -2900,9 +2930,11 @@
                 const feedData = await feedRes.json();
                 publicRecords = feedData.records;
                 renderPublicFeed();
+                renderMinnaTicker(publicRecords);
             } catch (err) {
                 document.getElementById('publicFeed').innerHTML =
                     `<div class="text-red-500 text-center py-8">エラー: ${err.message}</div>`;
+                renderMinnaTicker([]);
             }
         }
 
@@ -3431,6 +3463,52 @@
             await loadAuthorities();
             detectMunicipalityFromLocation({ silent: true });
         })();
+    </script>
+
+    <!-- 🌐 みんなの請求：画面下部固定テロップ（右から左に流れる） -->
+    <div class="minna-ticker-bar">
+        <div class="flex items-center">
+            <div class="shrink-0 bg-black/30 px-3 py-2 text-white text-xs font-bold flex items-center gap-1.5 z-10">
+                <span>🌐</span><span class="hidden sm:inline">みんなの請求</span>
+            </div>
+            <div class="relative overflow-hidden py-2 flex-1">
+                <div id="minnaTicker" class="minna-ticker-track gap-3 px-3"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // みんなの請求：下部テロップ用フォールバックサンプル（Publicな共有がまだ少ない時に表示）
+        const minnaTickerFallback = [
+            { anonymous_user_id: '市民#00423', category: '自治体', target_authority: '〇〇県庁', summary_public: '知事の海外出張の復命書・宿泊費の内訳を確認したい' },
+            { anonymous_user_id: '市民#01187', category: '警察', target_authority: '〇〇県警', summary_public: 'DV相談の110番受理記録・対応経過を開示してほしい' },
+            { anonymous_user_id: '市民#00256', category: '自治体', target_authority: '〇〇市', summary_public: '公共工事の入札参加者一覧と積算根拠を知りたい' },
+            { anonymous_user_id: '市民#00998', category: '警察', target_authority: '〇〇警察署', summary_public: '職務質問の地域別・時間帯別の実施統計を確認したい' },
+            { anonymous_user_id: '市民#00071', category: '自治体', target_authority: '〇〇市', summary_public: '補助金交付先の選定議事録を確認したい' },
+            { anonymous_user_id: '市民#00512', category: '裁判所', target_authority: '〇〇地方裁判所', summary_public: '司法行政文書（通達・執務提要）の開示を求めたい' },
+        ];
+
+        function renderMinnaTicker(records) {
+            const track = document.getElementById('minnaTicker');
+            if (!track) return;
+            const categoryColor = (c) => c === '警察' ? 'text-red-300' : (c === '裁判所' ? 'text-purple-300' : 'text-blue-300');
+            const makeCard = (r) => {
+                const el = document.createElement('span');
+                el.className = 'minna-card bg-white/10 text-gray-100 rounded-md px-3 py-1.5 text-xs flex items-center gap-2';
+                const text = r.summary_public || (r.user_input ? r.user_input.substring(0, 60) : '');
+                el.innerHTML = `
+                    <span class="font-bold ${categoryColor(r.category)}">${r.category || '自治体'}</span>
+                    <span class="text-gray-400">${r.anonymous_user_id || '匿名市民'}</span>
+                    <span class="text-gray-500">→</span>
+                    <span class="text-gray-300">${r.target_authority || ''}</span>
+                    <span class="text-white">${text}</span>
+                `;
+                return el;
+            };
+            track.innerHTML = '';
+            const source = (records && records.length > 0) ? records : minnaTickerFallback;
+            // 無限スクロールのため2周分レンダリング
+            [...source, ...source].forEach(r => track.appendChild(makeCard(r)));
+        }
     </script>
 </body>
 </html>
