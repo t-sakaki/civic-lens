@@ -684,6 +684,77 @@
         .cl-sidebar-new-project-btn:hover {
             background: rgba(242, 169, 59, 0.1);
         }
+
+        /* チャットタイムライン & 左右分割レイアウト */
+        #chatSplitGrid {
+            display: block;
+        }
+        #chatSplitGrid.split-active {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+        #chatRightPane {
+            position: sticky;
+            top: 1rem;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+        }
+        @media (max-width: 900px) {
+            #chatSplitGrid.split-active {
+                grid-template-columns: 1fr;
+            }
+            #chatRightPane {
+                position: static;
+                max-height: none;
+            }
+        }
+        .chat-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+        }
+        .chat-timeline.hidden {
+            display: none;
+        }
+        .chat-bubble-row {
+            display: flex;
+            width: 100%;
+        }
+        .chat-bubble-row.user {
+            justify-content: flex-end;
+        }
+        .chat-bubble-row.assistant {
+            justify-content: flex-start;
+        }
+        .chat-bubble {
+            max-width: 82%;
+            padding: 0.6rem 0.9rem;
+            border-radius: 1rem;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        .chat-bubble-row.user .chat-bubble {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #fff;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .chat-bubble-row.assistant .chat-bubble {
+            background: #f3f4f6;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
+            border-bottom-left-radius: 0.25rem;
+        }
+        .chat-bubble .chat-bubble-label {
+            display: block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            opacity: 0.7;
+            margin-bottom: 0.15rem;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -783,6 +854,10 @@
             </div>
         </header>
 
+        <div id="chatSplitGrid">
+        <div id="chatLeftPane">
+        <div id="chatTimeline" class="chat-timeline hidden"></div>
+
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
             <div class="flex items-center gap-2 mb-1">
@@ -862,7 +937,9 @@
             🚀 怒りを分析する
         </button>
         <div id="analyzeThinking" class="mb-6"></div>
+        </div><!-- /chatLeftPane -->
 
+        <div id="chatRightPane" class="hidden">
         <!-- STEP 2: 結果表示 -->
         <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">📊 怒りの分析結果</h2>
@@ -1273,6 +1350,8 @@
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">🚉 役所までのアクセス（駅すぱあとAPI）</h2>
             <div id="routeContent"></div>
         </section>
+        </div><!-- /chatRightPane -->
+        </div><!-- /chatSplitGrid -->
 
         <!-- STEP 7: みんなの請求 (Public ダッシュボード) -->
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
@@ -2300,13 +2379,38 @@
         });
         applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
 
+        // チャットタイムライン & 左右分割ビュー
+        function addChatBubble(role, html) {
+            const timeline = document.getElementById('chatTimeline');
+            timeline.classList.remove('hidden');
+
+            const row = document.createElement('div');
+            row.className = `chat-bubble-row ${role}`;
+            const bubble = document.createElement('div');
+            bubble.className = 'chat-bubble';
+            bubble.innerHTML = `<span class="chat-bubble-label">${role === 'user' ? 'あなた' : '🔍 Civic Lens'}</span>${html}`;
+            row.appendChild(bubble);
+            timeline.appendChild(row);
+            row.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            return bubble;
+        }
+
+        function activateSplitView() {
+            document.getElementById('chatSplitGrid').classList.add('split-active');
+            document.getElementById('chatRightPane').classList.remove('hidden');
+        }
+
         function selectSituation(s) {
             selectedSituation = s;
             renderAuthorityOptions(s.category);
 
+            addChatBubble('user', `<strong>${s.emoji || ''} ${s.label}</strong> を選択しました`);
+
             // シチュエーションに応じたサンプルテキストを自動入力
             fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
                 document.getElementById('userInput').value = detail.sample_anger_text;
+                addChatBubble('assistant', `「${s.label}」の例文を入力欄にセットしました。内容を確認・編集して、下の「🚀 怒りを分析する」を押してください。`);
+                document.getElementById('userInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
             });
         }
 
@@ -2369,6 +2473,9 @@
                 return;
             }
 
+            addChatBubble('user', userInput ? userInput.replace(/\n/g, '<br>') : '（画像を送信しました）');
+            const assistantBubble = addChatBubble('assistant', '🔄 分析しています…');
+
             const formData = new FormData();
             formData.append('user_input', userInput);
             formData.append('target_authority', targetAuthority);
@@ -2390,11 +2497,17 @@
                 displayAnalysis(data);
                 document.getElementById('resultSection').classList.remove('hidden');
                 document.getElementById('actionSection').classList.remove('hidden');
+                activateSplitView();
+
+                const analysis = data.anger_analysis;
+                const authorityName = analysis.target_authority || '対象機関';
+                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>分析が完了しました。怒りレベル ${analysis.anger_level}/10、対象機関「${authorityName}」への開示請求案を右側にまとめました。`;
 
                 if (data.anger_analysis.target_authority_key) {
                     setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
             } catch (err) {
+                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
                 alert('エラー: ' + err.message);
             } finally {
                 stopThinking(thinkingHandle);
