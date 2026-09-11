@@ -700,6 +700,17 @@
             top: 1rem;
             max-height: calc(100vh - 2rem);
             overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            align-items: start;
+            align-content: start;
+        }
+        #chatRightPane > section {
+            margin-bottom: 0;
+        }
+        #chatRightPane > #outputSection {
+            grid-column: 1 / -1;
         }
         @media (max-width: 900px) {
             #chatSplitGrid.split-active {
@@ -708,6 +719,7 @@
             #chatRightPane {
                 position: static;
                 max-height: none;
+                grid-template-columns: 1fr;
             }
         }
         .chat-timeline {
