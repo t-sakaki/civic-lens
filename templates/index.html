@@ -713,6 +713,14 @@
         .chat-timeline.hidden {
             display: none;
         }
+        #chatComposerDock {
+            position: sticky;
+            bottom: 0;
+            z-index: 20;
+            background: var(--cl-bg, #f9fafb);
+            padding-top: 0.75rem;
+            margin-top: -0.75rem;
+        }
         .chat-bubble-row {
             display: flex;
             width: 100%;
@@ -895,6 +903,8 @@
             </div>
         </div>
 
+        <!-- プロンプト入力欄は常に画面下部に固定表示し、チャットが伸びても見失わないようにする -->
+        <div id="chatComposerDock">
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
             <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
@@ -968,6 +978,7 @@
             🚀 怒りを分析する
         </button>
         <div id="analyzeThinking" class="mb-6"></div>
+        </div><!-- /chatComposerDock -->
         </div><!-- /chatLeftPane -->
 
         <div id="chatRightPane" class="hidden">
