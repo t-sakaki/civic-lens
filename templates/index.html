@@ -2535,6 +2535,9 @@
             try {
                 const res = await fetch('/api/analyze', { method: 'POST', body: formData });
                 const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || '分析に失敗しました。');
+                }
 
                 displayAnalysis(data);
                 document.getElementById('resultSection').classList.remove('hidden');
@@ -2680,8 +2683,15 @@
             ]);
 
             try {
+                if (!targetAuthority) {
+                    throw new Error('対象機関が特定できていません。入力欄の🏛️アイコンから対象機関を選択してください。');
+                }
+
                 const res = await fetch('/api/disclosure-request', { method: 'POST', body: formData });
                 const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || '開示請求書の生成に失敗しました。');
+                }
 
                 displayDisclosure(data);
                 document.getElementById('outputSection').classList.remove('hidden');
