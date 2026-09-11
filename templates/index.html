@@ -721,7 +721,7 @@
         }
         #chatSplitGrid.split-active {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
             gap: 1.25rem;
             align-items: start;
         }
@@ -730,6 +730,17 @@
             top: 1rem;
             max-height: calc(100vh - 2rem);
             overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            align-items: start;
+            align-content: start;
+        }
+        #chatRightPane > section {
+            margin-bottom: 0;
+        }
+        #chatRightPane > #outputSection {
+            grid-column: 1 / -1;
         }
         @media (max-width: 900px) {
             #chatSplitGrid.split-active {
@@ -738,6 +749,7 @@
             #chatRightPane {
                 position: static;
                 max-height: none;
+                grid-template-columns: 1fr;
             }
         }
         .chat-timeline {
@@ -784,6 +796,13 @@
             font-weight: 700;
             opacity: 0.7;
             margin-bottom: 0.15rem;
+        }
+        .chat-read-receipt {
+            display: block;
+            text-align: right;
+            font-size: 0.65rem;
+            opacity: 0.75;
+            margin-top: 0.25rem;
         }
     </style>
 </head>
@@ -886,16 +905,21 @@
 
         <div id="chatSplitGrid">
         <div id="chatLeftPane">
-        <div id="chatTimeline" class="chat-timeline hidden"></div>
+        <div id="chatTimeline" class="chat-timeline">
+            <div class="chat-bubble-row assistant">
+                <div class="chat-bubble">
+                    <span class="chat-bubble-label">🔍 Civic Lens</span>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🎯</span>
+                        <h2 id="mainQuestionHeading" class="text-lg font-semibold">何に怒りを感じていますか？</h2>
+                    </div>
+                    <p class="text-sm opacity-80">思ったことをそのまま書くか、下から近いものをタップしてください</p>
+                </div>
+            </div>
+        </div>
 
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
-            <div class="flex items-center gap-2 mb-1">
-                <span class="text-2xl">🎯</span>
-                <h2 id="mainQuestionHeading" class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
-            </div>
-            <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
-
             <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
             <div class="composer-card">
                 <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
@@ -2430,17 +2454,37 @@
             document.getElementById('chatRightPane').classList.remove('hidden');
         }
 
+        // 既読リアクション（👀）をユーザーの発言に付ける
+        function addReadReceipt(bubble) {
+            if (!bubble || bubble.querySelector('.chat-read-receipt')) return;
+            const receipt = document.createElement('span');
+            receipt.className = 'chat-read-receipt';
+            receipt.textContent = '👀 既読';
+            bubble.appendChild(receipt);
+        }
+
+        const SITUATION_EMPATHY_REPLIES = [
+            'それは納得いかないですよね…😠 事情、しっかり受け止めました。',
+            'それはモヤモヤしますね…💭 一緒に整理していきましょう。',
+            'それはひどい話ですね…😤 泣き寝入りする必要はありません。',
+        ];
+
         function selectSituation(s) {
             selectedSituation = s;
             renderAuthorityOptions(s.category);
 
-            addChatBubble('user', `<strong>${s.emoji || ''} ${s.label}</strong> を選択しました`);
+            const userBubble = addChatBubble('user', `<strong>${s.emoji || ''} ${s.label}</strong> を選択しました`);
 
-            // シチュエーションに応じたサンプルテキストを自動入力
+            // シチュエーションに応じたサンプルテキストを自動入力し、共感の返事とともに分析を自動実行
             fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
                 document.getElementById('userInput').value = detail.sample_anger_text;
-                addChatBubble('assistant', `「${s.label}」の例文を入力欄にセットしました。内容を確認・編集して、下の「🚀 怒りを分析する」を押してください。`);
-                document.getElementById('userInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                setTimeout(() => addReadReceipt(userBubble), 350);
+
+                const empathy = SITUATION_EMPATHY_REPLIES[Math.floor(Math.random() * SITUATION_EMPATHY_REPLIES.length)];
+                addChatBubble('assistant', `${empathy}「${s.label}」について、このまま怒りを分析しますね。`);
+
+                runAnalyze({ userText: detail.sample_anger_text, skipUserBubble: true });
             });
         }
 
@@ -2494,8 +2538,8 @@
         });
 
         // 怒り分析
-        document.getElementById('analyzeBtn').addEventListener('click', async () => {
-            const userInput = document.getElementById('userInput').value.trim();
+        async function runAnalyze(options = {}) {
+            const userInput = (options.userText !== undefined ? options.userText : document.getElementById('userInput').value).trim();
             const targetAuthority = document.getElementById('targetAuthority').value;
 
             if (!userInput && !capturedImageData) {
@@ -2503,7 +2547,9 @@
                 return;
             }
 
-            addChatBubble('user', userInput ? userInput.replace(/\n/g, '<br>') : '（画像を送信しました）');
+            if (!options.skipUserBubble) {
+                addChatBubble('user', userInput ? userInput.replace(/\n/g, '<br>') : '（画像を送信しました）');
+            }
             const assistantBubble = addChatBubble('assistant', '🔄 分析しています…');
 
             const formData = new FormData();
@@ -2544,7 +2590,9 @@
                 document.getElementById('analyzeBtn').textContent = '🚀 怒りを分析する';
                 document.getElementById('analyzeBtn').disabled = false;
             }
-        });
+        }
+
+        document.getElementById('analyzeBtn').addEventListener('click', () => runAnalyze());
 
         // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
         function mockBadge(isMock, label) {
