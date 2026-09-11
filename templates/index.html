@@ -539,24 +539,6 @@
             }
         }
 
-        /* --- 見出し「何に怒りを感じていますか？」のタイプライター演出 --- */
-        #mainQuestionHeading .heading-caret {
-            display: inline-block;
-            width: 2px;
-            margin-left: 2px;
-            background: currentColor;
-            animation: caretBlink 0.9s steps(1) infinite;
-        }
-        @media (prefers-reduced-motion: reduce) {
-            #mainQuestionHeading .heading-caret {
-                animation: none;
-            }
-        }
-        @keyframes caretBlink {
-            0%, 49% { opacity: 1; }
-            50%, 100% { opacity: 0; }
-        }
-
         /* --- 思考中インジケーター (Thinking Indicator) --- */
         .thinking-box {
             display: flex;
@@ -803,6 +785,31 @@
             font-size: 0.65rem;
             opacity: 0.75;
             margin-top: 0.25rem;
+        }
+        .chat-suggestion-btns {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            margin-top: 0.6rem;
+        }
+        .chat-suggestion-btn {
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.6rem;
+            border: 1px solid #c7d2fe;
+            background: #eef2ff;
+            color: #3730a3;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .chat-suggestion-btn:hover:not(:disabled) {
+            background: #e0e7ff;
+        }
+        .chat-suggestion-btn:disabled {
+            opacity: 0.5;
+            cursor: default;
         }
     </style>
 </head>
@@ -1063,10 +1070,10 @@
         <!-- STEP 4: Human-in-the-Loop & アクション -->
         <section id="actionSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-2 text-gray-800">⚖️ Human-in-the-Loop（市民の意思決定）</h2>
-            <p class="text-sm text-gray-600 mb-4">AIの自己批評に基づき、あなたのアクション方針を選択してください。最終決定権は常に市民にあります。</p>
+            <p class="text-sm text-gray-600 mb-4">「開示請求書を作成」はチャット内のサジェストから選べます。ここでは不開示決定への反論(審査請求書)のみ作成できます。</p>
 
-            <!-- 戦略選択ラジオ -->
-            <div id="strategyOptionsContainer" class="grid md:grid-cols-2 gap-4 mb-6">
+            <!-- 戦略選択ラジオ（開示請求書の作成はチャットのサジェストに移行したため非表示。値はrunDisclosureRequestに直接渡す） -->
+            <div id="strategyOptionsContainer" class="hidden grid md:grid-cols-2 gap-4 mb-6">
                 <label class="strategy-card border-2 border-green-500 bg-green-50/50 p-4 rounded-lg cursor-pointer flex flex-col justify-between hover:bg-green-50 transition">
                     <div>
                         <div class="flex items-center justify-between mb-1">
@@ -1100,8 +1107,8 @@
                 </label>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-4">
-                <button id="disclosureBtn" class="bg-gradient-to-r from-green-500 to-teal-600 text-white p-6 rounded-md hover:from-green-600 hover:to-teal-700">
+            <div class="grid gap-4">
+                <button id="disclosureBtn" class="hidden bg-gradient-to-r from-green-500 to-teal-600 text-white p-6 rounded-md hover:from-green-600 hover:to-teal-700">
                     <div class="text-3xl mb-2">📝</div>
                     <div class="font-bold">開示請求書を作成</div>
                     <div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>
@@ -1958,58 +1965,6 @@
             tick();
         }
 
-        // 見出し「何に怒りを感じていますか？」を、いくつかの問いかけの間でタイプライター風に切り替える
-        const HEADING_QUESTIONS = [
-            '何に怒りを感じていますか？',
-            'どんな不満を抱えていますか？',
-            '納得できないこと、ありませんか？',
-            '誰に説明を求めたいですか？',
-            'モヤモヤの原因は何ですか？',
-        ];
-
-        function startHeadingSuggestionAnimation() {
-            const el = document.getElementById('mainQuestionHeading');
-            if (!el) return;
-
-            let questionIndex = 0;
-            let charIndex = 0;
-            let deleting = false;
-
-            const render = (text) => {
-                el.textContent = text;
-                const caret = document.createElement('span');
-                caret.className = 'heading-caret';
-                caret.textContent = ' ';
-                el.appendChild(caret);
-            };
-
-            const tick = () => {
-                const current = HEADING_QUESTIONS[questionIndex % HEADING_QUESTIONS.length];
-
-                if (!deleting) {
-                    charIndex++;
-                    render(current.slice(0, charIndex));
-                    if (charIndex >= current.length) {
-                        deleting = true;
-                        setTimeout(tick, 2600); // 全文表示後、少し静止して読ませる
-                        return;
-                    }
-                    setTimeout(tick, 70);
-                } else {
-                    charIndex--;
-                    render(current.slice(0, charIndex));
-                    if (charIndex <= 0) {
-                        deleting = false;
-                        questionIndex++;
-                        setTimeout(tick, 400);
-                        return;
-                    }
-                    setTimeout(tick, 30);
-                }
-            };
-            tick();
-        }
-
         // シチュエーション一覧を取得し、チップとして数秒おきにフェードで流し続ける
         let allSituations = [];
         let situationChipCursor = 0;
@@ -2582,6 +2537,8 @@
                 if (data.anger_analysis.target_authority_key) {
                     setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
+
+                suggestDisclosureAction();
             } catch (err) {
                 assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
                 alert('エラー: ' + err.message);
@@ -2692,11 +2649,11 @@
             }
         }
 
-        // 開示請求書生成
-        document.getElementById('disclosureBtn').addEventListener('click', async () => {
+        // 開示請求書生成（チャットのサジェスト or 旧ボタンの両方から呼べる）
+        async function runDisclosureRequest(strategyOption, chatBubble) {
             const userInput = document.getElementById('userInput').value.trim();
             const targetAuthority = document.getElementById('targetAuthority').value;
-            const strategyOption = document.querySelector('input[name="strategyOption"]:checked')?.value || 'option-fast';
+            strategyOption = strategyOption || document.querySelector('input[name="strategyOption"]:checked')?.value || 'option-fast';
 
             const formData = new FormData();
             formData.append('user_input', userInput);
@@ -2705,7 +2662,6 @@
             if (selectedSituation) formData.append('situation_key', selectedSituation.key);
 
             document.getElementById('disclosureBtn').disabled = true;
-            document.getElementById('disclosureBtn').textContent = '📝 生成中...';
             const thinkingHandle = startThinking('actionThinking', [
                 '📝 開示請求書の文面を組み立て中…',
                 '⚖️ 適用条文を照合中…',
@@ -2725,14 +2681,45 @@
                 const routeData = await routeRes.json();
                 displayRoute(routeData);
                 document.getElementById('routeSection').classList.remove('hidden');
+
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>開示請求書を作成しました。提出先窓口までのアクセス情報とあわせて右側にまとめています。`;
+                }
             } catch (err) {
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
+                }
                 alert('エラー: ' + err.message);
             } finally {
                 stopThinking(thinkingHandle);
                 document.getElementById('disclosureBtn').disabled = false;
-                document.getElementById('disclosureBtn').innerHTML = '<div class="text-3xl mb-2">📝</div><div class="font-bold">開示請求書を作成</div><div class="text-sm mt-1 opacity-90">自治体への正式な開示請求</div>';
             }
-        });
+        }
+
+        document.getElementById('disclosureBtn').addEventListener('click', () => runDisclosureRequest());
+
+        // 分析完了後にチャット内で「開示請求書を作成しますか？」とサジェストする
+        let disclosureSuggestionCount = 0;
+        function suggestDisclosureAction() {
+            disclosureSuggestionCount++;
+            const groupId = `disclosureSuggest-${disclosureSuggestionCount}`;
+            addChatBubble('assistant', `この内容で開示請求書を作成しますか？方針を選んでください。<div class="chat-suggestion-btns" id="${groupId}">
+                <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-fast', '${groupId}', this)">📝 プランA：迅速開示重視で作成</button>
+                <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-thorough', '${groupId}', this)">🗂 プランB：網羅的に作成</button>
+            </div>`);
+        }
+
+        function handleDisclosureSuggestion(strategyOption, groupId, clickedBtn) {
+            const group = document.getElementById(groupId);
+            if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
+
+            const label = strategyOption === 'option-thorough' ? '🗂 プランB：網羅的に作成' : '📝 プランA：迅速開示重視で作成';
+            const userBubble = addChatBubble('user', label);
+            setTimeout(() => addReadReceipt(userBubble), 300);
+
+            const assistantBubble = addChatBubble('assistant', '📝 開示請求書を作成しています…');
+            runDisclosureRequest(strategyOption, assistantBubble);
+        }
 
         function displayDisclosure(data) {
             const html = `
@@ -4048,7 +4035,7 @@
         loadPublicFeed();
         loadMunicipalityHistory();
         startPromptSuggestionAnimation();
-        startHeadingSuggestionAnimation();
+        // 見出しは最初のチャット発言として静的に表示するため、タイプライター切り替えは行わない
 
         (async () => {
             // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
