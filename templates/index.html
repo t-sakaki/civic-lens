@@ -868,16 +868,21 @@
 
         <div id="chatSplitGrid">
         <div id="chatLeftPane">
-        <div id="chatTimeline" class="chat-timeline hidden"></div>
+        <div id="chatTimeline" class="chat-timeline">
+            <div class="chat-bubble-row assistant">
+                <div class="chat-bubble">
+                    <span class="chat-bubble-label">🔍 Civic Lens</span>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🎯</span>
+                        <h2 id="mainQuestionHeading" class="text-lg font-semibold">何に怒りを感じていますか？</h2>
+                    </div>
+                    <p class="text-sm opacity-80">思ったことをそのまま書くか、下から近いものをタップしてください</p>
+                </div>
+            </div>
+        </div>
 
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
         <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
-            <div class="flex items-center gap-2 mb-1">
-                <span class="text-2xl">🎯</span>
-                <h2 id="mainQuestionHeading" class="text-2xl font-semibold text-gray-800">何に怒りを感じていますか？</h2>
-            </div>
-            <p class="text-sm text-gray-600 mb-4">思ったことをそのまま書くか、下から近いものをタップしてください</p>
-
             <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
             <div class="composer-card">
                 <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
