@@ -2416,6 +2416,60 @@
             });
         }
 
+        // 疑似市民の声をユーザー自身のBluesky/Xアカウントからシェアする
+        // （専用botアカウントは使わない。認証情報未設定時は投稿用テキストを表示するフォールバック）
+        function renderNewsShareButtons(bubbleEl, newsId) {
+            const container = bubbleEl.querySelector('.news-share-buttons');
+            const resultEl = bubbleEl.querySelector('.news-share-result');
+
+            async function share(platform) {
+                resultEl.innerHTML = '<span class="text-xs text-gray-400">🔄 シェア処理中...</span>';
+                try {
+                    const res = await fetch('/api/social/share', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ platform, news_id: newsId }),
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        resultEl.innerHTML = `<span class="text-xs text-green-700">✅ 投稿しました${data.post_url ? `（<a href="${data.post_url}" target="_blank" rel="noopener" class="underline">投稿を見る</a>）` : ''}</span>`;
+                        return;
+                    }
+                    if (data.action === 'manual_post_needed') {
+                        const text = platform === 'bluesky'
+                            ? data.share_text.bluesky
+                            : (data.share_text.x.mode === 'thread'
+                                ? data.share_text.x.posts.map((p, i) => `--- ポスト${i + 1}/${data.share_text.x.posts.length} ---\n${p}`).join('\n\n')
+                                : data.share_text.x.posts[0]);
+                        resultEl.innerHTML = `
+                            <p class="text-xs text-gray-500 mb-1">認証情報が未設定のため、投稿用テキストを表示します。コピーしてご自身のアカウントから投稿してください。</p>
+                            <textarea readonly rows="6" class="w-full text-xs p-2 border border-gray-300 rounded-md bg-white">${text}</textarea>
+                        `;
+                    } else {
+                        resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${data.detail || 'シェアに失敗しました'}</span>`;
+                    }
+                } catch (err) {
+                    resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${err.message}</span>`;
+                }
+            }
+
+            const blueskyBtn = document.createElement('button');
+            blueskyBtn.type = 'button';
+            blueskyBtn.className = 'text-xs bg-sky-500 text-white px-2.5 py-1.5 rounded-md hover:bg-sky-600';
+            blueskyBtn.textContent = '🦋 Blueskyでシェア';
+            blueskyBtn.addEventListener('click', () => share('bluesky'));
+
+            const xBtn = document.createElement('button');
+            xBtn.type = 'button';
+            xBtn.className = 'text-xs bg-gray-900 text-white px-2.5 py-1.5 rounded-md hover:bg-gray-700';
+            xBtn.textContent = '𝕏でシェア';
+            xBtn.addEventListener('click', () => share('x'));
+
+            container.appendChild(blueskyBtn);
+            container.appendChild(xBtn);
+        }
+
         // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
         async function analyzeNewsItemInChat(item) {
             document.getElementById('newsAgentPanel').classList.add('hidden');
@@ -2447,9 +2501,12 @@
                     <div class="text-xs text-gray-500 mb-1">🗣️ 再現された市民の声（AIによる疑似生成）</div>
                     <p class="text-sm mb-1">${record.pseudo_citizen_voice}</p>
                     <p class="text-xs text-gray-400 mb-2">※ ${record.pseudo_citizen_voice_disclaimer}</p>
-                    <div class="news-reactions flex items-center gap-2"></div>
+                    <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
+                    <div class="news-share-buttons flex items-center gap-2 mt-2"></div>
+                    <div class="news-share-result mt-2"></div>
                 `;
                 renderNewsReactions(assistantBubble.querySelector('.news-reactions'), record.news_id, record.reactions);
+                renderNewsShareButtons(assistantBubble, record.news_id);
 
                 // 既存の怒り分析結果パネル（右ペイン）に接続
                 document.getElementById('userInput').value = record.pseudo_citizen_voice;
