@@ -2470,6 +2470,23 @@
             container.appendChild(xBtn);
         }
 
+        // ニュース怒り再現の分析はGemini呼び出しを2回連続で行うため数十秒かかることがあり、
+        // その間サーバーが応答を一切送らない状態が続くと、一部のネットワーク環境（WSL2の
+        // ポートフォワード等）で接続がアイドルとみなされ切断され、ブラウザに
+        // "Failed to fetch" が表示されることがある。サーバー側は処理を継続・完了しているため、
+        // ネットワークレベルのエラー（TypeError）に限り自動で1回だけ再試行する。
+        async function fetchWithRetry(url, options, retries = 1) {
+            try {
+                return await fetch(url, options);
+            } catch (err) {
+                if (retries > 0 && err instanceof TypeError) {
+                    console.warn('fetch失敗、再試行します:', err.message);
+                    return await fetchWithRetry(url, options, retries - 1);
+                }
+                throw err;
+            }
+        }
+
         // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
         async function analyzeNewsItemInChat(item) {
             document.getElementById('newsAgentPanel').classList.add('hidden');
@@ -2486,7 +2503,7 @@
                 const region = document.getElementById('newsAgentRegion').value.trim();
                 if (region) formData.append('region', region);
 
-                const res = await fetch('/api/news-agent/analyze', { method: 'POST', body: formData });
+                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData });
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);
@@ -2537,7 +2554,7 @@
             try {
                 const params = new URLSearchParams({ region });
                 if (keyword) params.append('keyword', keyword);
-                const res = await fetch(`/api/news-agent/list?${params.toString()}`);
+                const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);
@@ -2897,7 +2914,7 @@
             ]);
 
             try {
-                const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+                const res = await fetchWithRetry('/api/analyze', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) {
                     throw new Error(data.detail || '分析に失敗しました。');
