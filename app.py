@@ -63,7 +63,13 @@ from auth import (
 from news_collector_agent import get_news_collector_agent
 from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
 from location_agent import get_location_agent
-from news_reactions import make_news_id, record_analysis, add_reaction, list_records
+from news_reactions import make_news_id, record_analysis, add_reaction, list_records, get_record
+from social_posting import (
+    build_share_texts,
+    post_to_bluesky,
+    post_to_x,
+    SocialPostingError,
+)
 
 
 app = FastAPI(
@@ -120,6 +126,15 @@ class DisclosureRequest(BaseModel):
     user_input: str
     target_authority: Optional[str] = None
     image_data: Optional[str] = None  # base64
+
+
+class SocialShareRequest(BaseModel):
+    """疑似市民の声のSNSシェアリクエスト"""
+    platform: str  # "bluesky" | "x"
+    news_id: str
+    access_token: Optional[str] = None  # Bluesky: app password / X: OAuth 1.0a access token
+    access_token_secret: Optional[str] = None  # X のみ
+    handle: Optional[str] = None  # Bluesky のユーザーhandle（例: "user.bsky.social"）
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -334,6 +349,61 @@ async def react_to_news_item(
 async def get_news_agent_history(limit: int = 50):
     """これまでに分析したニュースの履歴一覧（新しい順）"""
     return {"items": list_records(limit=limit)}
+
+
+@app.post("/api/social/share")
+async def share_pseudo_citizen_voice(payload: SocialShareRequest):
+    """疑似市民の声をユーザー自身のSNSアカウントからシェアする。
+
+    専用botアカウントは使わず、リクエストごとに渡されたユーザー自身の認証情報
+    （Bluesky app password / Xのアクセストークン）でその場限りのクライアントを作り投稿する。
+    トークンはサーバー側に保存しない。
+
+    未認証（トークン未指定）の場合は投稿を行わず、手動投稿用のシェアテキストを返す。
+    """
+    record = get_record(payload.news_id)
+    if record is None:
+        raise HTTPException(404, "対象の記録が見つかりませんでした。先にニュースを分析してください。")
+
+    if payload.platform not in ("bluesky", "x"):
+        raise HTTPException(400, "platform は 'bluesky' または 'x' を指定してください。")
+
+    share_texts = build_share_texts(record)
+
+    # 認証情報が無ければ、投稿せずフォールバック（手動投稿用テキスト）を返す
+    has_credentials = bool(payload.access_token) and (
+        payload.platform == "bluesky" and payload.handle
+        or payload.platform == "x" and payload.access_token_secret
+    )
+    if not has_credentials:
+        return {
+            "success": False,
+            "action": "manual_post_needed",
+            "share_text": share_texts,
+        }
+
+    try:
+        if payload.platform == "bluesky":
+            result = post_to_bluesky(
+                text=share_texts["bluesky"],
+                handle=payload.handle,
+                app_password=payload.access_token,
+            )
+        else:
+            x_text = share_texts["x"]["posts"][0]
+            result = post_to_x(
+                text=x_text,
+                access_token=payload.access_token,
+                access_token_secret=payload.access_token_secret,
+            )
+    except SocialPostingError as e:
+        raise HTTPException(502, str(e))
+
+    return {
+        "success": result.success,
+        "post_url": result.post_url,
+        "posted_text": result.posted_text,
+    }
 
 
 @app.post("/api/news-agent/run")
