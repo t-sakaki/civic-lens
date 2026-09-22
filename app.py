@@ -60,6 +60,8 @@ from auth import (
     create_session_token, verify_session_token, get_user_by_id,
     generate_siwe_nonce
 )
+from news_collector_agent import get_news_collector_agent
+from news_anger_agent import AngerReproductionAgent
 
 
 app = FastAPI(
@@ -196,6 +198,60 @@ async def analyze_anger(
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
+    }
+
+
+@app.post("/api/news-agent/run")
+async def run_news_anger_agent(
+    region: str = Form(...),
+    keyword: Optional[str] = Form(None),
+):
+    """ニュース怒り再現パイプライン: 地域名からニュースを自動収集し、
+    論点整理・擬似市民の声・怒り分析（画面遷移で使う既存フォーマット）まで生成する。
+
+    エージェント構成（AGENTS.md参照）:
+      NewsCollectorAgent → AngerReproductionAgent → 怒り分析(agent.analyze_anger)
+    """
+    collector = get_news_collector_agent()
+    news_item = collector.fetch_top_news(region, extra_keywords=[keyword] if keyword else None)
+    if news_item is None:
+        raise HTTPException(
+            404,
+            f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
+        )
+
+    anger_agent = AngerReproductionAgent()
+    step1 = anger_agent.generate(news_item.as_text())
+    pseudo_voice = step1["pseudo_citizen_voice"]
+
+    agent = get_agent()
+    try:
+        anger_analysis = agent.analyze_anger(pseudo_voice)
+    except Exception as e:
+        print(f"Gemini エラー: {e}")
+        anger_analysis = AngerAnalysis(
+            anger_level=text_to_anger_level(pseudo_voice),
+            emotion_keywords=["怒り", "不信"],
+            target_authority="安城市",
+            target_authority_key="anjo-city",
+            pain_summary=pseudo_voice[:100],
+            specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
+            legal_basis="安城市情報公開条例第7条",
+            next_action="disclosure_request",
+            urgency="normal",
+            recommended_response_time="30日",
+            is_mock=True,
+        )
+
+    return {
+        "source_news": {
+            "title": news_item.title,
+            "link": news_item.link,
+            "published": news_item.published,
+        },
+        "key_points": step1["key_points"],
+        "pseudo_citizen_voice": pseudo_voice,
+        "anger_analysis": anger_analysis.model_dump(),
     }
 
 

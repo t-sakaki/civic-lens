@@ -76,6 +76,41 @@
             </div>
         </section>
 
+        <!-- STEP 0.5: ニュース怒り再現エージェント -->
+        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in border-2 border-rose-200">
+            <h2 class="text-2xl font-semibold mb-2 text-gray-800">📰 怒りの代理人AI — ニュースから怒りを再現する</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                地域名を入れると、AIエージェントがその地域の自治体・警察・公的行事に関するニュースをネットから自動収集し、
+                一見好意的に見えるニュースの裏にある論点を読み解いて、市民の怒りの声を再現します。
+            </p>
+            <div class="grid md:grid-cols-2 gap-3 mb-3">
+                <input id="newsAgentRegion" type="text" placeholder="対象地域（例: 名古屋市）"
+                       class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-rose-500">
+                <input id="newsAgentKeyword" type="text" placeholder="絞り込みキーワード（任意、例: アジア大会）"
+                       class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-rose-500">
+            </div>
+            <button id="newsAgentRunBtn" class="w-full bg-gradient-to-r from-rose-500 to-red-600 text-white px-6 py-3 rounded-md font-semibold hover:from-rose-600 hover:to-red-700">
+                📰 ニュースを取得して怒りを再現する
+            </button>
+
+            <div id="newsAgentResult" class="hidden mt-5">
+                <div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-3">
+                    <div class="text-xs text-gray-500 mb-1">元ニュース</div>
+                    <a id="newsAgentSourceLink" href="#" target="_blank" rel="noopener" class="text-sm text-blue-700 hover:underline font-medium"></a>
+                    <div id="newsAgentSourcePublished" class="text-xs text-gray-400 mt-1"></div>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-md p-4 mb-3">
+                    <h3 class="font-semibold text-amber-900 mb-2">🔍 論点整理（批判的に見た場合の疑問点）</h3>
+                    <ul id="newsAgentKeyPoints" class="list-disc list-inside text-amber-900 text-sm space-y-1"></ul>
+                </div>
+                <div class="bg-rose-50 border border-rose-200 rounded-md p-4">
+                    <h3 class="font-semibold text-rose-900 mb-2">🗣️ 再現された市民の声（AIによる疑似生成）</h3>
+                    <p id="newsAgentVoice" class="text-sm text-rose-900 leading-relaxed"></p>
+                    <p class="text-xs text-rose-500 mt-2">※ 実在の個人の発言ではなく、論点を代弁するためにAIが生成したフィクションです。</p>
+                </div>
+            </div>
+        </section>
+
         <!-- STEP 1: 感情入力 -->
         <section id="freeInputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">📍Step 1: あなたの怒りを教えてください</h2>
@@ -905,6 +940,65 @@
                 cameraStream.getTracks().forEach(t => t.stop());
                 video.classList.add('hidden');
                 document.getElementById('captureImage').classList.add('hidden');
+            }
+        });
+
+        // 怒りの代理人AI：ニュースから怒りを自動再現
+        document.getElementById('newsAgentRunBtn').addEventListener('click', async () => {
+            const region = document.getElementById('newsAgentRegion').value.trim();
+            const keyword = document.getElementById('newsAgentKeyword').value.trim();
+            if (!region) {
+                alert('対象地域を入力してください（例: 名古屋市）');
+                return;
+            }
+
+            const btn = document.getElementById('newsAgentRunBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 ニュースを収集し、怒りを分析中...（数十秒かかる場合があります）';
+
+            const formData = new FormData();
+            formData.append('region', region);
+            if (keyword) formData.append('keyword', keyword);
+
+            try {
+                const res = await fetch('/api/news-agent/run', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+
+                document.getElementById('newsAgentSourceLink').href = data.source_news.link;
+                document.getElementById('newsAgentSourceLink').textContent = data.source_news.title;
+                document.getElementById('newsAgentSourcePublished').textContent = data.source_news.published || '';
+
+                const kpList = document.getElementById('newsAgentKeyPoints');
+                kpList.innerHTML = '';
+                data.key_points.forEach(p => {
+                    const li = document.createElement('li');
+                    li.textContent = p;
+                    kpList.appendChild(li);
+                });
+
+                document.getElementById('newsAgentVoice').textContent = data.pseudo_citizen_voice;
+                document.getElementById('newsAgentResult').classList.remove('hidden');
+
+                // 既存の「怒りを分析する」フロー（Step1〜アクション選択）に接続
+                document.getElementById('freeInputSection').classList.remove('hidden');
+                document.getElementById('userInput').value = data.pseudo_citizen_voice;
+                if (data.anger_analysis.target_authority_key) {
+                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
+                }
+
+                displayAnalysis({ anger_analysis: data.anger_analysis, emotion_is_mock: null });
+                document.getElementById('resultSection').classList.remove('hidden');
+                document.getElementById('actionSection').classList.remove('hidden');
+                document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📰 ニュースを取得して怒りを再現する';
             }
         });
 
