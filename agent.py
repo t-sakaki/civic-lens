@@ -16,6 +16,7 @@ from precedent_cases import (
     find_relevant_precedents_by_embedding,
     format_precedent_case_for_prompt,
 )
+from timeout_utils import call_with_timeout
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -552,6 +553,17 @@ class CivicLensAgent:
         （例: ブラウザGeolocationで特定済みの自治体）。Gemini・ルールベースいずれも
         本文からの判定を優先し、判定できない場合にのみこの値を採用する。
         """
+        from ordinance_data import AUTHORITIES, match_authority_by_text
+
+        hint_line = ""
+        if hint_authority_key and hint_authority_key in AUTHORITIES:
+            hint_name = AUTHORITIES[hint_authority_key].authority
+            hint_line = (
+                f"\nヒント: この入力はユーザーが「{hint_name}」に関心を持って調べた内容です。"
+                f"入力文中に別の具体的な機関（警察組織や他の自治体など）への明確な言及がない限り、"
+                f"target_authority は「{hint_name}」、target_authority_key は「{hint_authority_key}」としてください。\n"
+            )
+
         if self.genai_client:
             try:
                 prompt = f"""
@@ -559,7 +571,7 @@ class CivicLensAgent:
 以下の市民入力を分析し、指定のJSON形式で返してください。
 
 入力内容: {user_input}
-
+{hint_line}
 【出力スキーマ】
 - anger_level: 怒り・不満レベルの整数 (1〜10)
 - emotion_keywords: 市民が感じている感情キーワードのリスト (例: ["不信", "隠蔽", "怒り"])
@@ -574,12 +586,14 @@ class CivicLensAgent:
 
 JSONのみを返してください。
 """
-                response = self.genai_client.models.generate_content(
+                response = call_with_timeout(
+                    self.genai_client.models.generate_content,
                     model="gemini-3.1-pro-preview",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                     ),
+                    timeout_s=25.0,
                 )
                 text = response.text.strip()
                 if text.startswith("```"):
@@ -587,11 +601,20 @@ JSONのみを返してください。
                     text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
                 text = text.strip()
                 data = json.loads(text)
+
+                # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
+                # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
+                from ordinance_data import addressee_name
+                if data.get("target_authority_key") not in AUTHORITIES:
+                    fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
+                    print(
+                        f"[analyze_anger] 不正なtarget_authority_key '{data.get('target_authority_key')}' を "
+                        f"'{fallback_key}' に補正しました"
+                    )
+                    data["target_authority_key"] = fallback_key
                 # target_authority はLLMの自由記述ではなく、実施機関名（例: 愛知県知事）で正規化する
-                from ordinance_data import get_ordinance as _get_ordinance, addressee_name as _addressee_name
-                _matched_ordinance = _get_ordinance(data.get("target_authority_key", ""))
-                if _matched_ordinance:
-                    data["target_authority"] = _addressee_name(_matched_ordinance)
+                data["target_authority"] = addressee_name(AUTHORITIES[data["target_authority_key"]])
+
                 if "task_dag" not in data or not data["task_dag"]:
                     data["task_dag"] = build_task_dag(
                         user_input,

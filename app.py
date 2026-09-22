@@ -77,7 +77,6 @@ from auth import (
 )
 from news_collector_agent import get_news_collector_agent
 from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
-from location_agent import get_location_agent
 from news_reactions import make_news_id, record_analysis, add_reaction, list_records, get_record
 from social_posting import (
     build_share_texts,
@@ -370,25 +369,12 @@ async def analyze_anger(
     }
 
 
-@app.post("/api/news-agent/region-from-location")
-async def region_from_location(
-    lat: float = Form(...),
-    lon: float = Form(...),
-):
-    """GPS座標から対象地域（市区町村名）を推定する（LocationAgent）。
-    ユーザーが地域を登録していない場合に、現在地から自動特定するための補助エンドポイント。
-    """
-    location_agent = get_location_agent()
-    guess = location_agent.region_from_coordinates(lat, lon)
-    if guess is None:
-        raise HTTPException(404, "現在地から地域を特定できませんでした。地域名を直接入力してください。")
-
-    return {
-        "region": guess.region,
-        "prefecture": guess.prefecture,
-        "raw_display_name": guess.raw_display_name,
-    }
-
+# ---------------------------------------------------------------------------
+# ニュース怒り再現エージェント（news_collector_agent.py / news_anger_agent.py）
+# 日本にはオンブズマン制度が存在しない。AIが市民の代わりにニュースへ怒り、
+# その怒りを情報公開請求に変換することで、その機能的空白を埋めることを狙う。
+# 詳細はAGENTS.mdの「ニュース怒り再現パイプライン」を参照。
+# ---------------------------------------------------------------------------
 
 @app.get("/api/news-agent/list")
 async def list_news_for_region(
@@ -429,8 +415,7 @@ def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str
     """怒り再現→開示請求分析の共通処理（1記事分）
 
     region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
-    無関係な自治体（前回選択されていた自治体等）へ誤って紐づかないよう、
-    対象機関特定のヒントとして使う。
+    無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
     """
     anger_agent = AngerReproductionAgent()
     step1 = anger_agent.generate(news_text, region=region)
@@ -438,7 +423,6 @@ def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str
 
     hint_authority_key = None
     if region:
-        from ordinance_data import match_authority_by_text
         hint_authority_key = match_authority_by_text(region, default="") or None
 
     agent = get_agent()
@@ -446,7 +430,6 @@ def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str
         anger_analysis = agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key)
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        from ordinance_data import AUTHORITIES
         fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else "anjo-city"
         fallback_authority = AUTHORITIES[fallback_key].authority
         anger_analysis = AngerAnalysis(
@@ -539,7 +522,6 @@ async def share_pseudo_citizen_voice(payload: SocialShareRequest):
 
     share_texts = build_share_texts(record)
 
-    # 認証情報が無ければ、投稿せずフォールバック（手動投稿用テキスト）を返す
     has_credentials = bool(payload.access_token) and (
         payload.platform == "bluesky" and payload.handle
         or payload.platform == "x" and payload.access_token_secret
@@ -572,36 +554,6 @@ async def share_pseudo_citizen_voice(payload: SocialShareRequest):
         "success": result.success,
         "post_url": result.post_url,
         "posted_text": result.posted_text,
-    }
-
-
-@app.post("/api/news-agent/run")
-async def run_news_anger_agent(
-    region: str = Form(...),
-    keyword: Optional[str] = Form(None),
-):
-    """[後方互換用] 地域名から最新1件のニュースを自動選択して分析する。
-    通常は /api/news-agent/list → /api/news-agent/analyze の2段フローを使う。
-    """
-    collector = get_news_collector_agent()
-    news_item = collector.fetch_top_news(region, extra_keywords=[keyword] if keyword else None)
-    if news_item is None:
-        raise HTTPException(
-            404,
-            f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
-        )
-
-    analyzed = _analyze_news_text(news_item.as_text(), region=region)
-    return {
-        "source_news": {
-            "title": news_item.title,
-            "link": news_item.link,
-            "published": news_item.published,
-        },
-        "key_points": analyzed["key_points"],
-        "pseudo_citizen_voice": analyzed["pseudo_citizen_voice"],
-        "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
-        "anger_analysis": analyzed["anger_analysis"].model_dump(),
     }
 
 

@@ -132,7 +132,7 @@
         .win-ticker-track {
             display: flex;
             width: max-content;
-            animation: winTickerScroll 40s linear infinite;
+            animation: winTickerScroll 90s linear infinite;
         }
         .win-ticker-track:hover {
             animation-play-state: paused;
@@ -518,6 +518,62 @@
             box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
             padding: 0.9rem;
             animation: fadeIn 0.15s ease-out;
+        }
+
+        /* --- 「+」メニュー: Windowsスタートメニュー的に、低頻度操作（シチュエーション選択・
+             ニュース怒り再現エージェント等）をひとつのポップアップに集約する --- */
+        .plus-menu-popover {
+            position: absolute;
+            z-index: 30;
+            bottom: calc(100% + 8px);
+            left: 0;
+            width: min(280px, 88vw);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+            padding: 0.5rem;
+            animation: fadeIn 0.15s ease-out;
+        }
+        .plus-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #374151;
+            transition: background 0.12s;
+        }
+        .plus-menu-item:hover {
+            background: #f3f4f6;
+        }
+        .plus-menu-item .emoji {
+            font-size: 1.1rem;
+        }
+        .plus-panel {
+            margin-top: 0.75rem;
+            padding: 0.9rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            background: #f9fafb;
+            animation: fadeIn 0.15s ease-out;
+        }
+        .news-agent-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background: #fff;
+        }
+        .news-agent-item:hover {
+            border-color: #fca5a5;
         }
 
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
@@ -970,6 +1026,20 @@
                             <span id="voiceIcon">🎙️</span>
                         </button>
                         <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）">📷</button>
+
+                        <!-- 「+」メニュー: シチュエーション選択・ニュース怒り再現エージェント等、
+                             低頻度操作をWindowsスタートメニュー的にひとつに集約する -->
+                        <div class="relative inline-block" id="plusMenuWrap">
+                            <button type="button" id="plusMenuBtn" class="composer-tool-btn" title="その他のメニュー">➕</button>
+                            <div id="plusMenuPopover" class="hidden plus-menu-popover">
+                                <button type="button" id="plusMenuSituationBtn" class="plus-menu-item">
+                                    <span class="emoji">🗂️</span><span>シチュエーションから選ぶ</span>
+                                </button>
+                                <button type="button" id="plusMenuNewsAgentBtn" class="plus-menu-item">
+                                    <span class="emoji">📰</span><span>ニュースから怒りを再現する</span>
+                                </button>
+                            </div>
+                        </div>
                         <span class="suggestion-hint">
                             <span class="thinking-dots"><span></span><span></span><span></span></span>
                             ヒントを提案中
@@ -1000,6 +1070,34 @@
             <div class="mt-3">
                 <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
                 <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
+            </div>
+
+            <!-- 「+」→シチュエーション: 全件から選びたい場合の一覧パネル -->
+            <div id="situationMenuPanel" class="hidden plus-panel">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-gray-700">🗂️ シチュエーションを選ぶ</h4>
+                    <button type="button" id="situationMenuCloseBtn" class="text-xs text-gray-400 hover:text-gray-600">✕ 閉じる</button>
+                </div>
+                <div id="situationMenuGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+            </div>
+
+            <!-- 「+」→ニュース怒り再現エージェント: 地域名からニュースを収集し、怒りを再現する -->
+            <div id="newsAgentPanel" class="hidden plus-panel">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-gray-700">📰 ニュースから怒りを再現する</h4>
+                    <button type="button" id="newsAgentPanelCloseBtn" class="text-xs text-gray-400 hover:text-gray-600">✕ 閉じる</button>
+                </div>
+                <p class="text-xs text-gray-500 mb-2">地域名を入れると、その地域の自治体・警察・公的行事に関するニュースを自動収集し、論点整理と擬似的な市民の声を再現します。</p>
+                <div class="flex gap-2 mb-2">
+                    <input id="newsAgentRegion" type="text" placeholder="対象地域（例: 名古屋市）" class="flex-1 text-sm p-2 border border-gray-300 rounded-md">
+                    <input id="newsAgentKeyword" type="text" placeholder="キーワード（任意）" class="flex-1 text-sm p-2 border border-gray-300 rounded-md">
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <button id="newsAgentGeoBtn" type="button" class="text-xs bg-gray-100 text-gray-700 px-3 py-2 rounded-md hover:bg-gray-200 border border-gray-200">📍 現在地から</button>
+                    <button id="newsAgentListBtn" type="button" class="flex-1 text-sm bg-rose-500 text-white px-3 py-2 rounded-md hover:bg-rose-600">ニュース一覧を取得</button>
+                </div>
+                <p id="newsAgentGeoStatus" class="text-xs text-gray-500 mb-2"></p>
+                <div id="newsAgentListItems" class="space-y-2 max-h-64 overflow-y-auto"></div>
             </div>
         </section>
 
@@ -2207,6 +2305,289 @@
         authorityPopover.addEventListener('click', (e) => e.stopPropagation());
         document.addEventListener('click', () => closeAuthorityPopover());
 
+        // 「+」メニュー: シチュエーション選択・ニュース怒り再現エージェントをひとつに集約する
+        const plusMenuBtn = document.getElementById('plusMenuBtn');
+        const plusMenuPopover = document.getElementById('plusMenuPopover');
+
+        function closePlusMenu() {
+            plusMenuPopover.classList.add('hidden');
+        }
+        plusMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            plusMenuPopover.classList.toggle('hidden');
+        });
+        plusMenuPopover.addEventListener('click', (e) => e.stopPropagation());
+        document.addEventListener('click', () => closePlusMenu());
+
+        function closeAllPlusPanels() {
+            document.getElementById('situationMenuPanel').classList.add('hidden');
+            document.getElementById('newsAgentPanel').classList.add('hidden');
+        }
+
+        // 「+」→ シチュエーションから選ぶ（全件グリッド表示）
+        document.getElementById('plusMenuSituationBtn').addEventListener('click', () => {
+            closePlusMenu();
+            closeAllPlusPanels();
+            const panel = document.getElementById('situationMenuPanel');
+            const grid = document.getElementById('situationMenuGrid');
+            grid.innerHTML = '';
+            allSituations.forEach(s => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'situation-chip';
+                btn.innerHTML = `<span class="situation-chip-emoji">${s.emoji}</span><span>${s.label}</span>`;
+                btn.addEventListener('click', () => {
+                    panel.classList.add('hidden');
+                    selectSituation(s);
+                });
+                grid.appendChild(btn);
+            });
+            panel.classList.remove('hidden');
+        });
+        document.getElementById('situationMenuCloseBtn').addEventListener('click', () => {
+            document.getElementById('situationMenuPanel').classList.add('hidden');
+        });
+
+        // 「+」→ ニュースから怒りを再現する
+        document.getElementById('plusMenuNewsAgentBtn').addEventListener('click', () => {
+            closePlusMenu();
+            closeAllPlusPanels();
+            document.getElementById('newsAgentPanel').classList.remove('hidden');
+        });
+        document.getElementById('newsAgentPanelCloseBtn').addEventListener('click', () => {
+            document.getElementById('newsAgentPanel').classList.add('hidden');
+        });
+
+        document.getElementById('newsAgentGeoBtn').addEventListener('click', () => {
+            const statusEl = document.getElementById('newsAgentGeoStatus');
+            if (!navigator.geolocation) {
+                statusEl.textContent = 'このブラウザは位置情報に対応していません。地域名を直接入力してください。';
+                return;
+            }
+            statusEl.textContent = '📍 現在地を取得中...';
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                try {
+                    const formData = new FormData();
+                    formData.append('lat', pos.coords.latitude);
+                    formData.append('lon', pos.coords.longitude);
+                    const res = await fetch('/api/municipality/detect', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error('現在地から地域を特定できませんでした');
+                    const data = await res.json();
+                    const municipality = data.location?.municipality;
+                    if (!municipality) throw new Error('地域を特定できませんでした');
+                    document.getElementById('newsAgentRegion').value = municipality;
+                    statusEl.textContent = `✅ 現在地から「${municipality}」と特定しました`;
+                } catch (err) {
+                    statusEl.textContent = 'エラー: ' + err.message;
+                }
+            }, (err) => {
+                statusEl.textContent = '位置情報の取得を許可してください（' + err.message + '）';
+            }, { timeout: 10000 });
+        });
+
+        const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
+
+        function renderNewsReactions(containerEl, newsId, reactions) {
+            containerEl.innerHTML = '';
+            Object.keys(NEWS_REACTION_EMOJI).forEach(type => {
+                const count = (reactions && reactions[type]) || 0;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'inline-flex items-center gap-1 text-xs bg-white border border-rose-200 rounded-full px-2.5 py-1 hover:bg-rose-50';
+                btn.innerHTML = `<span>${NEWS_REACTION_EMOJI[type]}</span><span class="font-semibold">${count}</span>`;
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    btn.disabled = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('news_id', newsId);
+                        formData.append('reaction', type);
+                        const res = await fetch('/api/news-agent/react', { method: 'POST', body: formData });
+                        if (!res.ok) throw new Error('reaction failed');
+                        const record = await res.json();
+                        renderNewsReactions(containerEl, newsId, record.reactions);
+                    } catch (err) {
+                        console.error(err);
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+                containerEl.appendChild(btn);
+            });
+        }
+
+        // 疑似市民の声をユーザー自身のBluesky/Xアカウントからシェアする
+        // （専用botアカウントは使わない。認証情報未設定時は投稿用テキストを表示するフォールバック）
+        function renderNewsShareButtons(bubbleEl, newsId) {
+            const container = bubbleEl.querySelector('.news-share-buttons');
+            const resultEl = bubbleEl.querySelector('.news-share-result');
+
+            async function share(platform) {
+                resultEl.innerHTML = '<span class="text-xs text-gray-400">🔄 シェア処理中...</span>';
+                try {
+                    const res = await fetch('/api/social/share', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ platform, news_id: newsId }),
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        resultEl.innerHTML = `<span class="text-xs text-green-700">✅ 投稿しました${data.post_url ? `（<a href="${data.post_url}" target="_blank" rel="noopener" class="underline">投稿を見る</a>）` : ''}</span>`;
+                        return;
+                    }
+                    if (data.action === 'manual_post_needed') {
+                        const text = platform === 'bluesky'
+                            ? data.share_text.bluesky
+                            : (data.share_text.x.mode === 'thread'
+                                ? data.share_text.x.posts.map((p, i) => `--- ポスト${i + 1}/${data.share_text.x.posts.length} ---\n${p}`).join('\n\n')
+                                : data.share_text.x.posts[0]);
+                        resultEl.innerHTML = `
+                            <p class="text-xs text-gray-500 mb-1">認証情報が未設定のため、投稿用テキストを表示します。コピーしてご自身のアカウントから投稿してください。</p>
+                            <textarea readonly rows="6" class="w-full text-xs p-2 border border-gray-300 rounded-md bg-white">${text}</textarea>
+                        `;
+                    } else {
+                        resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${data.detail || 'シェアに失敗しました'}</span>`;
+                    }
+                } catch (err) {
+                    resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${err.message}</span>`;
+                }
+            }
+
+            const blueskyBtn = document.createElement('button');
+            blueskyBtn.type = 'button';
+            blueskyBtn.className = 'text-xs bg-sky-500 text-white px-2.5 py-1.5 rounded-md hover:bg-sky-600';
+            blueskyBtn.textContent = '🦋 Blueskyでシェア';
+            blueskyBtn.addEventListener('click', () => share('bluesky'));
+
+            const xBtn = document.createElement('button');
+            xBtn.type = 'button';
+            xBtn.className = 'text-xs bg-gray-900 text-white px-2.5 py-1.5 rounded-md hover:bg-gray-700';
+            xBtn.textContent = '𝕏でシェア';
+            xBtn.addEventListener('click', () => share('x'));
+
+            container.appendChild(blueskyBtn);
+            container.appendChild(xBtn);
+        }
+
+        // ニュース怒り再現の分析はGemini呼び出しを2回連続で行うため数十秒かかることがあり、
+        // その間サーバーが応答を一切送らない状態が続くと、一部のネットワーク環境（WSL2の
+        // ポートフォワード等）で接続がアイドルとみなされ切断され、ブラウザに
+        // "Failed to fetch" が表示されることがある。サーバー側は処理を継続・完了しているため、
+        // ネットワークレベルのエラー（TypeError）に限り自動で1回だけ再試行する。
+        async function fetchWithRetry(url, options, retries = 1) {
+            try {
+                return await fetch(url, options);
+            } catch (err) {
+                if (retries > 0 && err instanceof TypeError) {
+                    console.warn('fetch失敗、再試行します:', err.message);
+                    return await fetchWithRetry(url, options, retries - 1);
+                }
+                throw err;
+            }
+        }
+
+        // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
+        async function analyzeNewsItemInChat(item) {
+            document.getElementById('newsAgentPanel').classList.add('hidden');
+
+            addChatBubble('user', `📰 「${item.title}」のニュースから怒りを再現して`);
+            const assistantBubble = addChatBubble('assistant', '🔄 ニュースを読み解いて、怒りを再現しています…（数十秒かかる場合があります）');
+
+            try {
+                const formData = new FormData();
+                formData.append('title', item.title);
+                formData.append('link', item.link);
+                formData.append('summary', item.summary || '');
+                if (item.published) formData.append('published', item.published);
+                const region = document.getElementById('newsAgentRegion').value.trim();
+                if (region) formData.append('region', region);
+
+                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `HTTP ${res.status}`);
+                }
+                const record = await res.json();
+
+                const keyPointsHtml = record.key_points.map(p => `<li>${p}</li>`).join('');
+                assistantBubble.innerHTML = `
+                    <span class="chat-bubble-label">🔍 Civic Lens</span>
+                    <div class="text-xs text-gray-500 mb-1">🔍 論点整理</div>
+                    <ul class="list-disc list-inside text-sm mb-2">${keyPointsHtml}</ul>
+                    <div class="text-xs text-gray-500 mb-1">🗣️ 再現された市民の声（AIによる疑似生成）</div>
+                    <p class="text-sm mb-1">${record.pseudo_citizen_voice}</p>
+                    <p class="text-xs text-gray-400 mb-2">※ ${record.pseudo_citizen_voice_disclaimer}</p>
+                    <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
+                    <div class="news-share-buttons flex items-center gap-2 mt-2"></div>
+                    <div class="news-share-result mt-2"></div>
+                `;
+                renderNewsReactions(assistantBubble.querySelector('.news-reactions'), record.news_id, record.reactions);
+                renderNewsShareButtons(assistantBubble, record.news_id);
+
+                // 既存の怒り分析結果パネル（右ペイン）に接続
+                document.getElementById('userInput').value = record.pseudo_citizen_voice;
+                displayAnalysis({ anger_analysis: record.anger_analysis, emotion_is_mock: null });
+                document.getElementById('resultSection').classList.remove('hidden');
+                document.getElementById('actionSection').classList.remove('hidden');
+                activateSplitView();
+                if (record.anger_analysis.target_authority_key) {
+                    setSelectedAuthority(record.anger_analysis.target_authority_key);
+                }
+            } catch (err) {
+                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
+            }
+        }
+
+        document.getElementById('newsAgentListBtn').addEventListener('click', async () => {
+            const region = document.getElementById('newsAgentRegion').value.trim();
+            const keyword = document.getElementById('newsAgentKeyword').value.trim();
+            if (!region) {
+                alert('対象地域を入力してください（例: 名古屋市）');
+                return;
+            }
+
+            const btn = document.getElementById('newsAgentListBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 収集中...';
+
+            try {
+                const params = new URLSearchParams({ region });
+                if (keyword) params.append('keyword', keyword);
+                const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+
+                const container = document.getElementById('newsAgentListItems');
+                container.innerHTML = '';
+                data.items.forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = 'news-agent-item';
+                    row.innerHTML = `
+                        <div class="min-w-0">
+                            <div class="text-xs font-medium text-gray-800 truncate">${item.title}</div>
+                            <div class="text-[10px] text-gray-400">${item.published || ''}</div>
+                        </div>
+                    `;
+                    const selectBtn = document.createElement('button');
+                    selectBtn.type = 'button';
+                    selectBtn.className = 'flex-shrink-0 text-xs bg-rose-500 text-white px-2.5 py-1.5 rounded-md hover:bg-rose-600 whitespace-nowrap';
+                    selectBtn.textContent = '怒りを再現';
+                    selectBtn.addEventListener('click', () => analyzeNewsItemInChat(item));
+                    row.appendChild(selectBtn);
+                    container.appendChild(row);
+                });
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'ニュース一覧を取得';
+            }
+        });
+
         // 未ログイン時でも履歴を紐付けられるよう、匿名IDをlocalStorageに永続化する
         function getOrCreateSessionId() {
             try {
@@ -2533,7 +2914,7 @@
             ]);
 
             try {
-                const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+                const res = await fetchWithRetry('/api/analyze', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) {
                     throw new Error(data.detail || '分析に失敗しました。');

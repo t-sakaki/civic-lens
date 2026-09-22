@@ -124,43 +124,51 @@
 
 ## 🕵️ ニュース怒り再現パイプライン（新規エージェント構成）
 
-**理念**: 日本には公的なオンブズマン制度が存在しない。市民は日々のニュースに怒りや違和感を覚えつつも、声を上げる気力を失い無関心を装いがちである。本パイプラインは、市民・国民の代わりにAIがニュースへ怒り、その怒りを情報公開請求という具体行動に変換することで、オンブズマン不在の機能的空白を埋めることを目的とする。
+**理念**: 日本には公的なオンブズマン制度が存在しない。市民は日々のニュースに怒りや違和感を覚えつつも、声を上げる気力を失い無関心を装いがちである。本パイプラインは、市民・国民の代わりにAIがニュースへ怒り、その怒りを情報公開請求という具体行動に変換することで、オンブズマン不在の機能的空白を埋めることを目的とする。ハッカソンの評価軸としても、既存の「情報公開請求支援」の枠を超え、行政監視の起点そのものをAIが担うという点でディスラプティブな提案と位置づけている。
 
 一見すると好意的・中立に見えるニュース（例: 「アジア大会が成功裏に閉幕」）の裏にも、税金の使途・意思決定過程の不透明さ・住民負担といった、批判的に見れば疑わしい論点が存在しうる。それを見逃さず言語化し、実際に提出可能な開示請求の内容にまで落とし込むのが本パイプラインの役割である。
 
 ### エージェント構成（役割分割）
 
-役割ごとに独立したモジュール（将来的には独立したエージェント/サービス）として実装している。
+役割ごとに独立したモジュールとして実装している。
 
 | エージェント | 実装 | 役割 |
 |---|---|---|
-| **NewsCollectorAgent** | `news_collector_agent.py` | 対象地域（市区町村名等）を入力に、Google News RSSからその地域の自治体・警察・公的行事に関するニュースを自動収集する。ユーザーによる記事貼り付けにも対応するが、貼り付けは「入力の一つ」であり、標準フローはエージェントによる自動収集である |
-| **AngerReproductionAgent**（怒り再現エージェント） | `news_anger_agent.py` | ニュース本文から、批判的に見た場合の論点整理（`key_points`）と、対象地域の市民が怒っているかのような一人称の疑似的な声（`pseudo_citizen_voice`）を生成する |
-| **DisclosureRequestAgent**（開示請求エージェント、既存） | `agent.py`（`CivicLensAgent.analyze_anger`） | 疑似的な怒りの声を、開示請求書の該当箇所（対象機関・請求文書・根拠条例・請求理由要約・推奨対応期限）に変換する。氏名・住所等の個人情報欄は含めない |
+| **NewsCollectorAgent** | `news_collector_agent.py` | 対象地域（市区町村名等）を入力に、Google News RSSからその地域の自治体・警察・公的行事に関するニュースを複数件自動収集する |
+| **AngerReproductionAgent**（怒り再現エージェント） | `news_anger_agent.py` | ニュース本文から、批判的に見た場合の論点整理（`key_points`）と、対象地域の市民が怒っているかのような一人称の疑似的な声（`pseudo_citizen_voice`）を生成する。検索地域をプロンプトのヒントとして渡し、記事本文が具体的な自治体に触れていない場合でも誤った地域に紐づかないようにしている |
+| **DisclosureRequestAgent**（開示請求エージェント、既存） | `agent.py`（`CivicLensAgent.analyze_anger`、`hint_authority_key`引数） | 疑似的な怒りの声を、開示請求書の該当箇所（対象機関・請求文書・根拠条例・請求理由要約・推奨対応期限）に変換する。返却された`target_authority_key`が条例DB（`ordinance_data.AUTHORITIES`）に存在しないスキーマ外の値だった場合は、ヒントまたはテキストマッチングで安全な値に自動補正する |
+| **SocialPostingAgent**（SNSシェア） | `social_posting.py` | 再現された「疑似的な市民の声」を、ユーザー自身のX/Blueskyアカウントから投稿するためのテキスト生成・投稿処理。専用botアカウントは使わない |
 
 ### パイプラインの流れ
 
 ```
 ユーザーの対象地域（登録市区町村 / GPS推定 / 行動履歴推定）
         ↓
-NewsCollectorAgent.fetch_news(region)  ── Google News RSS から関連ニュースを取得
+NewsCollectorAgent.fetch_news(region)  ── Google News RSS から関連ニュースを複数件取得（一覧表示）
+        ↓（ユーザーが記事を選択）
+AngerReproductionAgent.generate(news_text, region) ── 論点整理 + 擬似市民の声
         ↓
-AngerReproductionAgent.generate(news_text) ── 論点整理 + 擬似市民の声
+DisclosureRequestAgent.analyze_anger(pseudo_citizen_voice, hint_authority_key) ── 開示請求書の該当箇所を生成
         ↓
-DisclosureRequestAgent.analyze_anger(pseudo_citizen_voice) ── 開示請求書の該当箇所を生成
+news_reactions.py に記録として永続化（❤️😡😳リアクション、履歴一覧）
+        ↓（ユーザーの任意操作）
+SocialPostingAgent: X.com / Blueskyへシェア（未認証時は手動投稿用テキストを提示）
 ```
 
-CLIデモ:
-```bash
-python news_anger_agent.py --region 名古屋市 --keyword アジア大会
-```
+主なAPIエンドポイント（`app.py`）:
+- `GET /api/news-agent/list` — 地域のニュース一覧取得
+- `POST /api/news-agent/analyze` — 選択記事の怒り再現分析 + 記録保存
+- `POST /api/news-agent/react` — リアクション付与
+- `GET /api/news-agent/history` — 分析履歴一覧
+- `POST /api/social/share` — SNSシェア（投稿 or フォールバックのシェアテキスト生成）
 
 ### 設計上の注意点
 
-- ニュース取得はGoogle News RSS（APIキー不要）に依存する暫定実装。将来的にはユーザーのGPS/行動履歴から地域を自動推定するモジュールと接続する
+- ニュース取得はGoogle News RSS（APIキー不要）に依存する暫定実装
 - 出力する開示請求書は氏名・住所等の個人情報欄を含まない。あくまで「対象機関・請求文書・根拠条例」等、客観的に特定可能な箇所のみを生成する
-- AIによる「怒りの再現」はあくまで論点提示のためのフィクションであり、実在の個人の発言として提示・公表してはならない
-- 弁護士法72条遵守の方針（本ファイル冒頭・README参照）は本パイプラインにも適用される。AIは法的助言ではなく情報提供・書式作成支援に徹し、最終的に開示請求を行うか否かの判断は必ずユーザー自身が行う
+- AIによる「怒りの再現」はあくまで論点提示のためのフィクションであり、実在の個人の発言として提示・公表してはならない。SNSシェア時も投稿テキストに必ず免責文（`PSEUDO_VOICE_DISCLAIMER`）を含める
+- 弁護士法72条遵守の方針（本ファイル冒頭・README参照）は本パイプラインにも適用される。AIは法的助言ではなく情報提供・書式作成支援に徹し、最終的に開示請求・SNS投稿を行うか否かの判断は必ずユーザー自身が行う
+- GPSによる地域特定は `municipality_agent.py` / `municipality_pool.py` / `municipality_history.py`（既存のチャットUIコンポーザーに統合済み）を利用する。本パイプライン専用の簡易版地理エージェントは別途作らない
 
 ---
 
