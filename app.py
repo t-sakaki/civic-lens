@@ -6,7 +6,7 @@ import os
 import io
 import base64
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import uuid
 from dotenv import load_dotenv
@@ -75,6 +75,15 @@ from auth import (
     create_session_token, verify_session_token, get_user_by_id,
     generate_siwe_nonce, request_magic_link, verify_magic_link
 )
+from news_collector_agent import get_news_collector_agent
+from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
+from news_reactions import make_news_id, record_analysis, add_reaction, list_records, get_record
+from social_posting import (
+    build_share_texts,
+    post_to_bluesky,
+    post_to_x,
+    SocialPostingError,
+)
 
 
 app = FastAPI(
@@ -131,6 +140,15 @@ class DisclosureRequest(BaseModel):
     user_input: str
     target_authority: Optional[str] = None
     image_data: Optional[str] = None  # base64
+
+
+class SocialShareRequest(BaseModel):
+    """疑似市民の声のSNSシェアリクエスト"""
+    platform: str  # "bluesky" | "x"
+    news_id: str
+    access_token: Optional[str] = None  # Bluesky: app password / X: OAuth 1.0a access token
+    access_token_secret: Optional[str] = None  # X のみ
+    handle: Optional[str] = None  # Bluesky のユーザーhandle（例: "user.bsky.social"）
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -348,6 +366,194 @@ async def analyze_anger(
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
+    }
+
+
+# ---------------------------------------------------------------------------
+# ニュース怒り再現エージェント（news_collector_agent.py / news_anger_agent.py）
+# 日本にはオンブズマン制度が存在しない。AIが市民の代わりにニュースへ怒り、
+# その怒りを情報公開請求に変換することで、その機能的空白を埋めることを狙う。
+# 詳細はAGENTS.mdの「ニュース怒り再現パイプライン」を参照。
+# ---------------------------------------------------------------------------
+
+@app.get("/api/news-agent/list")
+async def list_news_for_region(
+    region: str,
+    keyword: Optional[str] = None,
+    max_items: int = 8,
+):
+    """指定地域のニュースを複数件取得する（NewsCollectorAgent）。
+    1件だけ自動選択するのではなく、ユーザーが記事を選んで分析できるようにする一覧表示用。
+    """
+    collector = get_news_collector_agent()
+    items = collector.fetch_news(
+        region,
+        extra_keywords=[keyword] if keyword else None,
+        max_items=max(1, min(max_items, 20)),
+    )
+    if not items:
+        raise HTTPException(
+            404,
+            f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
+        )
+
+    return {
+        "items": [
+            {
+                "news_id": make_news_id(item.link),
+                "title": item.title,
+                "link": item.link,
+                "published": item.published,
+                "summary": item.summary,
+            }
+            for item in items
+        ]
+    }
+
+
+def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str, Any]:
+    """怒り再現→開示請求分析の共通処理（1記事分）
+
+    region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
+    無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
+    """
+    anger_agent = AngerReproductionAgent()
+    step1 = anger_agent.generate(news_text, region=region)
+    pseudo_voice = step1["pseudo_citizen_voice"]
+
+    hint_authority_key = None
+    if region:
+        hint_authority_key = match_authority_by_text(region, default="") or None
+
+    agent = get_agent()
+    try:
+        anger_analysis = agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key)
+    except Exception as e:
+        print(f"Gemini エラー: {e}")
+        fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else "anjo-city"
+        fallback_authority = AUTHORITIES[fallback_key].authority
+        anger_analysis = AngerAnalysis(
+            anger_level=text_to_anger_level(pseudo_voice),
+            emotion_keywords=["怒り", "不信"],
+            target_authority=fallback_authority,
+            target_authority_key=fallback_key,
+            pain_summary=pseudo_voice[:100],
+            specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
+            legal_basis=f"{fallback_authority}情報公開条例第7条",
+            next_action="disclosure_request",
+            urgency="normal",
+            recommended_response_time="30日",
+            is_mock=True,
+        )
+
+    return {
+        "key_points": step1["key_points"],
+        "pseudo_citizen_voice": pseudo_voice,
+        "anger_analysis": anger_analysis,
+    }
+
+
+@app.post("/api/news-agent/analyze")
+async def analyze_news_item(
+    title: str = Form(...),
+    link: str = Form(...),
+    summary: str = Form(""),
+    published: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+):
+    """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
+
+    region: ユーザーが一覧取得時に指定した対象地域。記事本文が具体的な自治体名に
+    触れていない場合でも、無関係な自治体に誤って紐づかないよう対象機関特定に使う。
+
+    エージェント構成（AGENTS.md参照）:
+      AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
+    """
+    news_text = "\n".join([p for p in [title, summary] if p])
+    analyzed = _analyze_news_text(news_text, region=region)
+
+    news_id = make_news_id(link)
+    source_news = {"title": title, "link": link, "published": published}
+    record = record_analysis(
+        news_id=news_id,
+        source_news=source_news,
+        key_points=analyzed["key_points"],
+        pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
+        disclaimer=PSEUDO_VOICE_DISCLAIMER,
+        anger_analysis=analyzed["anger_analysis"].model_dump(),
+    )
+    return record
+
+
+@app.post("/api/news-agent/react")
+async def react_to_news_item(
+    news_id: str = Form(...),
+    reaction: str = Form("heart"),
+):
+    """擬似市民の声への共感リアクション（❤️等）を記録する"""
+    record = add_reaction(news_id, reaction)
+    if record is None:
+        raise HTTPException(404, "対象の記録が見つかりませんでした。先に記事を分析してください。")
+    return record
+
+
+@app.get("/api/news-agent/history")
+async def get_news_agent_history(limit: int = 50):
+    """これまでに分析したニュースの履歴一覧（新しい順）"""
+    return {"items": list_records(limit=limit)}
+
+
+@app.post("/api/social/share")
+async def share_pseudo_citizen_voice(payload: SocialShareRequest):
+    """疑似市民の声をユーザー自身のSNSアカウントからシェアする。
+
+    専用botアカウントは使わず、リクエストごとに渡されたユーザー自身の認証情報
+    （Bluesky app password / Xのアクセストークン）でその場限りのクライアントを作り投稿する。
+    トークンはサーバー側に保存しない。
+
+    未認証（トークン未指定）の場合は投稿を行わず、手動投稿用のシェアテキストを返す。
+    """
+    record = get_record(payload.news_id)
+    if record is None:
+        raise HTTPException(404, "対象の記録が見つかりませんでした。先にニュースを分析してください。")
+
+    if payload.platform not in ("bluesky", "x"):
+        raise HTTPException(400, "platform は 'bluesky' または 'x' を指定してください。")
+
+    share_texts = build_share_texts(record)
+
+    has_credentials = bool(payload.access_token) and (
+        payload.platform == "bluesky" and payload.handle
+        or payload.platform == "x" and payload.access_token_secret
+    )
+    if not has_credentials:
+        return {
+            "success": False,
+            "action": "manual_post_needed",
+            "share_text": share_texts,
+        }
+
+    try:
+        if payload.platform == "bluesky":
+            result = post_to_bluesky(
+                text=share_texts["bluesky"],
+                handle=payload.handle,
+                app_password=payload.access_token,
+            )
+        else:
+            x_text = share_texts["x"]["posts"][0]
+            result = post_to_x(
+                text=x_text,
+                access_token=payload.access_token,
+                access_token_secret=payload.access_token_secret,
+            )
+    except SocialPostingError as e:
+        raise HTTPException(502, str(e))
+
+    return {
+        "success": result.success,
+        "post_url": result.post_url,
+        "posted_text": result.posted_text,
     }
 
 
