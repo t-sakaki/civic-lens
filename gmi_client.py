@@ -113,6 +113,85 @@ def search_precedents(query: str, top_k: int = 5) -> List[PrecedentMatch]:
         return _mock_precedent_search(query, top_k)
 
 
+_MUNICIPALITY_RESEARCH_SYSTEM_PROMPT = """あなたは日本の自治体の情報公開制度に関する調査エージェントです。
+指定された自治体の情報公開条例について、必ず次のJSON形式のみで回答してください（前置き・説明文は一切不要）:
+
+{"ordinance_name": "string（例: ○○市情報公開条例）", "authority_type": "string（例: 市長）",
+ "request_deadline_days": 整数（開示決定までの日数、不明なら30）,
+ "extension_days": 整数（延長可能日数、不明なら30）,
+ "review_period_days": 整数（審査請求可能日数、不明なら90）,
+ "non_disclosure_grounds": [{"number": "string", "name": "string", "description": "string", "exception": "string"}],
+ "review_authority": "string（情報公開審査会等）",
+ "contact": "string（担当部署）"}
+
+非公式な推測であっても、一般的な自治体情報公開条例の標準的構成（個人情報・法人情報・
+審議検討情報・事務事業情報の4類型を含む）に基づいて回答してください。
+"""
+
+
+def research_municipality_disclosure_system(
+    municipality: str, prefecture: str = ""
+) -> Dict:
+    """未収録の自治体について、情報公開条例の概要をLLMで調査する
+
+    バックグラウンドの自治体特定エージェントから呼び出される。GMI_API_KEY未設定・
+    API失敗時は一般的な自治体条例のひな形（is_mock=True）を返す。
+    """
+    query = f"{prefecture}{municipality} の情報公開条例について教えてください。"
+
+    if not GMI_API_KEY:
+        return _mock_municipality_research(municipality)
+
+    try:
+        content = _call_gmi(_MUNICIPALITY_RESEARCH_SYSTEM_PROMPT, query)
+        parsed = _extract_json(content)
+        parsed["is_mock"] = False
+        return parsed
+    except Exception as e:
+        print(f"GMI Cloud エラー（自治体情報公開制度調査）: {e}")
+        return _mock_municipality_research(municipality)
+
+
+def _mock_municipality_research(municipality: str) -> Dict:
+    """GMI_API_KEY未設定・API失敗時の一般的な条例ひな形"""
+    return {
+        "ordinance_name": f"{municipality}情報公開条例",
+        "authority_type": "市長" if municipality.endswith(("市", "区")) else "町長・村長",
+        "request_deadline_days": 30,
+        "extension_days": 30,
+        "review_period_days": 90,
+        "non_disclosure_grounds": [
+            {
+                "number": "第1号",
+                "name": "個人情報",
+                "description": "個人に関する情報で、特定の個人を識別することができるもの",
+                "exception": "人の生命、健康、生活又は財産を保護するため、公にすることが必要であると認められる情報は開示",
+            },
+            {
+                "number": "第2号",
+                "name": "法人情報",
+                "description": "法人その他の団体に関する情報であって、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+                "exception": "",
+            },
+            {
+                "number": "第3号",
+                "name": "事務執行影響",
+                "description": "審議、検討又は協議に関する情報であって、公にすることにより率直な意見交換等が不当に損なわれるおそれがあるもの",
+                "exception": "",
+            },
+            {
+                "number": "第4号",
+                "name": "事務事業情報",
+                "description": "事務又は事業に関する情報であって、公にすることにより当該事務又は事業の適正な遂行に支障を及ぼすおそれがあるもの",
+                "exception": "",
+            },
+        ],
+        "review_authority": f"{municipality}情報公開審査会",
+        "contact": f"{municipality}役所 総務課 情報公開担当",
+        "is_mock": True,
+    }
+
+
 def _mock_ordinance_search(query: str, top_k: int) -> List[OrdinanceMatch]:
     """APIキーがない場合のモック"""
     mock_results = [

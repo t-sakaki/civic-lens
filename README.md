@@ -2,24 +2,17 @@
 
 [![CI Pipeline](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/t-sakaki/civic-lens/actions/workflows/ci.yml)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?logo=vercel)](https://civic-lens-jp.vercel.app)
+[![Hackathon](https://img.shields.io/badge/Zenn_Agentic_AI_ミニハッカソン-優勝🏆-gold)](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5)
+
+![Civic Lens](static/og-image.png)
+
+> 🏆 **2026年9月5日、「Zenn Agentic AI ミニハッカソン with Google Cloud」（東京・渋谷 Google拠点、参加者約200名）にて優勝しました。** コーディング時間約2時間という短時間実装での受賞です。詳細は[🏆 受賞歴](#-受賞歴)をご覧ください。
 
 ## 🎯 概要
 
 **Civic Lens**は、市民が行政に対して抱く「怒り・不信・諦め」を、**情報公開請求・審査請求**という法的アクションに自動変換するAIエージェントです。
 
 市民は弁護士なしで、年間30万件以上の情報公開請求制度をフル活用できます。
-
-## 💢 理念 — 「怒ることに疲れた市民」の代理人
-
-多くの市民はニュースを見ても、心のどこかで違和感や怒りを覚えながら、それを表明する気力を失い、無関心を装うようになっている。声を上げても何も変わらない、という学習性の無力感が、行政の不透明さを温存させてしまう。
-
-日本には公的なオンブズマン制度（行政監視官）が存在しない。Civic Lens はその機能的な空白を、AIエージェントで埋めることを目指す。**市民・国民の代わりにニュースへ怒り、その怒りを情報公開請求という具体的な行動に変換する**——これが本プロジェクトの中核的な理念である。
-
-- 一見すると好意的・中立に報じられているニュース（華やかな式典、成功した大会、明るい統計）の裏にある、税金の使途・意思決定過程の不透明さ・住民負担を、AIエージェントが批判的な視点で読み解く
-- その論点をもとに、怒っているはずの市民の声を疑似的に再現する
-- 再現した怒りを、個人が実際に提出できる情報公開請求書の具体的な記載内容（対象機関・請求文書・根拠条例）へと変換する
-
-これにより、「怒ることに疲れた」市民に代わってAIが怒り、シビック・ガバナンス（市民による行政監視）を持続可能な形で機能させることを目指す。
 
 ## 🏛️ 解決する課題
 
@@ -50,11 +43,10 @@ Civic Lens は、市民の「怒り・不信・諦め」を入力すると、AI�
 1. **感情解析（YouCam API）** — 市民の怒り表情を検知し、エージェントへの入力に変換
 2. **条例自動マッチング（Vertex AI + GMI Cloud）** — 市民の怒り内容から適用条例を自動特定
 3. **開示請求書・司法行政文書開示申出書の自動生成** — 17機関（7自治体・議会 + 4警察本部 + 6裁判所）対応。行政文書だけでなく裁判所の「司法行政文書の開示に関する事務の取扱要綱」に基づく開示請求にも完全対応
-4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例（自治体条例、警察情報公開規程、裁判所取扱要綱）を交えて構築
+4. **審査請求書 + 反論ロジック生成** — 不開示決定への反論を判例・先例（自治体条例、警察情報公開規程、裁判所取扱要綱）を交えて構築。先例として提示する認容事例は、総務省「行政不服審査裁決・答申検索データベース」から収集した実在のデータをGemini Embeddingsによるベクトル検索で照合したものを使用し、Geminiによる先例の「創作」を防止
 5. **期限管理（60日ルール等）** — Cloud Scheduler で自動通知
 6. **窓口までの経路案内（駅すぱあとAPI）** — 市民が実際に行動する後押し
 7. **シチュエーション別テンプレート** — 13種類（海外視察、公共事業、補助金、警察事案、裁判所司法行政・予算執行等）から選ぶだけ
-8. **ニュース怒り再現パイプライン（デモ実装）** — ユーザーの入力（＋将来的にはGPS/行動履歴）から対象地域を特定し、その地域の自治体・警察・公的行事に関するニュースを自動収集。表向きは好意的に見えるニュースからも批判的な論点を抽出し、市民の怒りの声を疑似生成、開示請求書の該当箇所まで自動生成する（詳細は [AGENTS.md](AGENTS.md#-ニュース怒り再現パイプライン新規エージェント構成) を参照）
 
 ## 🛠️ 技術スタック
 
@@ -66,6 +58,7 @@ Civic Lens は、市民の「怒り・不信・諦め」を入力すると、AI�
 | **GMI Cloud (DeepSeek V4 Pro)** | 条例・判例RAG推論 | `gmi_client.py` |
 | **駅すぱあとAPI** | 最寄り市役所までの経路案内 | `station_guide.py` |
 | **YouCam API** | 市民の怒り表情解析 | `emotion_analyzer.py` |
+| **総務省 行政不服審査裁決・答申検索データベース + Gemini Embeddings** | 認容事例の実データ検索（先例の「創作」防止） | `precedent_cases.py`, `scripts/scrape_gyofuku_cases.py`, `scripts/build_precedent_embeddings.py` |
 
 ### ADKアーキテクチャ
 ```
@@ -85,20 +78,31 @@ SequentialAgent (civic_lens_integrated)
 - **Cloud Scheduler** — 期限通知cron
 - **Firebase Authentication + Firestore** — ユーザー認証（メール/パスワード・Web3ウォレット）、開示請求記録・フォーク・スターの永続化。Cloud Runのステートレスなコンテナ間でもデータを保持するために使用
 
+### 🤖 認容事例 自動収集エージェント（定期実行）
+
+反論ロジックに使う先例データは、`.github/workflows/scrape-precedents.yml` により週1回（サーバー負荷に配慮し高頻度にはしない）自動更新される。GitHub ActionsがPlaywrightで総務省「行政不服審査裁決・答申検索データベース」(https://fufukudb.search.soumu.go.jp/koukai/Main) を巡回して認容・一部認容事例を収集（`scripts/scrape_gyofuku_cases.py`）し、続けてGemini Embeddings（`gemini-embedding-001`）で検索用ベクトルを計算する（`scripts/build_precedent_embeddings.py`、既に計算済みのcase_idは再計算しないキャッシュ設計）。`workflow_dispatch`により手動実行も可能。
+
+収集データはPDL1.0（公共データ利用規約）に配慮し、裁決・答申の全文ではなくデータベースが提示する概要スニペットのみを保存し、各レコードに出典URLを必ず添付する。また、mainブランチへの直接コミット・pushは行わず、差分が生じた場合のみ`peter-evans/create-pull-request`でブランチを切ってプルリクエストを作成し、人間のレビュー・マージを介す設計にしている。
+
 ## 📁 ファイル構成
 
 ```
 civic-lens/
-├── app.py                      # FastAPI メイン（エンドポイント定義）
-├── agent.py                    # Gemini エージェント本体（怒り分析→開示請求）
-├── news_collector_agent.py     # ニュース収集エージェント（地域名からGoogle News RSSを検索）
-├── news_anger_agent.py         # 怒り再現エージェント + パイプライン全体のオーケストレーション
-├── ordinance_data.py     # 5自治体分の条例データ
-├── station_guide.py      # 駅すぱあとAPI統合
-├── emotion_analyzer.py   # YouCam API統合
-├── gmi_client.py         # GMI Cloud RAG
+├── app.py                            # FastAPI メイン（エンドポイント定義）
+├── agent.py                          # Gemini エージェント本体
+├── ordinance_data.py                 # 5自治体分の条例データ
+├── station_guide.py                  # 駅すぱあとAPI統合
+├── emotion_analyzer.py               # YouCam API統合
+├── gmi_client.py                     # GMI Cloud RAG
+├── precedent_cases.py                # 認容事例の検索（Gemini Embeddings + Ngramフォールバック）
+├── scripts/
+│   ├── scrape_gyofuku_cases.py       # 総務省DBからの認容事例スクレイパー
+│   └── build_precedent_embeddings.py # 認容事例の埋め込みベクトル生成
 ├── templates/
-│   └── index.html        # メインユーザーインターフェース
+│   ├── index.html                    # メインユーザーインターフェース
+│   └── precedent_cases.html          # 認容事例 閲覧・検索ページ
+├── .github/workflows/
+│   └── scrape-precedents.yml         # 認容事例 自動収集エージェント（定期実行）
 ├── requirements.txt
 ├── Dockerfile
 └── README.md
@@ -175,13 +179,29 @@ gcloud run deploy civic-lens \
 5. **経路案内**: 駅すぱあとAPIで安城市役所までのアクセスを表示
 6. **審査請求対応**: 不開示決定時の反論ロジック生成
 
+## 🏆 受賞歴
+
+### Zenn Agentic AI ミニハッカソン with Google Cloud（優勝）
+
+- **開催日**: 2026年9月5日
+- **会場**: 東京・渋谷 Google拠点
+- **規模**: 参加者約200名、2部屋に分かれての開催（[第5回 Agentic AI Hackathon with Google Cloud](https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5) のスピンオフ企画）
+- **結果**: 単独参加で**優勝**
+- **実装時間**: コーディング時間は約2時間のみという、ハッカソンとしては異例の短時間実装
+
+**評価されたポイント**
+
+- 4社API（Gemini + GMI Cloud + 駅すぱあと + YouCam）を統合し、市民の「怒り・不信・諦め」を情報公開請求という具体的な法的アクションへ自動変換する一気通貫の実装
+- Google AntiGravityなどAIエージェントを活用した超短時間でのフルスタック実装
+- 「情報公開請求のGitHub」というコンセプトのもと、開示請求のPublic/Private共有・フォーク・スター機能を実装し、共有された請求を集合知として地域の行政問題の可視化につなげるアイデア
+
 ## 📜 ライセンス
 
 MIT License
 
 ## 👥 作者
 
-Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加
+Zenn Agentic AI ミニハッカソン with Google Cloud — 2026/9/5 参加・**優勝**
 
 ## 🙏 謝辞
 
