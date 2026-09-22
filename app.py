@@ -273,25 +273,38 @@ async def list_news_for_region(
     }
 
 
-def _analyze_news_text(news_text: str) -> Dict[str, Any]:
-    """怒り再現→開示請求分析の共通処理（1記事分）"""
+def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str, Any]:
+    """怒り再現→開示請求分析の共通処理（1記事分）
+
+    region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
+    無関係な自治体（前回選択されていた自治体等）へ誤って紐づかないよう、
+    対象機関特定のヒントとして使う。
+    """
     anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text)
+    step1 = anger_agent.generate(news_text, region=region)
     pseudo_voice = step1["pseudo_citizen_voice"]
+
+    hint_authority_key = None
+    if region:
+        from ordinance_data import match_authority_by_text
+        hint_authority_key = match_authority_by_text(region, default="") or None
 
     agent = get_agent()
     try:
-        anger_analysis = agent.analyze_anger(pseudo_voice)
+        anger_analysis = agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key)
     except Exception as e:
         print(f"Gemini エラー: {e}")
+        from ordinance_data import AUTHORITIES
+        fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else "anjo-city"
+        fallback_authority = AUTHORITIES[fallback_key].authority
         anger_analysis = AngerAnalysis(
             anger_level=text_to_anger_level(pseudo_voice),
             emotion_keywords=["怒り", "不信"],
-            target_authority="安城市",
-            target_authority_key="anjo-city",
+            target_authority=fallback_authority,
+            target_authority_key=fallback_key,
             pain_summary=pseudo_voice[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
-            legal_basis="安城市情報公開条例第7条",
+            legal_basis=f"{fallback_authority}情報公開条例第7条",
             next_action="disclosure_request",
             urgency="normal",
             recommended_response_time="30日",
@@ -311,14 +324,18 @@ async def analyze_news_item(
     link: str = Form(...),
     summary: str = Form(""),
     published: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
 ):
     """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
+
+    region: ユーザーが一覧取得時に指定した対象地域。記事本文が具体的な自治体名に
+    触れていない場合でも、無関係な自治体に誤って紐づかないよう対象機関特定に使う。
 
     エージェント構成（AGENTS.md参照）:
       AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
     """
     news_text = "\n".join([p for p in [title, summary] if p])
-    analyzed = _analyze_news_text(news_text)
+    analyzed = _analyze_news_text(news_text, region=region)
 
     news_id = make_news_id(link)
     source_news = {"title": title, "link": link, "published": published}
@@ -422,7 +439,7 @@ async def run_news_anger_agent(
             f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
         )
 
-    analyzed = _analyze_news_text(news_item.as_text())
+    analyzed = _analyze_news_text(news_item.as_text(), region=region)
     return {
         "source_news": {
             "title": news_item.title,

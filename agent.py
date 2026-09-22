@@ -534,8 +534,25 @@ class CivicLensAgent:
                 print(f"Failed to initialize google-genai client: {e}")
         return self._genai_client
 
-    def analyze_anger(self, user_input: str) -> AngerAnalysis:
-        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）"""
+    def analyze_anger(self, user_input: str, hint_authority_key: Optional[str] = None) -> AngerAnalysis:
+        """怒り分析（Gemini Vertex AI優先、失敗時ルールベースフォールバック）
+
+        hint_authority_key: ニュース怒り再現エージェント等、呼び出し元が既に
+        対象地域を特定している場合に渡す条例キーのヒント。入力文が特定の
+        機関に明確に言及していない場合の対象機関特定に使う（誤って無関係な
+        自治体・前回選択した自治体に紐づいてしまうことを防ぐ）。
+        """
+        from ordinance_data import AUTHORITIES, match_authority_by_text
+
+        hint_line = ""
+        if hint_authority_key and hint_authority_key in AUTHORITIES:
+            hint_name = AUTHORITIES[hint_authority_key].authority
+            hint_line = (
+                f"\nヒント: この入力はユーザーが「{hint_name}」に関心を持って調べた内容です。"
+                f"入力文中に別の具体的な機関（警察組織や他の自治体など）への明確な言及がない限り、"
+                f"target_authority は「{hint_name}」、target_authority_key は「{hint_authority_key}」としてください。\n"
+            )
+
         if self.genai_client:
             try:
                 prompt = f"""
@@ -543,7 +560,7 @@ class CivicLensAgent:
 以下の市民入力を分析し、指定のJSON形式で返してください。
 
 入力内容: {user_input}
-
+{hint_line}
 【出力スキーマ】
 - anger_level: 怒り・不満レベルの整数 (1〜10)
 - emotion_keywords: 市民が感じている感情キーワードのリスト (例: ["不信", "隠蔽", "怒り"])
@@ -573,6 +590,18 @@ JSONのみを返してください。
                     text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
                 text = text.strip()
                 data = json.loads(text)
+
+                # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
+                # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
+                if data.get("target_authority_key") not in AUTHORITIES:
+                    fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
+                    print(
+                        f"[analyze_anger] 不正なtarget_authority_key '{data.get('target_authority_key')}' を "
+                        f"'{fallback_key}' に補正しました"
+                    )
+                    data["target_authority_key"] = fallback_key
+                    data["target_authority"] = AUTHORITIES[fallback_key].authority
+
                 if "task_dag" not in data or not data["task_dag"]:
                     data["task_dag"] = build_task_dag(
                         user_input,

@@ -1092,6 +1092,8 @@
                 formData.append('link', item.link);
                 formData.append('summary', item.summary || '');
                 if (item.published) formData.append('published', item.published);
+                const region = document.getElementById('newsAgentRegion').value.trim();
+                if (region) formData.append('region', region);
 
                 const res = await fetch('/api/news-agent/analyze', { method: 'POST', body: formData });
                 if (!res.ok) {

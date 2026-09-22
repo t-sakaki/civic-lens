@@ -37,7 +37,7 @@ NEWS_ANALYSIS_PROMPT = """あなたは行政監視の視点を持つジャーナ
 以下のニュース記事を読み、一見すると市民が喜んでいる/好意的に報じられているように見える場合でも、
 税金の使途・意思決定過程の不透明さ・警備や動員の過剰さ・住民負担など、批判的に見た場合に
 疑問視されうる論点を洗い出してください。
-
+{region_line}
 【ニュース記事】
 {news_text}
 
@@ -55,13 +55,20 @@ class AngerReproductionAgent:
     def __init__(self):
         self._civic_agent = get_agent()
 
-    def generate(self, news_text: str) -> dict:
+    def generate(self, news_text: str, region: str | None = None) -> dict:
+        region_line = ""
+        if region:
+            region_line = (
+                f"\nこのニュースはユーザーが「{region}」について検索して見つけた記事です。"
+                f"記事本文が具体的な自治体名に触れていない場合でも、論点整理と擬似的な市民の声は"
+                f"「{region}」の住民・行政を念頭に置いて生成してください（他の地域や県全体の話にすり替えないこと）。\n"
+            )
         if GENAI_AVAILABLE and self._civic_agent.genai_client:
             try:
                 response = call_with_timeout(
                     self._civic_agent.genai_client.models.generate_content,
                     model="gemini-3.1-pro-preview",
-                    contents=NEWS_ANALYSIS_PROMPT.format(news_text=news_text),
+                    contents=NEWS_ANALYSIS_PROMPT.format(news_text=news_text, region_line=region_line),
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
                     timeout_s=25.0,
                 )
@@ -91,14 +98,21 @@ class AngerReproductionAgent:
         }
 
 
-def run_pipeline(news_text: str, source: dict | None = None) -> dict:
-    """怒り再現 → 開示請求の該当箇所生成までを実行する"""
+def run_pipeline(news_text: str, source: dict | None = None, region: str | None = None) -> dict:
+    """怒り再現 → 開示請求の該当箇所生成までを実行する
+
+    region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
+    無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
+    """
     anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text)
+    step1 = anger_agent.generate(news_text, region=region)
     pseudo_voice = step1["pseudo_citizen_voice"]
 
+    from ordinance_data import match_authority_by_text
+
+    hint_authority_key = match_authority_by_text(region, default="") if region else ""
     disclosure_agent = get_agent()
-    analysis = disclosure_agent.analyze_anger(pseudo_voice)
+    analysis = disclosure_agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key or None)
 
     disclosure_excerpt = {
         "対象機関": analysis.target_authority,
@@ -133,7 +147,7 @@ def run_pipeline_from_region(region: str, keyword: str | None = None) -> dict:
         )
 
     source = {"title": news_item.title, "link": news_item.link, "published": news_item.published}
-    return run_pipeline(news_item.as_text(), source=source)
+    return run_pipeline(news_item.as_text(), source=source, region=region)
 
 
 def main():
