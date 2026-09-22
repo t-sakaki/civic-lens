@@ -1,0 +1,100 @@
+"""News Anger Records
+
+ニュース怒り再現エージェントが分析した結果を記録として永続化し、
+一覧（履歴メニュー）で振り返れるようにする。あわせて、擬似的な市民の声への
+「いいね」等のリアクション（共感の記録）も保持する。
+
+永続化はデモ用途のためJSONファイルへのシンプルな読み書きとする。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+_STORE_PATH = Path(__file__).resolve().parent / "data" / "news_anger_records.json"
+_LOCK = threading.Lock()
+
+REACTION_TYPES = ["heart", "angry", "shock"]
+REACTION_EMOJI = {"heart": "❤️", "angry": "😡", "shock": "😳"}
+
+
+def make_news_id(link: str) -> str:
+    """ニュースリンクから安定した記録IDを生成する"""
+    return hashlib.sha256(link.encode("utf-8")).hexdigest()[:16]
+
+
+def _load() -> Dict[str, Any]:
+    if not _STORE_PATH.exists():
+        return {}
+    try:
+        with _STORE_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save(data: Dict[str, Any]) -> None:
+    _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _STORE_PATH.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def record_analysis(
+    news_id: str,
+    source_news: Dict[str, Any],
+    key_points: List[str],
+    pseudo_citizen_voice: str,
+    disclaimer: str,
+    anger_analysis: Dict[str, Any],
+) -> Dict[str, Any]:
+    """分析結果を記録する（既存レコードがあればリアクション数は維持して内容だけ更新）"""
+    with _LOCK:
+        data = _load()
+        existing = data.get(news_id)
+        reactions = existing["reactions"] if existing else {r: 0 for r in REACTION_TYPES}
+
+        record = {
+            "news_id": news_id,
+            "source_news": source_news,
+            "key_points": key_points,
+            "pseudo_citizen_voice": pseudo_citizen_voice,
+            "pseudo_citizen_voice_disclaimer": disclaimer,
+            "anger_analysis": anger_analysis,
+            "reactions": reactions,
+            "created_at": existing["created_at"] if existing else datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        data[news_id] = record
+        _save(data)
+        return record
+
+
+def add_reaction(news_id: str, reaction: str) -> Optional[Dict[str, Any]]:
+    """指定した記録にリアクション（共感）を1つ加算する"""
+    if reaction not in REACTION_TYPES:
+        reaction = "heart"
+    with _LOCK:
+        data = _load()
+        record = data.get(news_id)
+        if record is None:
+            return None
+        record.setdefault("reactions", {r: 0 for r in REACTION_TYPES})
+        record["reactions"][reaction] = record["reactions"].get(reaction, 0) + 1
+        data[news_id] = record
+        _save(data)
+        return record
+
+
+def get_record(news_id: str) -> Optional[Dict[str, Any]]:
+    return _load().get(news_id)
+
+
+def list_records(limit: int = 50) -> List[Dict[str, Any]]:
+    """新しい順に記録一覧を返す（履歴メニュー用）"""
+    data = _load()
+    records = sorted(data.values(), key=lambda r: r.get("updated_at", ""), reverse=True)
+    return records[:limit]

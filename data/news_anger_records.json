@@ -1,0 +1,277 @@
+{
+  "a851b5bc77832cf9": {
+    "news_id": "a851b5bc77832cf9",
+    "source_news": {
+      "title": "安城市 令和８年度 長寿犬表彰式に出席しました - 選挙ドットコム",
+      "link": "https://news.google.com/rss/articles/test-integration-1",
+      "published": "Mon, 21 Sep 2026 20:06:12 GMT"
+    },
+    "key_points": [
+      "華やかな式典・大会運営の裏で、税金や公金の具体的な使途が記事中で明示されていない",
+      "警備体制や動員規模が過剰でないか、その費用対効果が検証されていない",
+      "地域住民への負担（交通規制・騒音・生活道路の制限等）が記事では触れられていない"
+    ],
+    "pseudo_citizen_voice": "ニュースだと成功したイベントみたいに報じられてるけど、実際近くに住んでる身としては交通規制もすごかったし、警備にどれだけ税金使ったのか全然説明がない。喜んでる人だけがニュースになってるだけで、こっちは正直不満しかない。ちゃんと使ったお金の内訳を見せてほしい。",
+    "pseudo_citizen_voice_disclaimer": "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。実在の人物の発言として引用・転載しないでください。",
+    "anger_analysis": {
+      "anger_level": 5,
+      "emotion_keywords": [
+        "怒り",
+        "不信"
+      ],
+      "target_authority": "安城市",
+      "target_authority_key": "anjo-city",
+      "pain_summary": "ニュースだと成功したイベントみたいに報じられてるけど、実際近くに住んでる身としては交通規制もすごかったし、警備にどれだけ税金使ったのか全然説明がない。喜んでる人だけがニュースになってるだけで、こっちは",
+      "specific_documents_requested": [
+        "行政文書一式"
+      ],
+      "legal_basis": "安城市情報公開条例",
+      "next_action": "disclosure_request",
+      "urgency": "normal",
+      "recommended_response_time": "30日以内",
+      "task_dag": {
+        "tasks": [
+          {
+            "id": "task-pain",
+            "name": "争点原子化 & ペイン抽出",
+            "description": "市民の自然言語入力から行政問題の争点を特定し不可分タスク(Atomic Task)へ分解",
+            "dependencies": [],
+            "status": "completed",
+            "acceptance_criteria": "市民の不満要約および対象文書群が客観的テキストとして抽出されていること"
+          },
+          {
+            "id": "task-ordinance",
+            "name": "条例 & 法的根拠マッチング",
+            "description": "安城市の保有文書公開条例および所管部署の照合",
+            "dependencies": [
+              "task-pain"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "管轄自治体条例の条文番号（例: 第7条）および開示義務規定がマッピングされていること"
+          },
+          {
+            "id": "task-critique",
+            "name": "メタ認知批評 & 行政逃げ道検知",
+            "description": "行政側の『不存在』『事務支障』逃げ道を事前自己批評し、請求文書を実務簿冊レベルに補正",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "弱点検知（SPOF）、期限延長リスク、代案Bの策定が完了していること"
+          },
+          {
+            "id": "task-draft",
+            "name": "開示請求書 自動策定",
+            "description": "補正後の簿冊名と理由を盛り込んだ正式な情報公開請求書の策定",
+            "dependencies": [
+              "task-critique"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "開示請求書マークダウンが生成され、対象文書および請求理由が網羅されていること"
+          },
+          {
+            "id": "task-routing",
+            "name": "窓口特定 & 経路案内 (駅すぱあと)",
+            "description": "安城市情報公開窓口への公共交通アクセスを案内",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "最寄り駅および市役所・警察窓口の所在地・電話番号が特定されていること"
+          },
+          {
+            "id": "task-hitl",
+            "name": "Human-in-the-Loop 市民承認 & 戦略選択",
+            "description": "市民が『早期開示重視』または『徹底追求重視』の戦略を選択し、最終意思決定を行う",
+            "dependencies": [
+              "task-draft"
+            ],
+            "status": "in_progress",
+            "acceptance_criteria": "市民（ユーザー）によるプラン選択および提出意思確認"
+          }
+        ],
+        "execution_order": [
+          "task-pain",
+          "task-ordinance",
+          "task-critique",
+          "task-draft",
+          "task-routing",
+          "task-hitl"
+        ]
+      },
+      "critique": {
+        "vulnerability": "【弱点検知】警察関係文書は公安委員会・警察本部長の裁量が広く、『捜査手法の露見』や『公共の安全』を理由に包括的不開示（存否応答拒否）を主張されるリスクが極めて高いです。",
+        "risk_prediction": "【リスク予測】90日以内の審査請求（国家公安委員会/県公安委員会宛）への移行を前提とした書式準備が必要です。",
+        "verifiability": "安城市情報公開条例に基づく開示請求権者の要件（市民・利害関係者・何人も請求可能規定）を満たしており、法的・実務的書式要件を充足しています。",
+        "critique_summary": "AIによるメタ認知自己批評を実施：行政側の常套的な不開示・不存在逃げ道を先回り検知し、公文書管理上の簿冊名へと自動補強を行いました。",
+        "confidence_score": 0.91,
+        "improvements_applied": [
+          "捜査記録そのものではなく『捜査終結後の処分結果通知書・統計記録』等へ請求対象を精査",
+          "不開示前提の審査請求事前ドラフトを同時スタンバイ"
+        ]
+      },
+      "safeguard_options": [
+        {
+          "id": "option-fast",
+          "name": "プランA：迅速開示重視（推奨）",
+          "description": "決裁文書・報告書など核心的文書に限定し、14日以内の早期開示決定を狙う（延長リスク低）",
+          "badge": "スピード重視"
+        },
+        {
+          "id": "option-thorough",
+          "name": "プランB：網羅的徹底追及",
+          "description": "領収書・精算書・関連メール含む全関係文書を一括請求（期間延長の可能性あり）",
+          "badge": "徹底調査"
+        }
+      ],
+      "is_mock": true
+    },
+    "reactions": {
+      "heart": 0,
+      "angry": 0,
+      "shock": 0
+    },
+    "created_at": "2026-09-22T10:14:26.935279+00:00",
+    "updated_at": "2026-09-22T10:14:26.935315+00:00"
+  },
+  "7f66b13895b5ee0a": {
+    "news_id": "7f66b13895b5ee0a",
+    "source_news": {
+      "title": "近代五種・鈴木結理選手が13位 愛知県出身、「ちょっと焦った」 - 中日新聞Web",
+      "link": "https://news.google.com/rss/articles/test-integration-suzuki",
+      "published": "Sun, 20 Sep 2026 03:10:56 GMT"
+    },
+    "key_points": [
+      "地元出身選手の活躍に便乗した、安城市によるパブリックビューイングや懸垂幕設置などのイベントにかかる公金支出の妥当性と、特定個人・競技に対する支援基準の不透明さ",
+      "市が主導する応援イベントにおける、安城市職員の業務時間外の動員や、地元小中学生の「教育の一環」と称した事実上の強制参加のリスク",
+      "「地元選手の活躍」を大義名分とした、安城市内の既存スポーツ施設の過剰な改修や新規整備構想への発展による、将来的な税金負担増加の懸念"
+    ],
+    "pseudo_citizen_voice": "鈴木選手の活躍は純粋にすごいと思うけど、安城市が市役所に巨大な垂れ幕を出したり、パブリックビューイングに職員を動員してるのを見ると正直モヤモヤする。税金を使って市のPRに便乗するお金があるなら、市内の道路の修繕とか子育て支援に回してほしい。特定の選手だけ特別扱いする基準も不透明だし、これを口実にスポーツ施設を無駄に改修するとか言い出さないか心配。選手の順位より、私たちの苦しい生活の方を心配してよ。",
+    "pseudo_citizen_voice_disclaimer": "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。実在の人物の発言として引用・転載しないでください。",
+    "anger_analysis": {
+      "anger_level": 7,
+      "emotion_keywords": [
+        "不満",
+        "モヤモヤ",
+        "疑問",
+        "不安"
+      ],
+      "target_authority": "安城市",
+      "target_authority_key": "anjo-city",
+      "pain_summary": "特定のスポーツ選手を応援するための垂れ幕設置やパブリックビューイングへの税金投入や職員動員に対する不満と、特別扱いの基準の不透明さ、今後のスポーツ施設の無駄な改修への懸念。",
+      "specific_documents_requested": [
+        "垂れ幕の制作・設置にかかる起案文書および支出負担行為決議書",
+        "パブリックビューイング開催にかかる企画書および費用内訳書",
+        "パブリックビューイングへの市職員の動員・配置や勤務形態がわかる文書",
+        "特定のスポーツ選手の応援や表彰等に関する基準・要綱"
+      ],
+      "legal_basis": "安城市情報公開条例",
+      "next_action": "disclosure_request",
+      "urgency": "normal",
+      "recommended_response_time": "14日以内",
+      "task_dag": {
+        "tasks": [
+          {
+            "id": "task-pain",
+            "name": "争点原子化 & ペイン抽出",
+            "description": "市民の自然言語入力から行政問題の争点を特定し不可分タスク(Atomic Task)へ分解",
+            "dependencies": [],
+            "status": "completed",
+            "acceptance_criteria": "市民の不満要約および対象文書群が客観的テキストとして抽出されていること"
+          },
+          {
+            "id": "task-ordinance",
+            "name": "条例 & 法的根拠マッチング",
+            "description": "安城市の保有文書公開条例および所管部署の照合",
+            "dependencies": [
+              "task-pain"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "管轄自治体条例の条文番号（例: 第7条）および開示義務規定がマッピングされていること"
+          },
+          {
+            "id": "task-critique",
+            "name": "メタ認知批評 & 行政逃げ道検知",
+            "description": "行政側の『不存在』『事務支障』逃げ道を事前自己批評し、請求文書を実務簿冊レベルに補正",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "弱点検知（SPOF）、期限延長リスク、代案Bの策定が完了していること"
+          },
+          {
+            "id": "task-draft",
+            "name": "開示請求書 自動策定",
+            "description": "補正後の簿冊名と理由を盛り込んだ正式な情報公開請求書の策定",
+            "dependencies": [
+              "task-critique"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "開示請求書マークダウンが生成され、対象文書および請求理由が網羅されていること"
+          },
+          {
+            "id": "task-routing",
+            "name": "窓口特定 & 経路案内 (駅すぱあと)",
+            "description": "安城市情報公開窓口への公共交通アクセスを案内",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "最寄り駅および市役所・警察窓口の所在地・電話番号が特定されていること"
+          },
+          {
+            "id": "task-hitl",
+            "name": "Human-in-the-Loop 市民承認 & 戦略選択",
+            "description": "市民が『早期開示重視』または『徹底追求重視』の戦略を選択し、最終意思決定を行う",
+            "dependencies": [
+              "task-draft"
+            ],
+            "status": "in_progress",
+            "acceptance_criteria": "市民（ユーザー）によるプラン選択および提出意思確認"
+          }
+        ],
+        "execution_order": [
+          "task-pain",
+          "task-ordinance",
+          "task-critique",
+          "task-draft",
+          "task-routing",
+          "task-hitl"
+        ]
+      },
+      "critique": {
+        "vulnerability": "【弱点検知】『鈴木選手の活躍は純粋にすごいと思うけど、安城市が市役所に巨大な垂れ幕を出したり、...』のような包括的表現では、窓口から『文書の特定が不十分』として補正命令（手続きの引き延ばし）を受けるリスクがあります。",
+        "risk_prediction": "【リスク予測】文書特定不足による補正命令リスク（約40%）。代案Bとして、所管部署の文書分類表（ファイル管理簿）の事前開示請求を組み合わせます。",
+        "verifiability": "安城市情報公開条例に基づく開示請求権者の要件（市民・利害関係者・何人も請求可能規定）を満たしており、法的・実務的書式要件を充足しています。",
+        "critique_summary": "AIによるメタ認知自己批評を実施：行政側の常套的な不開示・不存在逃げ道を先回り検知し、公文書管理上の簿冊名へと自動補強を行いました。",
+        "confidence_score": 0.91,
+        "improvements_applied": [
+          "起案文書・決裁文書・伺書など行政実務上の正式簿冊名を補正挿入",
+          "文書管理台帳に基づく特定ロジックを反映"
+        ]
+      },
+      "safeguard_options": [
+        {
+          "id": "option-fast",
+          "name": "プランA：迅速開示重視（推奨）",
+          "description": "決裁文書・報告書など核心的文書に限定し、14日以内の早期開示決定を狙う（延長リスク低）",
+          "badge": "スピード重視"
+        },
+        {
+          "id": "option-thorough",
+          "name": "プランB：網羅的徹底追及",
+          "description": "領収書・精算書・関連メール含む全関係文書を一括請求（期間延長の可能性あり）",
+          "badge": "徹底調査"
+        }
+      ],
+      "is_mock": false
+    },
+    "reactions": {
+      "heart": 0,
+      "angry": 0,
+      "shock": 0
+    },
+    "created_at": "2026-09-22T10:15:59.609384+00:00",
+    "updated_at": "2026-09-22T10:15:59.609405+00:00"
+  }
+}
