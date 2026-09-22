@@ -61,7 +61,7 @@ from auth import (
     generate_siwe_nonce
 )
 from news_collector_agent import get_news_collector_agent
-from news_anger_agent import AngerReproductionAgent
+from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
 from location_agent import get_location_agent
 
 
@@ -272,6 +272,7 @@ async def run_news_anger_agent(
         },
         "key_points": step1["key_points"],
         "pseudo_citizen_voice": pseudo_voice,
+        "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
         "anger_analysis": anger_analysis.model_dump(),
     }
 

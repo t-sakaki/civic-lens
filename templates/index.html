@@ -110,7 +110,7 @@
                 <div class="bg-rose-50 border border-rose-200 rounded-md p-4">
                     <h3 class="font-semibold text-rose-900 mb-2">🗣️ 再現された市民の声（AIによる疑似生成）</h3>
                     <p id="newsAgentVoice" class="text-sm text-rose-900 leading-relaxed"></p>
-                    <p class="text-xs text-rose-500 mt-2">※ 実在の個人の発言ではなく、論点を代弁するためにAIが生成したフィクションです。</p>
+                    <p id="newsAgentVoiceDisclaimer" class="text-xs text-rose-500 mt-2">※ 実在の個人の発言ではなく、論点を代弁するためにAIが生成したフィクションです。</p>
                 </div>
             </div>
         </section>
@@ -1019,6 +1019,9 @@
                 });
 
                 document.getElementById('newsAgentVoice').textContent = data.pseudo_citizen_voice;
+                if (data.pseudo_citizen_voice_disclaimer) {
+                    document.getElementById('newsAgentVoiceDisclaimer').textContent = '※ ' + data.pseudo_citizen_voice_disclaimer;
+                }
                 document.getElementById('newsAgentResult').classList.remove('hidden');
 
                 // 既存の「怒りを分析する」フロー（Step1〜アクション選択）に接続

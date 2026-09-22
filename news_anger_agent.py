@@ -24,6 +24,13 @@ import json
 from agent import get_agent, GENAI_AVAILABLE
 from google.genai import types  # type: ignore
 from news_collector_agent import get_news_collector_agent, NewsItem
+from timeout_utils import call_with_timeout
+
+
+PSEUDO_VOICE_DISCLAIMER = (
+    "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。"
+    "実在の人物の発言として引用・転載しないでください。"
+)
 
 
 NEWS_ANALYSIS_PROMPT = """あなたは行政監視の視点を持つジャーナリストAIです。
@@ -51,10 +58,12 @@ class AngerReproductionAgent:
     def generate(self, news_text: str) -> dict:
         if GENAI_AVAILABLE and self._civic_agent.genai_client:
             try:
-                response = self._civic_agent.genai_client.models.generate_content(
+                response = call_with_timeout(
+                    self._civic_agent.genai_client.models.generate_content,
                     model="gemini-3.1-pro-preview",
                     contents=NEWS_ANALYSIS_PROMPT.format(news_text=news_text),
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
+                    timeout_s=25.0,
                 )
                 text = response.text.strip()
                 if text.startswith("```"):
@@ -102,6 +111,7 @@ def run_pipeline(news_text: str, source: dict | None = None) -> dict:
     result = {
         "key_points": step1["key_points"],
         "pseudo_citizen_voice": pseudo_voice,
+        "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
         "disclosure_request_excerpt": disclosure_excerpt,
         "anger_level": analysis.anger_level,
         "is_mock": analysis.is_mock,

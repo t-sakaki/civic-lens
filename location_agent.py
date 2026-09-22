@@ -12,6 +12,7 @@ GPS（緯度経度）や住所文字列から、ニュース怒り再現エー�
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -19,6 +20,12 @@ import requests
 
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "civic-lens-demo/1.0"
+
+# Nominatim(OSM)の利用規約は低頻度リクエストを前提としているため、
+# 同一地点（およそ市区町村スケールの誤差範囲）への再問い合わせをキャッシュして呼び出し回数を抑える。
+_CACHE_TTL_SECONDS = 60 * 60  # 1時間
+_CACHE_COORD_PRECISION = 2  # 小数点2桁 ≒ 約1.1km四方に丸めてキャッシュキー化
+_reverse_geocode_cache: dict[tuple[float, float], tuple[float, Optional["RegionGuess"]]] = {}
 
 
 @dataclass
@@ -35,6 +42,18 @@ class LocationAgent:
         self.timeout = timeout
 
     def region_from_coordinates(self, lat: float, lon: float) -> Optional[RegionGuess]:
+        cache_key = (round(lat, _CACHE_COORD_PRECISION), round(lon, _CACHE_COORD_PRECISION))
+        cached = _reverse_geocode_cache.get(cache_key)
+        if cached is not None:
+            cached_at, cached_guess = cached
+            if time.time() - cached_at < _CACHE_TTL_SECONDS:
+                return cached_guess
+
+        guess = self._fetch_region_from_coordinates(lat, lon)
+        _reverse_geocode_cache[cache_key] = (time.time(), guess)
+        return guess
+
+    def _fetch_region_from_coordinates(self, lat: float, lon: float) -> Optional[RegionGuess]:
         try:
             resp = requests.get(
                 NOMINATIM_REVERSE_URL,

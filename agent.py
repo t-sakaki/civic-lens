@@ -11,6 +11,8 @@ from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
+from timeout_utils import call_with_timeout, GeminiCallTimeout
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Google GenAI SDK (Vertex AI / Gemini API 統合)
@@ -556,12 +558,14 @@ class CivicLensAgent:
 
 JSONのみを返してください。
 """
-                response = self.genai_client.models.generate_content(
+                response = call_with_timeout(
+                    self.genai_client.models.generate_content,
                     model="gemini-3.1-pro-preview",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                     ),
+                    timeout_s=25.0,
                 )
                 text = response.text.strip()
                 if text.startswith("```"):
@@ -619,12 +623,14 @@ JSONのみを返してください。
 
 JSONのみを出力してください。
 """
-                response = self.genai_client.models.generate_content(
+                response = call_with_timeout(
+                    self.genai_client.models.generate_content,
                     model="gemini-3.1-pro-preview",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                     ),
+                    timeout_s=25.0,
                 )
                 text = response.text.strip()
                 data = json.loads(text.strip())
