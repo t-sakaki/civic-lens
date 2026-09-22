@@ -6,7 +6,7 @@ import os
 import io
 import base64
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import uuid
 from dotenv import load_dotenv
@@ -63,6 +63,7 @@ from auth import (
 from news_collector_agent import get_news_collector_agent
 from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
 from location_agent import get_location_agent
+from news_reactions import make_news_id, record_analysis, add_reaction, list_records
 
 
 app = FastAPI(
@@ -222,27 +223,45 @@ async def region_from_location(
     }
 
 
-@app.post("/api/news-agent/run")
-async def run_news_anger_agent(
-    region: str = Form(...),
-    keyword: Optional[str] = Form(None),
+@app.get("/api/news-agent/list")
+async def list_news_for_region(
+    region: str,
+    keyword: Optional[str] = None,
+    max_items: int = 8,
 ):
-    """ニュース怒り再現パイプライン: 地域名からニュースを自動収集し、
-    論点整理・擬似市民の声・怒り分析（画面遷移で使う既存フォーマット）まで生成する。
-
-    エージェント構成（AGENTS.md参照）:
-      NewsCollectorAgent → AngerReproductionAgent → 怒り分析(agent.analyze_anger)
+    """指定地域のニュースを複数件取得する（NewsCollectorAgent）。
+    1件だけ自動選択するのではなく、ユーザーが記事を選んで分析できるようにする一覧表示用。
     """
     collector = get_news_collector_agent()
-    news_item = collector.fetch_top_news(region, extra_keywords=[keyword] if keyword else None)
-    if news_item is None:
+    items = collector.fetch_news(
+        region,
+        extra_keywords=[keyword] if keyword else None,
+        max_items=max(1, min(max_items, 20)),
+    )
+    if not items:
         raise HTTPException(
             404,
             f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
         )
 
+    return {
+        "items": [
+            {
+                "news_id": make_news_id(item.link),
+                "title": item.title,
+                "link": item.link,
+                "published": item.published,
+                "summary": item.summary,
+            }
+            for item in items
+        ]
+    }
+
+
+def _analyze_news_text(news_text: str) -> Dict[str, Any]:
+    """怒り再現→開示請求分析の共通処理（1記事分）"""
     anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_item.as_text())
+    step1 = anger_agent.generate(news_text)
     pseudo_voice = step1["pseudo_citizen_voice"]
 
     agent = get_agent()
@@ -265,15 +284,85 @@ async def run_news_anger_agent(
         )
 
     return {
+        "key_points": step1["key_points"],
+        "pseudo_citizen_voice": pseudo_voice,
+        "anger_analysis": anger_analysis,
+    }
+
+
+@app.post("/api/news-agent/analyze")
+async def analyze_news_item(
+    title: str = Form(...),
+    link: str = Form(...),
+    summary: str = Form(""),
+    published: Optional[str] = Form(None),
+):
+    """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
+
+    エージェント構成（AGENTS.md参照）:
+      AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
+    """
+    news_text = "\n".join([p for p in [title, summary] if p])
+    analyzed = _analyze_news_text(news_text)
+
+    news_id = make_news_id(link)
+    source_news = {"title": title, "link": link, "published": published}
+    record = record_analysis(
+        news_id=news_id,
+        source_news=source_news,
+        key_points=analyzed["key_points"],
+        pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
+        disclaimer=PSEUDO_VOICE_DISCLAIMER,
+        anger_analysis=analyzed["anger_analysis"].model_dump(),
+    )
+    return record
+
+
+@app.post("/api/news-agent/react")
+async def react_to_news_item(
+    news_id: str = Form(...),
+    reaction: str = Form("heart"),
+):
+    """擬似市民の声への共感リアクション（❤️等）を記録する"""
+    record = add_reaction(news_id, reaction)
+    if record is None:
+        raise HTTPException(404, "対象の記録が見つかりませんでした。先に記事を分析してください。")
+    return record
+
+
+@app.get("/api/news-agent/history")
+async def get_news_agent_history(limit: int = 50):
+    """これまでに分析したニュースの履歴一覧（新しい順）"""
+    return {"items": list_records(limit=limit)}
+
+
+@app.post("/api/news-agent/run")
+async def run_news_anger_agent(
+    region: str = Form(...),
+    keyword: Optional[str] = Form(None),
+):
+    """[後方互換用] 地域名から最新1件のニュースを自動選択して分析する。
+    通常は /api/news-agent/list → /api/news-agent/analyze の2段フローを使う。
+    """
+    collector = get_news_collector_agent()
+    news_item = collector.fetch_top_news(region, extra_keywords=[keyword] if keyword else None)
+    if news_item is None:
+        raise HTTPException(
+            404,
+            f"'{region}' に関するニュースが見つかりませんでした。地域名やキーワードを変えてお試しください。",
+        )
+
+    analyzed = _analyze_news_text(news_item.as_text())
+    return {
         "source_news": {
             "title": news_item.title,
             "link": news_item.link,
             "published": news_item.published,
         },
-        "key_points": step1["key_points"],
-        "pseudo_citizen_voice": pseudo_voice,
+        "key_points": analyzed["key_points"],
+        "pseudo_citizen_voice": analyzed["pseudo_citizen_voice"],
         "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
-        "anger_analysis": anger_analysis.model_dump(),
+        "anger_analysis": analyzed["anger_analysis"].model_dump(),
     }
 
 

@@ -80,8 +80,8 @@
         <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in border-2 border-rose-200">
             <h2 class="text-2xl font-semibold mb-2 text-gray-800">📰 怒りの代理人AI — ニュースから怒りを再現する</h2>
             <p class="text-sm text-gray-600 mb-4">
-                地域名を入れると、AIエージェントがその地域の自治体・警察・公的行事に関するニュースをネットから自動収集し、
-                一見好意的に見えるニュースの裏にある論点を読み解いて、市民の怒りの声を再現します。
+                地域名を入れると、AIエージェントがその地域の自治体・警察・公的行事に関するニュースを複数件ネットから自動収集します。
+                気になる記事を選ぶと、一見好意的に見えるニュースの裏にある論点を読み解いて、市民の怒りの声を再現します。
             </p>
             <div class="grid md:grid-cols-2 gap-3 mb-2">
                 <input id="newsAgentRegion" type="text" placeholder="対象地域（例: 名古屋市）"
@@ -93,10 +93,17 @@
                 📍 現在地から対象地域を自動入力
             </button>
             <p id="newsAgentGeoStatus" class="text-xs text-gray-500 mb-3 -mt-2"></p>
-            <button id="newsAgentRunBtn" class="w-full bg-gradient-to-r from-rose-500 to-red-600 text-white px-6 py-3 rounded-md font-semibold hover:from-rose-600 hover:to-red-700">
-                📰 ニュースを取得して怒りを再現する
+            <button id="newsAgentListBtn" class="w-full bg-gradient-to-r from-rose-500 to-red-600 text-white px-6 py-3 rounded-md font-semibold hover:from-rose-600 hover:to-red-700">
+                📰 ニュース一覧を取得する
             </button>
 
+            <!-- ニュース一覧（メニュー） -->
+            <div id="newsAgentListSection" class="hidden mt-5">
+                <h3 class="font-semibold text-gray-800 mb-2">📋 ニュース一覧（気になる記事を選んでください）</h3>
+                <div id="newsAgentListItems" class="space-y-2"></div>
+            </div>
+
+            <!-- 選択した記事の分析結果 -->
             <div id="newsAgentResult" class="hidden mt-5">
                 <div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-3">
                     <div class="text-xs text-gray-500 mb-1">元ニュース</div>
@@ -111,7 +118,18 @@
                     <h3 class="font-semibold text-rose-900 mb-2">🗣️ 再現された市民の声（AIによる疑似生成）</h3>
                     <p id="newsAgentVoice" class="text-sm text-rose-900 leading-relaxed"></p>
                     <p id="newsAgentVoiceDisclaimer" class="text-xs text-rose-500 mt-2">※ 実在の個人の発言ではなく、論点を代弁するためにAIが生成したフィクションです。</p>
+                    <div id="newsAgentReactions" class="flex items-center gap-3 mt-3 pt-3 border-t border-rose-200"></div>
                 </div>
+            </div>
+
+            <!-- 履歴メニュー -->
+            <div class="mt-6 pt-4 border-t border-gray-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-semibold text-gray-800">🕘 履歴（これまでに再現した怒り）</h3>
+                    <button id="newsAgentHistoryRefreshBtn" type="button" class="text-xs text-blue-600 hover:underline">🔄 更新</button>
+                </div>
+                <div id="newsAgentHistoryItems" class="space-y-2 max-h-96 overflow-y-auto"></div>
+                <p id="newsAgentHistoryEmpty" class="text-xs text-gray-400">まだ履歴はありません。</p>
             </div>
         </section>
 
@@ -981,8 +999,122 @@
             );
         });
 
-        // 怒りの代理人AI：ニュースから怒りを自動再現
-        document.getElementById('newsAgentRunBtn').addEventListener('click', async () => {
+        // 怒りの代理人AI：ニュース一覧取得 → 選択 → 分析 → リアクション → 履歴
+        const REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
+        let currentNewsList = []; // news_id -> item（一覧取得結果のキャッシュ）
+
+        function renderReactions(containerId, newsId, reactions) {
+            const el = document.getElementById(containerId);
+            el.innerHTML = '';
+            Object.keys(REACTION_EMOJI).forEach(type => {
+                const count = (reactions && reactions[type]) || 0;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'inline-flex items-center gap-1 text-sm bg-white border border-rose-200 rounded-full px-3 py-1 hover:bg-rose-100 transition';
+                btn.innerHTML = `<span>${REACTION_EMOJI[type]}</span><span class="font-semibold">${count}</span>`;
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('news_id', newsId);
+                        formData.append('reaction', type);
+                        const res = await fetch('/api/news-agent/react', { method: 'POST', body: formData });
+                        if (!res.ok) throw new Error('reaction failed');
+                        const record = await res.json();
+                        renderReactions(containerId, newsId, record.reactions);
+                        loadNewsAgentHistory();
+                    } catch (err) {
+                        console.error(err);
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+                el.appendChild(btn);
+            });
+        }
+
+        function displayNewsAgentAnalysis(record) {
+            document.getElementById('newsAgentSourceLink').href = record.source_news.link;
+            document.getElementById('newsAgentSourceLink').textContent = record.source_news.title;
+            document.getElementById('newsAgentSourcePublished').textContent = record.source_news.published || '';
+
+            const kpList = document.getElementById('newsAgentKeyPoints');
+            kpList.innerHTML = '';
+            record.key_points.forEach(p => {
+                const li = document.createElement('li');
+                li.textContent = p;
+                kpList.appendChild(li);
+            });
+
+            document.getElementById('newsAgentVoice').textContent = record.pseudo_citizen_voice;
+            if (record.pseudo_citizen_voice_disclaimer) {
+                document.getElementById('newsAgentVoiceDisclaimer').textContent = '※ ' + record.pseudo_citizen_voice_disclaimer;
+            }
+            renderReactions('newsAgentReactions', record.news_id, record.reactions);
+            document.getElementById('newsAgentResult').classList.remove('hidden');
+
+            // 既存の「怒りを分析する」フロー（Step1〜アクション選択）に接続
+            document.getElementById('freeInputSection').classList.remove('hidden');
+            document.getElementById('userInput').value = record.pseudo_citizen_voice;
+            if (record.anger_analysis.target_authority_key) {
+                document.getElementById('targetAuthority').value = record.anger_analysis.target_authority_key;
+            }
+
+            displayAnalysis({ anger_analysis: record.anger_analysis, emotion_is_mock: null });
+            document.getElementById('resultSection').classList.remove('hidden');
+            document.getElementById('actionSection').classList.remove('hidden');
+            document.getElementById('newsAgentResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function analyzeNewsItem(item, btnEl) {
+            if (btnEl) { btnEl.disabled = true; btnEl.textContent = '🔄 分析中...（数十秒かかる場合があります）'; }
+            try {
+                const formData = new FormData();
+                formData.append('title', item.title);
+                formData.append('link', item.link);
+                formData.append('summary', item.summary || '');
+                if (item.published) formData.append('published', item.published);
+
+                const res = await fetch('/api/news-agent/analyze', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `HTTP ${res.status}`);
+                }
+                const record = await res.json();
+                displayNewsAgentAnalysis(record);
+                loadNewsAgentHistory();
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            } finally {
+                if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'この記事の怒りを再現する →'; }
+            }
+        }
+
+        function renderNewsAgentList(items) {
+            currentNewsList = items;
+            const container = document.getElementById('newsAgentListItems');
+            container.innerHTML = '';
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'border border-gray-200 rounded-md p-3 flex items-start justify-between gap-3 hover:bg-gray-50';
+                card.innerHTML = `
+                    <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-800">${item.title}</div>
+                        <div class="text-xs text-gray-400 mt-1">${item.published || ''}</div>
+                    </div>
+                `;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'flex-shrink-0 text-xs bg-rose-500 text-white px-3 py-2 rounded-md hover:bg-rose-600 whitespace-nowrap';
+                btn.textContent = 'この記事の怒りを再現する →';
+                btn.addEventListener('click', () => analyzeNewsItem(item, btn));
+                card.appendChild(btn);
+                container.appendChild(card);
+            });
+            document.getElementById('newsAgentListSection').classList.remove('hidden');
+        }
+
+        document.getElementById('newsAgentListBtn').addEventListener('click', async () => {
             const region = document.getElementById('newsAgentRegion').value.trim();
             const keyword = document.getElementById('newsAgentKeyword').value.trim();
             if (!region) {
@@ -990,58 +1122,69 @@
                 return;
             }
 
-            const btn = document.getElementById('newsAgentRunBtn');
+            const btn = document.getElementById('newsAgentListBtn');
             btn.disabled = true;
-            btn.textContent = '🔄 ニュースを収集し、怒りを分析中...（数十秒かかる場合があります）';
-
-            const formData = new FormData();
-            formData.append('region', region);
-            if (keyword) formData.append('keyword', keyword);
+            btn.textContent = '🔄 ニュースを収集中...';
 
             try {
-                const res = await fetch('/api/news-agent/run', { method: 'POST', body: formData });
+                const params = new URLSearchParams({ region });
+                if (keyword) params.append('keyword', keyword);
+                const res = await fetch(`/api/news-agent/list?${params.toString()}`);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);
                 }
                 const data = await res.json();
-
-                document.getElementById('newsAgentSourceLink').href = data.source_news.link;
-                document.getElementById('newsAgentSourceLink').textContent = data.source_news.title;
-                document.getElementById('newsAgentSourcePublished').textContent = data.source_news.published || '';
-
-                const kpList = document.getElementById('newsAgentKeyPoints');
-                kpList.innerHTML = '';
-                data.key_points.forEach(p => {
-                    const li = document.createElement('li');
-                    li.textContent = p;
-                    kpList.appendChild(li);
-                });
-
-                document.getElementById('newsAgentVoice').textContent = data.pseudo_citizen_voice;
-                if (data.pseudo_citizen_voice_disclaimer) {
-                    document.getElementById('newsAgentVoiceDisclaimer').textContent = '※ ' + data.pseudo_citizen_voice_disclaimer;
-                }
-                document.getElementById('newsAgentResult').classList.remove('hidden');
-
-                // 既存の「怒りを分析する」フロー（Step1〜アクション選択）に接続
-                document.getElementById('freeInputSection').classList.remove('hidden');
-                document.getElementById('userInput').value = data.pseudo_citizen_voice;
-                if (data.anger_analysis.target_authority_key) {
-                    document.getElementById('targetAuthority').value = data.anger_analysis.target_authority_key;
-                }
-
-                displayAnalysis({ anger_analysis: data.anger_analysis, emotion_is_mock: null });
-                document.getElementById('resultSection').classList.remove('hidden');
-                document.getElementById('actionSection').classList.remove('hidden');
-                document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                renderNewsAgentList(data.items);
+                document.getElementById('newsAgentListSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (err) {
                 alert('エラー: ' + err.message);
             } finally {
                 btn.disabled = false;
-                btn.textContent = '📰 ニュースを取得して怒りを再現する';
+                btn.textContent = '📰 ニュース一覧を取得する';
             }
         });
+
+        // 履歴メニュー
+        async function loadNewsAgentHistory() {
+            try {
+                const res = await fetch('/api/news-agent/history');
+                if (!res.ok) return;
+                const data = await res.json();
+                const container = document.getElementById('newsAgentHistoryItems');
+                const emptyMsg = document.getElementById('newsAgentHistoryEmpty');
+                container.innerHTML = '';
+
+                if (!data.items || data.items.length === 0) {
+                    emptyMsg.classList.remove('hidden');
+                    return;
+                }
+                emptyMsg.classList.add('hidden');
+
+                data.items.forEach(record => {
+                    const reactionSummary = Object.keys(REACTION_EMOJI)
+                        .map(type => `${REACTION_EMOJI[type]}${(record.reactions && record.reactions[type]) || 0}`)
+                        .join(' ');
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'w-full text-left border border-gray-200 rounded-md p-3 hover:bg-gray-50 flex items-center justify-between gap-3';
+                    row.innerHTML = `
+                        <div class="min-w-0">
+                            <div class="text-sm font-medium text-gray-800 truncate">${record.source_news.title}</div>
+                            <div class="text-xs text-gray-500 mt-1">${record.anger_analysis.target_authority || ''} ・ 怒りレベル${record.anger_analysis.anger_level}/10</div>
+                        </div>
+                        <div class="flex-shrink-0 text-xs text-gray-500">${reactionSummary}</div>
+                    `;
+                    row.addEventListener('click', () => displayNewsAgentAnalysis(record));
+                    container.appendChild(row);
+                });
+            } catch (err) {
+                console.error('履歴取得エラー', err);
+            }
+        }
+
+        document.getElementById('newsAgentHistoryRefreshBtn').addEventListener('click', loadNewsAgentHistory);
+        loadNewsAgentHistory();
 
         // 怒り分析
         document.getElementById('analyzeBtn').addEventListener('click', async () => {

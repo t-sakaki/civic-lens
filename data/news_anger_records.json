@@ -1,0 +1,283 @@
+{
+  "149c2c9af2c7d12a": {
+    "news_id": "149c2c9af2c7d12a",
+    "source_news": {
+      "title": "名古屋上空をブルーインパルスが飛行 アジア大会開幕にあわせ - news.web.nhk",
+      "link": "https://news.google.com/rss/articles/CBMiX0FVX3lxTFA3TkVaVHNfOW0wS3hHMEZzQkNJRUZVdmdPRUloTjNjc2xlN0Y4cXJ0VUZjcUdnYnBKUjJVZXVDeE1XRkxUTDl1aGV4TklrYmItSE5WeWdidndldFlTb1Z3?oc=5",
+      "published": "Sat, 19 Sep 2026 06:52:57 GMT"
+    },
+    "key_points": [
+      "税金の使途と費用対効果：アジア大会の機運醸成という名目で多額の燃料費や運用費、周辺警備費に税金が投じられているが、福祉や生活支援などより優先すべき課題があるのではないか。",
+      "騒音被害と安全リスク：人口密集地である名古屋市街地上空を編隊飛行することによる深刻な騒音被害や、万が一の事故・落下物リスクに対する住民への事前説明や合意形成プロセスが欠如しているのではないか。",
+      "スポーツイベントの政治利用：純粋な国際スポーツの祭典であるアジア競技大会を、自衛隊のPR活動や過度な国威発揚の場として利用する意思決定過程の不透明さ。"
+    ],
+    "pseudo_citizen_voice": "今日のブルーインパルス、空見上げて喜んでる人多いけど、ちょっと待ってよ。あの数十分の飛行に私たちの税金いくら使ってんの？アジア大会のPRって言うけど、ただでさえ大会の開催費用が膨らんでるのに無駄遣いすぎでしょ。いきなりものすごい爆音で飛んできて子どもはギャン泣きするし、本当に迷惑だった。一部の人が盛り上がるためだけに、なんの相談もなく血税がバンバン使われていくの、どうしても納得いかないわ。",
+    "pseudo_citizen_voice_disclaimer": "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。実在の人物の発言として引用・転載しないでください。",
+    "anger_analysis": {
+      "anger_level": 8,
+      "emotion_keywords": [
+        "怒り",
+        "不満",
+        "不信",
+        "迷惑",
+        "納得いかない"
+      ],
+      "target_authority": "愛知県",
+      "target_authority_key": "aichi-pref",
+      "pain_summary": "アジア大会PR目的のブルーインパルス飛行に関して、多額の税金が使われていることへの疑念と、事前の十分な説明がないまま発生した騒音被害（子どものギャン泣き等）に対する強い不満。",
+      "specific_documents_requested": [
+        "ブルーインパルス展示飛行に係る経費の執行伺および精算書",
+        "アジア競技大会PRイベント事業の予算内訳書",
+        "防衛省（航空自衛隊）との展示飛行に係る協定書または覚書",
+        "展示飛行に関する住民への事前周知計画や広報の記録"
+      ],
+      "legal_basis": "愛知県情報公開条例第6条",
+      "next_action": "disclosure_request",
+      "urgency": "normal",
+      "recommended_response_time": "15日以内",
+      "task_dag": {
+        "tasks": [
+          {
+            "id": "task-pain",
+            "name": "争点原子化 & ペイン抽出",
+            "description": "市民の自然言語入力から行政問題の争点を特定し不可分タスク(Atomic Task)へ分解",
+            "dependencies": [],
+            "status": "completed",
+            "acceptance_criteria": "市民の不満要約および対象文書群が客観的テキストとして抽出されていること"
+          },
+          {
+            "id": "task-ordinance",
+            "name": "条例 & 法的根拠マッチング",
+            "description": "愛知県の保有文書公開条例および所管部署の照合",
+            "dependencies": [
+              "task-pain"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "管轄自治体条例の条文番号（例: 第7条）および開示義務規定がマッピングされていること"
+          },
+          {
+            "id": "task-critique",
+            "name": "メタ認知批評 & 行政逃げ道検知",
+            "description": "行政側の『不存在』『事務支障』逃げ道を事前自己批評し、請求文書を実務簿冊レベルに補正",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "弱点検知（SPOF）、期限延長リスク、代案Bの策定が完了していること"
+          },
+          {
+            "id": "task-draft",
+            "name": "開示請求書 自動策定",
+            "description": "補正後の簿冊名と理由を盛り込んだ正式な情報公開請求書の策定",
+            "dependencies": [
+              "task-critique"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "開示請求書マークダウンが生成され、対象文書および請求理由が網羅されていること"
+          },
+          {
+            "id": "task-routing",
+            "name": "窓口特定 & 経路案内 (駅すぱあと)",
+            "description": "愛知県情報公開窓口への公共交通アクセスを案内",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "最寄り駅および市役所・警察窓口の所在地・電話番号が特定されていること"
+          },
+          {
+            "id": "task-hitl",
+            "name": "Human-in-the-Loop 市民承認 & 戦略選択",
+            "description": "市民が『早期開示重視』または『徹底追求重視』の戦略を選択し、最終意思決定を行う",
+            "dependencies": [
+              "task-draft"
+            ],
+            "status": "in_progress",
+            "acceptance_criteria": "市民（ユーザー）によるプラン選択および提出意思確認"
+          }
+        ],
+        "execution_order": [
+          "task-pain",
+          "task-ordinance",
+          "task-critique",
+          "task-draft",
+          "task-routing",
+          "task-hitl"
+        ]
+      },
+      "critique": {
+        "vulnerability": "【弱点検知】『今日のブルーインパルス、空見上げて喜んでる人多いけど、ちょっと待ってよ。あの数十...』のような包括的表現では、窓口から『文書の特定が不十分』として補正命令（手続きの引き延ばし）を受けるリスクがあります。",
+        "risk_prediction": "【リスク予測】文書特定不足による補正命令リスク（約40%）。代案Bとして、所管部署の文書分類表（ファイル管理簿）の事前開示請求を組み合わせます。",
+        "verifiability": "愛知県情報公開条例に基づく開示請求権者の要件（市民・利害関係者・何人も請求可能規定）を満たしており、法的・実務的書式要件を充足しています。",
+        "critique_summary": "AIによるメタ認知自己批評を実施：行政側の常套的な不開示・不存在逃げ道を先回り検知し、公文書管理上の簿冊名へと自動補強を行いました。",
+        "confidence_score": 0.91,
+        "improvements_applied": [
+          "起案文書・決裁文書・伺書など行政実務上の正式簿冊名を補正挿入",
+          "文書管理台帳に基づく特定ロジックを反映"
+        ]
+      },
+      "safeguard_options": [
+        {
+          "id": "option-fast",
+          "name": "プランA：迅速開示重視（推奨）",
+          "description": "決裁文書・報告書など核心的文書に限定し、14日以内の早期開示決定を狙う（延長リスク低）",
+          "badge": "スピード重視"
+        },
+        {
+          "id": "option-thorough",
+          "name": "プランB：網羅的徹底追及",
+          "description": "領収書・精算書・関連メール含む全関係文書を一括請求（期間延長の可能性あり）",
+          "badge": "徹底調査"
+        }
+      ],
+      "is_mock": false
+    },
+    "reactions": {
+      "heart": 1,
+      "angry": 0,
+      "shock": 0
+    },
+    "created_at": "2026-09-22T05:35:47.679075+00:00",
+    "updated_at": "2026-09-22T05:35:47.679098+00:00"
+  },
+  "c8f4a2cba8bbfb99": {
+    "news_id": "c8f4a2cba8bbfb99",
+    "source_news": {
+      "title": "【動画】アジア大会「メダリストセレブレーション」名古屋・栄の久屋大通公園で初開催 来場者とハイタッチや写真撮影 - 中日新聞Web",
+      "link": "https://news.google.com/rss/articles/CBMiVEFVX3lxTE40RG1LYnZNNWpNU08tWFlCSU15R0FOMjlYSjNfQzcxdW8xYVVGcFJSZlY3am1QVTUxNTFqOUFfVndpVkt0X2YyQUl2R2szYzAyZGxLZA?oc=5",
+      "published": "Mon, 21 Sep 2026 10:43:46 GMT"
+    },
+    "key_points": [
+      "大規模イベント開催にかかる公費（設営・警備・運営費など）の総額と費用対効果の検証",
+      "イベント企画や運営業務の委託先選定プロセス、および初開催に至る意思決定の不透明さ",
+      "中心部の公園占有による一般市民の利用制限と、過剰な警備・交通規制がもたらす周辺住民への負担"
+    ],
+    "pseudo_citizen_voice": "栄の久屋大通公園でメダリストのイベントやってたけど、人だらけで通れないし警備員に迂回させられるし最悪。これ初開催らしいけど、設営や警備にどれだけ税金使ってんの？週末の公園くらい普通に散歩させてよ。ハイタッチだ写真撮影だって一部の人が喜んでる裏で、莫大な税金がイベント会社に流れてるんじゃないかと勘ぐっちゃう。市民の日常を邪魔してまで見栄えのいいイベントやる暇あったら、もっと生活のために金使って！",
+    "pseudo_citizen_voice_disclaimer": "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。実在の人物の発言として引用・転載しないでください。",
+    "anger_analysis": {
+      "anger_level": 8,
+      "emotion_keywords": [
+        "不満",
+        "怒り",
+        "不信",
+        "疑念",
+        "迷惑"
+      ],
+      "target_authority": "名古屋市",
+      "target_authority_key": "nagoya-city",
+      "pain_summary": "久屋大通公園で開催されたメダリストイベントによる激しい混雑と通行規制に対する強い不満と、イベント会社への不透明な税金投入や過剰な警備・設営費用に対する強い疑念。",
+      "specific_documents_requested": [
+        "イベント開催に係る予算書および決算書（収支内訳書）",
+        "イベント運営業務および警備業務の委託契約書・仕様書",
+        "委託業務に関する見積書、請求書、および支払い完了がわかる書類（領収書等）"
+      ],
+      "legal_basis": "名古屋市情報公開条例第7条",
+      "next_action": "disclosure_request",
+      "urgency": "normal",
+      "recommended_response_time": "14日以内",
+      "task_dag": {
+        "tasks": [
+          {
+            "id": "task-pain",
+            "name": "争点原子化 & ペイン抽出",
+            "description": "市民の自然言語入力から行政問題の争点を特定し不可分タスク(Atomic Task)へ分解",
+            "dependencies": [],
+            "status": "completed",
+            "acceptance_criteria": "市民の不満要約および対象文書群が客観的テキストとして抽出されていること"
+          },
+          {
+            "id": "task-ordinance",
+            "name": "条例 & 法的根拠マッチング",
+            "description": "名古屋市の保有文書公開条例および所管部署の照合",
+            "dependencies": [
+              "task-pain"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "管轄自治体条例の条文番号（例: 第7条）および開示義務規定がマッピングされていること"
+          },
+          {
+            "id": "task-critique",
+            "name": "メタ認知批評 & 行政逃げ道検知",
+            "description": "行政側の『不存在』『事務支障』逃げ道を事前自己批評し、請求文書を実務簿冊レベルに補正",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "弱点検知（SPOF）、期限延長リスク、代案Bの策定が完了していること"
+          },
+          {
+            "id": "task-draft",
+            "name": "開示請求書 自動策定",
+            "description": "補正後の簿冊名と理由を盛り込んだ正式な情報公開請求書の策定",
+            "dependencies": [
+              "task-critique"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "開示請求書マークダウンが生成され、対象文書および請求理由が網羅されていること"
+          },
+          {
+            "id": "task-routing",
+            "name": "窓口特定 & 経路案内 (駅すぱあと)",
+            "description": "名古屋市情報公開窓口への公共交通アクセスを案内",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "最寄り駅および市役所・警察窓口の所在地・電話番号が特定されていること"
+          },
+          {
+            "id": "task-hitl",
+            "name": "Human-in-the-Loop 市民承認 & 戦略選択",
+            "description": "市民が『早期開示重視』または『徹底追求重視』の戦略を選択し、最終意思決定を行う",
+            "dependencies": [
+              "task-draft"
+            ],
+            "status": "in_progress",
+            "acceptance_criteria": "市民（ユーザー）によるプラン選択および提出意思確認"
+          }
+        ],
+        "execution_order": [
+          "task-pain",
+          "task-ordinance",
+          "task-critique",
+          "task-draft",
+          "task-routing",
+          "task-hitl"
+        ]
+      },
+      "critique": {
+        "vulnerability": "【弱点検知】『入札額』や『積算内訳』は、行政が情報公開条例第7条（法人等の競争上の地位を害するおそれ）を紋切り型に適用して不開示決定を下す典型的な類型です。",
+        "risk_prediction": "【リスク予測】業者名や内訳単価が黒塗り（部分開示）となる確率: 約70%。事前に対象文書を『落札決定伺書および設計書総括表』にフォーカスし、競争情報に当たらない確定済み公文書を狙うのが安全です。",
+        "verifiability": "名古屋市情報公開条例に基づく開示請求権者の要件（市民・利害関係者・何人も請求可能規定）を満たしており、法的・実務的書式要件を充足しています。",
+        "critique_summary": "AIによるメタ認知自己批評を実施：行政側の常套的な不開示・不存在逃げ道を先回り検知し、公文書管理上の簿冊名へと自動補強を行いました。",
+        "confidence_score": 0.91,
+        "improvements_applied": [
+          "最高裁判決（平14.2.8）の『実質的・具体的な損害の蓋然性が必要』という反論判例を事前添付",
+          "予定価格・設計書総括表など確定事実文書を優先請求指定"
+        ]
+      },
+      "safeguard_options": [
+        {
+          "id": "option-fast",
+          "name": "プランA：迅速開示重視（推奨）",
+          "description": "決裁文書・報告書など核心的文書に限定し、14日以内の早期開示決定を狙う（延長リスク低）",
+          "badge": "スピード重視"
+        },
+        {
+          "id": "option-thorough",
+          "name": "プランB：網羅的徹底追及",
+          "description": "領収書・精算書・関連メール含む全関係文書を一括請求（期間延長の可能性あり）",
+          "badge": "徹底調査"
+        }
+      ],
+      "is_mock": false
+    },
+    "reactions": {
+      "heart": 1,
+      "angry": 0,
+      "shock": 0
+    },
+    "created_at": "2026-09-22T05:36:30.938240+00:00",
+    "updated_at": "2026-09-22T05:36:30.938264+00:00"
+  }
+}
