@@ -119,7 +119,22 @@
                     <p id="newsAgentVoice" class="text-sm text-rose-900 leading-relaxed"></p>
                     <p id="newsAgentVoiceDisclaimer" class="text-xs text-rose-500 mt-2">※ 実在の個人の発言ではなく、論点を代弁するためにAIが生成したフィクションです。</p>
                     <div id="newsAgentReactions" class="flex items-center gap-3 mt-3 pt-3 border-t border-rose-200"></div>
+                    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-rose-200">
+                        <button id="newsAgentShareBlueskyBtn" type="button" class="text-xs bg-sky-500 text-white px-3 py-2 rounded-md hover:bg-sky-600">🦋 Blueskyでシェア</button>
+                        <button id="newsAgentShareXBtn" type="button" class="text-xs bg-gray-900 text-white px-3 py-2 rounded-md hover:bg-gray-700">𝕏でシェア</button>
+                    </div>
                 </div>
+            </div>
+
+            <!-- シェア用テキスト表示（フォールバック / 手動投稿用） -->
+            <div id="newsAgentShareModal" class="hidden mt-4 bg-slate-50 border border-slate-300 rounded-md p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 id="newsAgentShareModalTitle" class="font-semibold text-slate-800 text-sm"></h4>
+                    <button id="newsAgentShareModalClose" type="button" class="text-slate-400 hover:text-slate-600 text-sm">✕ 閉じる</button>
+                </div>
+                <p class="text-xs text-slate-500 mb-2">認証情報が未設定のため、投稿用テキストを表示しています。コピーしてご自身のアカウントから投稿してください。</p>
+                <textarea id="newsAgentShareModalText" rows="8" readonly class="w-full text-sm p-3 border border-slate-300 rounded-md bg-white"></textarea>
+                <button id="newsAgentShareModalCopyBtn" type="button" class="mt-2 text-xs bg-slate-700 text-white px-3 py-2 rounded-md hover:bg-slate-800">📋 コピーする</button>
             </div>
 
             <!-- 履歴メニュー -->
@@ -1033,7 +1048,10 @@
             });
         }
 
+        let currentNewsAgentRecord = null;
+
         function displayNewsAgentAnalysis(record) {
+            currentNewsAgentRecord = record;
             document.getElementById('newsAgentSourceLink').href = record.source_news.link;
             document.getElementById('newsAgentSourceLink').textContent = record.source_news.title;
             document.getElementById('newsAgentSourcePublished').textContent = record.source_news.published || '';
@@ -1185,6 +1203,69 @@
 
         document.getElementById('newsAgentHistoryRefreshBtn').addEventListener('click', loadNewsAgentHistory);
         loadNewsAgentHistory();
+
+        // SNSシェア（Bluesky / X）
+        function openShareModal(title, text) {
+            document.getElementById('newsAgentShareModalTitle').textContent = title;
+            document.getElementById('newsAgentShareModalText').value = text;
+            document.getElementById('newsAgentShareModal').classList.remove('hidden');
+            document.getElementById('newsAgentShareModal').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        document.getElementById('newsAgentShareModalClose').addEventListener('click', () => {
+            document.getElementById('newsAgentShareModal').classList.add('hidden');
+        });
+
+        document.getElementById('newsAgentShareModalCopyBtn').addEventListener('click', async () => {
+            const textarea = document.getElementById('newsAgentShareModalText');
+            try {
+                await navigator.clipboard.writeText(textarea.value);
+                const btn = document.getElementById('newsAgentShareModalCopyBtn');
+                const original = btn.textContent;
+                btn.textContent = '✅ コピーしました';
+                setTimeout(() => { btn.textContent = original; }, 1500);
+            } catch (err) {
+                textarea.select();
+                document.execCommand('copy');
+            }
+        });
+
+        async function shareToSocial(platform) {
+            if (!currentNewsAgentRecord) return;
+            try {
+                const res = await fetch('/api/social/share', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform, news_id: currentNewsAgentRecord.news_id }),
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert(`投稿しました！\n${data.post_url || ''}`);
+                    return;
+                }
+
+                // 未認証時のフォールバック: 手動投稿用テキストを表示
+                if (data.action === 'manual_post_needed') {
+                    if (platform === 'bluesky') {
+                        openShareModal('🦋 Blueskyでシェア（手動投稿）', data.share_text.bluesky);
+                    } else {
+                        const xShare = data.share_text.x;
+                        const combined = xShare.mode === 'thread'
+                            ? xShare.posts.map((p, i) => `--- ポスト${i + 1}/${xShare.posts.length} ---\n${p}`).join('\n\n')
+                            : xShare.posts[0];
+                        openShareModal('𝕏でシェア（手動投稿・' + (xShare.mode === 'thread' ? 'スレッド案' : '1投稿') + '）', combined);
+                    }
+                } else {
+                    alert('エラー: ' + (data.detail || 'シェアに失敗しました'));
+                }
+            } catch (err) {
+                alert('エラー: ' + err.message);
+            }
+        }
+
+        document.getElementById('newsAgentShareBlueskyBtn').addEventListener('click', () => shareToSocial('bluesky'));
+        document.getElementById('newsAgentShareXBtn').addEventListener('click', () => shareToSocial('x'));
 
         // 怒り分析
         document.getElementById('analyzeBtn').addEventListener('click', async () => {
