@@ -133,6 +133,29 @@ def _authority_info_from_pool(pooled: Optional[dict]) -> Optional[AuthorityInfo]
     )
 
 
+def addressee_name(info: AuthorityInfo) -> str:
+    """開示請求・審査請求の宛先となる実施機関名を返す（例: 愛知県 → 愛知県知事）。
+
+    情報公開条例上、請求の名宛人は「県」「市」といった団体そのものではなく、
+    その文書を管理する実施機関（知事・市長・警察本部長・議会 等）である。
+    ただし単純に authority + authority_type を連結すると、
+    - authority に authority_type がすでに含まれている場合（例: 愛知県警察本部・
+      名古屋地方裁判所）は二重表記になる
+    - 語尾が重なる場合（例: 安城市 + 市長 → 安城市市長）も不自然な重複になる
+    - 「〜庁」（例: 警視庁）は組織名自体で完結しており、末尾に種別を付け足す必要がない
+    ため、これらを避けて結合する。
+    """
+    authority, authority_type = info.authority, info.authority_type
+    if authority.endswith(authority_type) or authority.endswith("庁"):
+        return authority
+    overlap = 0
+    for n in range(min(len(authority), len(authority_type)), 0, -1):
+        if authority.endswith(authority_type[:n]):
+            overlap = n
+            break
+    return authority + authority_type[overlap:]
+
+
 def get_ordinance(authority_key: str) -> Optional[AuthorityInfo]:
     """条例・取扱要綱を取得（自治体・警察・裁判所すべて）
 

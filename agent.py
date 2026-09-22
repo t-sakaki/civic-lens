@@ -290,11 +290,13 @@ def analyze_user_anger(user_input: str, hint_authority_key: Optional[str] = None
     level = min(level, 10)
 
     # 対象機関の推定（data/authorities/*.json の aliases を長い順にマッチ）
-    from ordinance_data import match_authority_by_text, get_ordinance
+    from ordinance_data import match_authority_by_text, get_ordinance, addressee_name
 
     auth_key = match_authority_by_text(user_input, default=hint_authority_key or "anjo-city")
     ordinance = get_ordinance(auth_key)
     auth_name = ordinance.authority if ordinance else "安城市"
+    # 開示請求の名宛人は団体名（例: 愛知県）ではなく実施機関名（例: 愛知県知事）
+    addressee = addressee_name(ordinance) if ordinance else "安城市長"
 
     # 文書の特定
     documents = ["行政文書一式"]
@@ -337,7 +339,7 @@ def analyze_user_anger(user_input: str, hint_authority_key: Optional[str] = None
         legal_basis = ordinance.ordinance_name
         response_time = f"{ordinance.request_deadline_days}日以内"
     elif ordinance:
-        legal_basis = f"{auth_name}情報公開条例"
+        legal_basis = ordinance.ordinance_name
         response_time = f"{ordinance.request_deadline_days}日以内"
     else:
         legal_basis = "情報公開条例"
@@ -346,7 +348,7 @@ def analyze_user_anger(user_input: str, hint_authority_key: Optional[str] = None
     return {
         "anger_level": level,
         "emotion_keywords": ["怒り", "不信"],
-        "target_authority": auth_name,
+        "target_authority": addressee,
         "target_authority_key": auth_key,
         "pain_summary": user_input[:100],
         "specific_documents_requested": documents,
@@ -602,6 +604,7 @@ JSONのみを返してください。
 
                 # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
                 # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
+                from ordinance_data import addressee_name
                 if data.get("target_authority_key") not in AUTHORITIES:
                     fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
                     print(
@@ -609,7 +612,8 @@ JSONのみを返してください。
                         f"'{fallback_key}' に補正しました"
                     )
                     data["target_authority_key"] = fallback_key
-                    data["target_authority"] = AUTHORITIES[fallback_key].authority
+                # target_authority はLLMの自由記述ではなく、実施機関名（例: 愛知県知事）で正規化する
+                data["target_authority"] = addressee_name(AUTHORITIES[data["target_authority_key"]])
 
                 if "task_dag" not in data or not data["task_dag"]:
                     data["task_dag"] = build_task_dag(
@@ -748,6 +752,9 @@ JSONのみを出力してください。
         doc_label = "司法行政文書" if is_court else "行政文書"
         action_verb = "申し出ます" if is_court else "請求します"
         form_title = getattr(ordinance, "request_form", "司法行政文書開示申出書" if is_court else "情報公開請求書")
+        from ordinance_data import addressee_name
+        # 請求書の宛先（御中）は団体名ではなく実施機関名（例: 愛知県知事）とする
+        addressee = addressee_name(ordinance)
 
         deadline_days_text = f"{ordinance.request_deadline_days}日以内"
 
@@ -772,7 +779,7 @@ JSONのみを出力してください。
             try:
                 prompt = f"""
 あなたは情報公開制度および司法行政文書開示制度に精通した専門家AIです。
-市民の相談内容をもとに、提出先（{ordinance.authority}）の{ordinance.ordinance_name}に適合する正式な「{form_title}」のMarkdownドラフトを作成してください。
+市民の相談内容をもとに、提出先（{addressee}）の{ordinance.ordinance_name}に適合する正式な「{form_title}」のMarkdownドラフトを作成してください。
 {court_guidance}
 【市民の要望・怒り】:
 {user_input}
@@ -781,7 +788,7 @@ JSONのみを出力してください。
 {strategy_note}
 
 【提出先情報】:
-- 機関名: {ordinance.authority}
+- 機関名（宛先）: {addressee}
 - 担当窓口: {ordinance.contact}
 - 根拠規定: {ordinance.ordinance_name}
 - 請求日/申出日: {current_date}
@@ -789,7 +796,7 @@ JSONのみを出力してください。
 以下の構成でMarkdownテキストを作成してください（不要な前置きや説明は含めず、請求書面の内容のみを出力してください）：
 # {form_title}
 
-## {ordinance.authority} {ordinance.contact} 御中
+## {addressee} {ordinance.contact} 御中
 
 ### 1. 申出日（請求日）
 ### 2. 申出人（請求人）の住所・氏名
@@ -836,7 +843,7 @@ JSONのみを出力してください。
 
         return f"""# {form_title}
 
-## {ordinance.authority} {ordinance.contact} 御中
+## {addressee} {ordinance.contact} 御中
 
 {ordinance.ordinance_name}に基づき、以下のとおり{doc_label}の開示を{action_verb}。
 
