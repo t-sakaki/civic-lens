@@ -83,12 +83,16 @@
                 地域名を入れると、AIエージェントがその地域の自治体・警察・公的行事に関するニュースをネットから自動収集し、
                 一見好意的に見えるニュースの裏にある論点を読み解いて、市民の怒りの声を再現します。
             </p>
-            <div class="grid md:grid-cols-2 gap-3 mb-3">
+            <div class="grid md:grid-cols-2 gap-3 mb-2">
                 <input id="newsAgentRegion" type="text" placeholder="対象地域（例: 名古屋市）"
                        class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-rose-500">
                 <input id="newsAgentKeyword" type="text" placeholder="絞り込みキーワード（任意、例: アジア大会）"
                        class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-rose-500">
             </div>
+            <button id="newsAgentGeoBtn" type="button" class="w-full mb-3 text-sm bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 border border-gray-200">
+                📍 現在地から対象地域を自動入力
+            </button>
+            <p id="newsAgentGeoStatus" class="text-xs text-gray-500 mb-3 -mt-2"></p>
             <button id="newsAgentRunBtn" class="w-full bg-gradient-to-r from-rose-500 to-red-600 text-white px-6 py-3 rounded-md font-semibold hover:from-rose-600 hover:to-red-700">
                 📰 ニュースを取得して怒りを再現する
             </button>
@@ -941,6 +945,40 @@
                 video.classList.add('hidden');
                 document.getElementById('captureImage').classList.add('hidden');
             }
+        });
+
+        // 怒りの代理人AI：現在地から対象地域を自動入力（LocationAgent）
+        document.getElementById('newsAgentGeoBtn').addEventListener('click', () => {
+            const statusEl = document.getElementById('newsAgentGeoStatus');
+            if (!navigator.geolocation) {
+                statusEl.textContent = 'このブラウザは位置情報に対応していません。地域名を直接入力してください。';
+                return;
+            }
+
+            statusEl.textContent = '📍 現在地を取得中...';
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    const formData = new FormData();
+                    formData.append('lat', pos.coords.latitude);
+                    formData.append('lon', pos.coords.longitude);
+                    try {
+                        const res = await fetch('/api/news-agent/region-from-location', { method: 'POST', body: formData });
+                        if (!res.ok) {
+                            const errData = await res.json().catch(() => ({}));
+                            throw new Error(errData.detail || `HTTP ${res.status}`);
+                        }
+                        const data = await res.json();
+                        document.getElementById('newsAgentRegion').value = data.region;
+                        statusEl.textContent = `✅ 現在地から「${data.prefecture ? data.prefecture + ' ' : ''}${data.region}」と特定しました`;
+                    } catch (err) {
+                        statusEl.textContent = 'エラー: ' + err.message;
+                    }
+                },
+                (err) => {
+                    statusEl.textContent = '位置情報の取得を許可してください（' + err.message + '）';
+                },
+                { timeout: 10000 }
+            );
         });
 
         // 怒りの代理人AI：ニュースから怒りを自動再現

@@ -62,6 +62,7 @@ from auth import (
 )
 from news_collector_agent import get_news_collector_agent
 from news_anger_agent import AngerReproductionAgent
+from location_agent import get_location_agent
 
 
 app = FastAPI(
@@ -198,6 +199,26 @@ async def analyze_anger(
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
+    }
+
+
+@app.post("/api/news-agent/region-from-location")
+async def region_from_location(
+    lat: float = Form(...),
+    lon: float = Form(...),
+):
+    """GPS座標から対象地域（市区町村名）を推定する（LocationAgent）。
+    ユーザーが地域を登録していない場合に、現在地から自動特定するための補助エンドポイント。
+    """
+    location_agent = get_location_agent()
+    guess = location_agent.region_from_coordinates(lat, lon)
+    if guess is None:
+        raise HTTPException(404, "現在地から地域を特定できませんでした。地域名を直接入力してください。")
+
+    return {
+        "region": guess.region,
+        "prefecture": guess.prefecture,
+        "raw_display_name": guess.raw_display_name,
     }
 
 
