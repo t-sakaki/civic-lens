@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>開示請求台帳 — Civic Lens</title>
+    <meta name="description" content="ブロックチェーンに記録された公文書開示請求の一覧。記録はCivic Lensのデータベースではなくチェーンから直接読み出しており、誰でも検証できます。">
+    <link rel="icon" href="/static/favicon.ico" sizes="any">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --cl-bg: #0b1120;
+            --cl-amber: #f2a93b;
+            --cl-teal: #5fd4c4;
+        }
+        body {
+            font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
+            background-color: var(--cl-bg);
+            color: #EDEDF2;
+        }
+        .cl-navbar {
+            background: rgba(11, 17, 32, 0.55);
+            border-color: rgba(242, 169, 59, 0.22) !important;
+            backdrop-filter: blur(6px);
+        }
+        .cl-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); }
+        .cl-fact { background: rgba(95, 212, 196, 0.06); border: 1px solid rgba(95, 212, 196, 0.25); }
+        .cl-badge { background: rgba(242, 169, 59, 0.12); color: var(--cl-amber); border: 1px solid rgba(242, 169, 59, 0.35); }
+        .cl-badge-teal { background: rgba(95, 212, 196, 0.12); color: var(--cl-teal); border: 1px solid rgba(95, 212, 196, 0.4); }
+        a.cl-link { color: var(--cl-teal); }
+        a.cl-link:hover { text-decoration: underline; }
+        .cl-react { border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); }
+        .cl-react:hover { border-color: rgba(242, 169, 59, 0.6); }
+        .cl-react[aria-pressed="true"] { border-color: var(--cl-amber); background: rgba(242, 169, 59, 0.16); }
+        textarea { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); color: #EDEDF2; }
+    </style>
+</head>
+<body>
+    <nav class="cl-navbar border-b sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="font-bold text-lg" style="color: var(--cl-amber)">Civic Lens</a>
+            <a href="/" class="text-sm text-gray-300 hover:text-white">← トップに戻る</a>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <header class="mb-6">
+            <h1 class="text-2xl font-bold mb-2">⛓️ 開示請求台帳</h1>
+            <p class="text-sm text-gray-300 leading-relaxed">
+                ブロックチェーンに記録された公文書開示請求の一覧です。表示している記録は Civic Lens のデータベースではなく、
+                <strong>チェーンから直接読み出しています</strong>。記録は誰にも（Civic Lens 自身にも）書き換え・削除できず、各記録のリンクから誰でも検証できます。
+            </p>
+            <p id="ledgerMeta" class="text-xs text-gray-400 mt-2"></p>
+        </header>
+
+        <div id="ledgerStatus" class="text-sm text-gray-400">読み込み中...</div>
+        <div id="ledgerList" class="space-y-5"></div>
+    </main>
+
+    <script>
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        let loggedIn = false;
+
+        function formatDate(iso) {
+            const [y, m, d] = iso.split('-').map(Number);
+            return `${y}年${m}月${d}日`;
+        }
+
+        function deadlineHtml(dl) {
+            if (!dl) {
+                return '<p class="text-xs text-gray-400">この実施機関の決定期限データがないため、期限の目安は表示できません。</p>';
+            }
+            let headline;
+            if (dl.days_remaining >= 0) {
+                headline = `<span class="text-lg font-bold" style="color: var(--cl-amber)">あと ${dl.days_remaining} 日</span>`;
+            } else {
+                headline = `<span class="text-lg font-bold text-red-300">${escapeHtml(dl.phase)}</span>`;
+            }
+            return `
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span class="text-sm text-gray-300">決定期限の目安：<strong>${formatDate(dl.deadline)}</strong></span>
+                    ${headline}
+                </div>
+                <p class="text-xs text-gray-400 mt-1 leading-relaxed">
+                    ${escapeHtml(dl.ordinance_name)}：請求日から起算して${dl.request_deadline_days}日以内、延長は${dl.extension_days}日以内（延長時の目安 ${formatDate(dl.extended_deadline)}）。
+                    記録日を請求日とみなした目安で、補正の期間や延長通知によって変わります。
+                </p>`;
+        }
+
+        function reactionsHtml(entry) {
+            return Object.entries(entry.reactions).map(([type, r]) => `
+                <button type="button" class="cl-react rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5 transition"
+                        data-uid="${escapeHtml(entry.uid)}" data-reaction="${type}" aria-pressed="${r.mine}">
+                    <span>${r.emoji}</span><span>${escapeHtml(r.label)}</span>
+                    <span class="font-bold" data-count>${r.count}</span>
+                </button>`).join('');
+        }
+
+        function entryHtml(e) {
+            const docs = e.is_public
+                ? `<p class="text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(e.requested_documents)}</p>`
+                : '<p class="text-sm text-gray-400">非公開の請求です（請求内容はハッシュのみ記録されています）。</p>';
+            return `
+            <article class="cl-card rounded-lg p-5">
+                <div class="cl-fact rounded-md p-4 space-y-3">
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <span class="cl-badge-teal rounded-full px-2 py-0.5 font-semibold">オンチェーンの事実（改ざん不可）</span>
+                        <span class="cl-badge rounded-full px-2 py-0.5">${e.is_public ? '公開の請求' : '非公開の請求'}</span>
+                        <span class="text-gray-400">記録日時 ${escapeHtml(e.recorded_at_display)}</span>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-400">請求先 / 根拠</div>
+                        <div class="font-bold">${escapeHtml(e.authority)} <span class="font-normal text-gray-300">／ ${escapeHtml(e.legal_basis)}</span></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-400 mb-0.5">請求した公文書</div>
+                        ${docs}
+                    </div>
+                    <div class="border-t border-white/10 pt-3">${deadlineHtml(e.deadline)}</div>
+                    <details class="text-xs text-gray-300">
+                        <summary class="cursor-pointer cl-link">🔎 この記録を検証する</summary>
+                        <div class="mt-2 space-y-2 leading-relaxed">
+                            <p>
+                                <a class="cl-link" href="${escapeHtml(e.explorer_url)}" target="_blank" rel="noopener noreferrer">EAS Scan で記録を見る ↗</a>
+                                ／ <a class="cl-link" href="${escapeHtml(e.tx_url)}" target="_blank" rel="noopener noreferrer">取引（トランザクション）を見る ↗</a>
+                            </p>
+                            <p class="font-mono break-all text-gray-400">UID: ${escapeHtml(e.uid)}<br>請求書全文のハッシュ: ${escapeHtml(e.document_hash)}</p>
+                            <p>原本（請求書の全文）をお持ちの方は、下に貼り付けるか検証キット（.json）を選ぶと、このページ内でハッシュを計算して照合します（原本はどこにも送信されません）。</p>
+                            <input type="file" accept=".json,.txt,application/json,text/plain" class="text-xs" data-verify-file="${escapeHtml(e.uid)}">
+                            <textarea rows="3" class="w-full rounded p-2 text-xs" data-verify-input="${escapeHtml(e.uid)}" placeholder="請求書の全文を貼り付け"></textarea>
+                            <button type="button" class="cl-react rounded px-3 py-1 text-xs" data-verify="${escapeHtml(e.uid)}" data-hash="${escapeHtml(e.document_hash)}">ハッシュを照合</button>
+                            <span data-verify-result="${escapeHtml(e.uid)}"></span>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="mt-4">
+                    <div class="text-xs text-gray-400 mb-2">市民の反応（オフチェーン・件数のみ公開）</div>
+                    <div class="flex flex-wrap gap-2">${reactionsHtml(e)}</div>
+                    <p class="text-xs text-red-300 mt-2 hidden" data-react-msg="${escapeHtml(e.uid)}"></p>
+                </div>
+            </article>`;
+        }
+
+        async function sha256Hex(text) {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+            return '0x' + Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function loadLedger() {
+            const status = document.getElementById('ledgerStatus');
+            try {
+                const res = await fetch('/api/ledger', { credentials: 'same-origin' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || '読み込みに失敗しました');
+                loggedIn = data.logged_in;
+                document.getElementById('ledgerMeta').innerHTML =
+                    `ネットワーク：${escapeHtml(data.network)} ／ 記録者（Civic Lens 公証アドレス）：<span class="font-mono">${escapeHtml(data.attester)}</span> ／ ` +
+                    `<a class="cl-link" href="${escapeHtml(data.schema_url)}" target="_blank" rel="noopener noreferrer">記録形式（スキーマ）↗</a>`;
+                status.textContent = data.entries.length ? `${data.entries.length} 件の記録` : 'まだ記録はありません。';
+                document.getElementById('ledgerList').innerHTML = data.entries.map(entryHtml).join('');
+            } catch (err) {
+                status.innerHTML = `<span class="text-red-300">${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        document.addEventListener('click', async (ev) => {
+            const reactBtn = ev.target.closest('[data-reaction]');
+            if (reactBtn) {
+                const uid = reactBtn.dataset.uid;
+                const msg = document.querySelector(`[data-react-msg="${CSS.escape(uid)}"]`);
+                if (!loggedIn) {
+                    msg.innerHTML = 'リアクションにはログインが必要です。<a class="cl-link" href="/">トップページでログイン</a>してから戻ってください。';
+                    msg.classList.remove('hidden');
+                    return;
+                }
+                const form = new FormData();
+                form.append('reaction', reactBtn.dataset.reaction);
+                const res = await fetch(`/api/ledger/${encodeURIComponent(uid)}/react`, { method: 'POST', body: form, credentials: 'same-origin' });
+                const data = await res.json();
+                if (!res.ok) {
+                    msg.textContent = data.detail || 'リアクションに失敗しました';
+                    msg.classList.remove('hidden');
+                    return;
+                }
+                msg.classList.add('hidden');
+                for (const [type, r] of Object.entries(data.reactions)) {
+                    const btn = document.querySelector(`[data-uid="${CSS.escape(uid)}"][data-reaction="${type}"]`);
+                    btn.setAttribute('aria-pressed', r.mine);
+                    btn.querySelector('[data-count]').textContent = r.count;
+                }
+                return;
+            }
+
+            const verifyBtn = ev.target.closest('[data-verify]');
+            if (verifyBtn) {
+                const uid = verifyBtn.dataset.verify;
+                const input = document.querySelector(`[data-verify-input="${CSS.escape(uid)}"]`);
+                const out = document.querySelector(`[data-verify-result="${CSS.escape(uid)}"]`);
+                if (!input.value.trim()) { out.textContent = '原本を貼り付けてください。'; return; }
+                // サーバー側（compute_document_hash）と同じく、前後の空白を除いたUTF-8のSHA-256
+                const hash = await sha256Hex(input.value.trim());
+                out.innerHTML = hash.toLowerCase() === verifyBtn.dataset.hash.toLowerCase()
+                    ? '<span class="text-emerald-300 font-bold">✅ 一致しました。この原本は記録日時に存在していたことが確認できます。</span>'
+                    : '<span class="text-red-300 font-bold">❌ 一致しません（1文字でも違うと一致しません。改行や空白も確認してください）。</span>';
+            }
+        });
+
+        // 検証キット（JSON）なら original_text を、テキストファイルならその内容を照合欄に入れる
+        document.addEventListener('change', async (ev) => {
+            const input = ev.target.closest('[data-verify-file]');
+            if (!input || !input.files[0]) return;
+            const uid = input.dataset.verifyFile;
+            const text = await input.files[0].text();
+            let original = text;
+            try {
+                const kit = JSON.parse(text);
+                if (kit && typeof kit.original_text === 'string') {
+                    original = kit.original_text;
+                    if (kit.uid && kit.uid.toLowerCase() !== uid.toLowerCase()) {
+                        document.querySelector(`[data-verify-result="${CSS.escape(uid)}"]`).innerHTML =
+                            '<span class="text-amber-300">この検証キットは別の記録のものです。</span>';
+                    }
+                }
+            } catch (e) { /* JSONでなければテキストとして扱う */ }
+            document.querySelector(`[data-verify-input="${CSS.escape(uid)}"]`).value = original;
+        });
+
+        loadLedger();
+    </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
   "ordinance_id": "平成12年愛知県条例第37号",
   "enacted": "平成12年10月13日",
   "request_form": "愛知県情報公開請求書",
-  "request_deadline_days": 30,
+  "request_deadline_days": 15,
   "extension_days": 30,
   "review_period_days": 90,
   "non_disclosure_grounds": [
