@@ -114,6 +114,26 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    """未捕捉の例外をJSONで返す
+
+    FastAPI/Starlette はデフォルトで未捕捉の例外に対し text/plain の
+    "Internal Server Error" を返す。フロントエンドは基本的に res.json() で
+    レスポンスをパースしているため、このプレーンテキストが
+    `Unexpected token 'I', "Internal S"... is not valid JSON` という
+    分かりにくいエラーとして表示されてしまう。ここでJSONに統一して、
+    せめて原因が追いやすいメッセージを返す。
+    """
+    import traceback
+    print(f"[unhandled_exception] {request.method} {request.url.path}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"サーバー内部エラーが発生しました: {exc}"},
+    )
+
+
 def get_current_user_optional(
     authorization: Optional[str] = Header(None),
     auth_token: Optional[str] = Cookie(None),
