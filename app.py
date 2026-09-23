@@ -48,6 +48,7 @@ from attachment_reader import (
     read_attachments,
 )
 from gmi_client import search_ordinances, search_precedents
+import civic_actions
 from precedent_cases import search_cases, get_case as get_precedent_case
 from situations import get_situation_list, get_situation
 from visibility import (
@@ -677,11 +678,25 @@ async def generate_review_request(
     non_disclosure_decision: str = Form(...),
     target_authority: str = Form(...),
     alleged_ground: str = Form(...),
+    decision_type: Optional[str] = Form("non_disclosure"),
+    decision_date: Optional[str] = Form(None),
 ):
-    """審査請求書 + 反論ロジックを生成"""
+    """審査請求書 + 反論ロジックを生成
+
+    decision_type: non_disclosure / partial_disclosure / neither_confirm_nor_deny / document_absent
+    decision_date: 決定通知を受け取った日（YYYY-MM-DD）。指定時は審査請求期限を算出する
+    """
     ordinance = get_ordinance(target_authority)
     if not ordinance:
         raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
+    if decision_type not in civic_actions.DECISION_TYPES:
+        decision_type = "non_disclosure"
+    known_date = None
+    if decision_date:
+        try:
+            known_date = datetime.strptime(decision_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(400, "decision_date は YYYY-MM-DD 形式で指定してください")
 
     agent = get_agent()
     try:
@@ -689,15 +704,95 @@ async def generate_review_request(
     except Exception as e:
         print(f"Gemini エラー: {e}")
         counter = _mock_counter_argument(ordinance, alleged_ground)
+    counter_dict = counter.model_dump() if hasattr(counter, "model_dump") else counter
+
+    review_text, review_is_mock = civic_actions.generate_review_request_document(
+        agent.genai_client,
+        ordinance,
+        decision_summary=non_disclosure_decision,
+        decision_type=decision_type,
+        alleged_ground=alleged_ground,
+        counter_arguments=counter_dict.get("counter_arguments", []),
+        decision_date=known_date.strftime("%Y年%m月%d日") if known_date else None,
+    )
+    deadline = civic_actions.review_deadline(ordinance, known_date)
 
     # 類似事例・判例
     precedents = search_precedents(non_disclosure_decision, top_k=5)
 
     return {
-        "counter_argument": counter.model_dump() if hasattr(counter, "model_dump") else counter,
+        "counter_argument": counter_dict,
         "precedents": [p.model_dump() for p in precedents],
         "review_authority": ordinance.review_authority,
+        "review_addressee": civic_actions.review_addressee(ordinance),
+        "decision_type_label": civic_actions.DECISION_TYPES[decision_type],
+        "review_request_text": review_text,
+        "review_request_is_mock": review_is_mock,
+        "review_period_days": ordinance.review_period_days,
+        "review_deadline": deadline.isoformat() if deadline else None,
     }
+
+
+@app.post("/api/police-complaint")
+async def generate_police_complaint(
+    user_input: str = Form(...),
+    target_authority: str = Form(...),
+    incident_datetime: Optional[str] = Form(""),
+    incident_place: Optional[str] = Form(""),
+    is_direct_party: bool = Form(True),
+):
+    """警察組織に対する都道府県公安委員会への苦情申出書（警察法第79条）を生成"""
+    ordinance = get_ordinance(target_authority)
+    if not ordinance:
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
+    if ordinance.category != "警察":
+        raise HTTPException(400, "公安委員会への苦情申出は警察組織のみ対象です")
+
+    agent = get_agent()
+    text, is_mock = civic_actions.generate_police_complaint(
+        agent.genai_client,
+        ordinance,
+        user_input,
+        incident_datetime=incident_datetime or "",
+        incident_place=incident_place or "",
+        is_direct_party=is_direct_party,
+    )
+    commission = civic_actions.public_safety_commission(ordinance)
+    return {
+        "commission": commission,
+        "police_authority": ordinance.authority,
+        "is_direct_party": is_direct_party,
+        "complaint_text": text,
+        "is_mock": is_mock,
+        "next_steps": [
+            f"1. 生成された書面の日時・場所・内容を事実に即して加筆・修正",
+            f"2. {commission}（事務は{ordinance.authority}の公安委員会補佐室等が担当）へ郵送または持参",
+            "3. 警察法第79条の苦情であれば、処理結果が文書で通知される" if is_direct_party
+            else "3. 意見・要望として扱われるため、回答の有無は公安委員会の運用による",
+            "4. 並行して関係文書の開示請求を行うと、事実関係の裏付けになる",
+        ],
+    }
+
+
+@app.post("/api/council-question")
+async def generate_council_question(
+    user_input: str = Form(...),
+    target_authority: str = Form(...),
+    requested_documents: Optional[str] = Form(""),
+):
+    """開示請求と並行して、管轄議会の議員に提案する一般質問の通告書・読み上げ原稿を生成
+
+    requested_documents: 開示請求中の文書名（改行区切り）
+    """
+    ordinance = get_ordinance(target_authority)
+    if not ordinance:
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
+    if civic_actions.council_name(ordinance) is None:
+        raise HTTPException(400, "裁判所は地方議会の一般質問の対象外です")
+
+    docs = [d.strip().lstrip("-・ ").strip() for d in (requested_documents or "").splitlines() if d.strip()]
+    agent = get_agent()
+    return civic_actions.generate_council_questions(agent.genai_client, ordinance, user_input, docs)
 
 
 @app.post("/api/route")

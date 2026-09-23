@@ -1444,6 +1444,151 @@
         .has-messages .quick-suggestions {
             display: none;
         }
+
+        /* --- ウェルカムの処理フロー（4ステップ） --- */
+        .chat-welcome h2 { word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
+        .chat-welcome-flow {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin: 1.75rem auto 0;
+            padding: 0;
+            max-width: 46rem;
+        }
+        .chat-welcome-flow li {
+            position: relative;
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.85rem 0.5rem;
+            border-radius: 0.9rem;
+            background: var(--chat-hover);
+            border: 1px solid var(--chat-border);
+            animation: flowIn 0.5s ease-out both;
+        }
+        .chat-welcome-flow li:nth-child(2) { animation-delay: 0.08s; }
+        .chat-welcome-flow li:nth-child(3) { animation-delay: 0.16s; }
+        .chat-welcome-flow li:nth-child(4) { animation-delay: 0.24s; }
+        .chat-welcome-flow li + li::before {
+            content: '';
+            position: absolute;
+            left: -0.45rem;
+            top: 50%;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-top: 2px solid var(--chat-muted);
+            border-right: 2px solid var(--chat-muted);
+            transform: translate(-25%, -50%) rotate(45deg);
+            opacity: 0.6;
+        }
+        .chat-welcome-flow .flow-icon { font-size: 1.35rem; line-height: 1; }
+        .chat-welcome-flow b { display: block; font-size: 0.82rem; font-weight: 700; color: var(--chat-text); }
+        .chat-welcome-flow small { display: block; margin-top: 0.15rem; font-size: 0.68rem; color: var(--chat-muted); }
+        @keyframes flowIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: none; }
+        }
+        @media (max-width: 640px) {
+            .chat-welcome { padding-top: 1.5rem; }
+            .chat-welcome h2 { font-size: 1.35rem; }
+            .chat-welcome-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+            .chat-welcome-flow li { flex-direction: row; text-align: left; padding: 0.6rem 0.7rem; }
+            .chat-welcome-flow li + li::before { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .chat-welcome-flow li { animation: none; }
+        }
+
+        .cl-ghost-btn {
+            border: 1px solid var(--chat-border-strong);
+            color: var(--chat-text);
+            background: transparent;
+            transition: background 0.15s;
+        }
+        .cl-ghost-btn:hover { background: var(--chat-hover); }
+
+        /* --- ダーク/ゴールドテーマでの結果カード・モーダル。
+             Tailwind の白基調クラスがそのままだと、暗いチャット画面の中に白い板が浮いて見えるため、
+             カード内だけ同じ意味の色（青=情報、緑=根拠、黄=文書、紫=AI、赤=警告）を暗色向けに置き換える --- */
+        html:not([data-theme="light"]) .cl-card {
+            background: var(--chat-surface);
+            color: var(--chat-text);
+            border: 1px solid var(--chat-border);
+            border-radius: 1rem;
+            box-shadow: var(--chat-shadow);
+        }
+        html:not([data-theme="light"]) .cl-card :is(.bg-white) { background-color: rgba(255,255,255,0.03); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-gray-50,.bg-gray-100,.bg-slate-50) { background-color: rgba(255,255,255,0.045); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-gray-200) { background-color: rgba(255,255,255,0.08); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-blue-50,.bg-blue-100,.bg-indigo-50,.bg-indigo-100,.bg-sky-50) { background-color: rgba(99,102,241,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-green-50,.bg-green-100,.bg-emerald-50,.bg-emerald-100,.bg-teal-50,.bg-teal-100) { background-color: rgba(16,185,129,0.12); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-yellow-50,.bg-yellow-100,.bg-amber-50,.bg-amber-100,.bg-orange-50) { background-color: rgba(245,158,11,0.12); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-purple-50,.bg-purple-100) { background-color: rgba(168,85,247,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-red-50,.bg-red-100,.bg-rose-50) { background-color: rgba(244,63,94,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-blue-200,.bg-green-200,.bg-purple-200) { background-color: rgba(255,255,255,0.1); }
+
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-900,.text-gray-800,.text-gray-700,.text-slate-800) { color: var(--chat-text); }
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-600,.text-gray-500,.text-slate-500) { color: #a3adbf; }
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-400) { color: var(--chat-muted); }
+        html:not([data-theme="light"]) .cl-card :is(.text-blue-600,.text-blue-700,.text-blue-800,.text-blue-900,.text-indigo-600,.text-indigo-700,.text-indigo-800,.text-indigo-900) { color: #a5b4fc; }
+        html:not([data-theme="light"]) .cl-card :is(.text-green-600,.text-green-700,.text-green-800,.text-green-900,.text-emerald-700,.text-emerald-800,.text-teal-700,.text-teal-800,.text-teal-900) { color: #6ee7b7; }
+        html:not([data-theme="light"]) .cl-card :is(.text-yellow-700,.text-yellow-800,.text-yellow-900,.text-amber-700,.text-amber-800,.text-amber-900,.text-orange-600,.text-orange-700,.text-orange-800,.text-orange-900) { color: #fcd34d; }
+        html:not([data-theme="light"]) .cl-card :is(.text-purple-600,.text-purple-700,.text-purple-800,.text-purple-900) { color: #d8b4fe; }
+        html:not([data-theme="light"]) .cl-card :is(.text-red-600,.text-red-700) { color: #fca5a5; }
+
+        html:not([data-theme="light"]) .cl-card :is(.border-gray-100,.border-gray-200,.border-gray-300,.border-slate-200) { border-color: var(--chat-border-strong); }
+        html:not([data-theme="light"]) .cl-card :is(.border-blue-300,.border-indigo-200,.border-indigo-300,.border-purple-100,.border-purple-200,.border-purple-300) { border-color: rgba(129,140,248,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-green-500,.border-emerald-300,.border-teal-100,.border-teal-200,.border-teal-300) { border-color: rgba(52,211,153,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-amber-100,.border-amber-200,.border-amber-300,.border-yellow-300) { border-color: rgba(251,191,36,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-red-200,.border-red-300,.border-rose-200) { border-color: rgba(248,113,113,0.4); }
+
+        html:not([data-theme="light"]) .cl-card :is(.hover\:bg-gray-100,.hover\:bg-blue-200,.hover\:bg-indigo-100,.hover\:bg-amber-50,.hover\:bg-amber-100,.hover\:bg-green-50,.hover\:bg-purple-50,.hover\:bg-purple-100,.hover\:bg-red-50,.hover\:bg-rose-50):hover { background-color: var(--chat-hover); }
+        html:not([data-theme="light"]) .cl-card :is(.hover\:text-gray-600,.hover\:text-gray-700,.hover\:text-indigo-800,.hover\:text-teal-900,.hover\:text-purple-700):hover { color: var(--chat-text); }
+
+        html:not([data-theme="light"]) .cl-card :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select) {
+            background-color: rgba(255,255,255,0.04);
+            color: var(--chat-text);
+            border-color: var(--chat-border-strong);
+        }
+        html:not([data-theme="light"]) .cl-card :is(input,textarea)::placeholder { color: var(--chat-muted); }
+
+        /* 認容実績テロップ：原色のベタ塗りをやめ、画面になじむガラス調＋緑のアクセントにする */
+        .win-ticker-bar {
+            background: var(--chat-surface);
+            border: 1px solid var(--chat-border);
+            -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+                    mask-image: linear-gradient(90deg, #000 85%, transparent);
+        }
+        .win-ticker-label {
+            color: #34d399;
+            background: rgba(16,185,129,0.12);
+            border-right: 1px solid var(--chat-border);
+        }
+        html[data-theme="light"] .win-ticker-label { color: #047857; }
+        .win-card-doc {
+            max-width: 26em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        html:not([data-theme="light"]) .win-card {
+            background: rgba(255,255,255,0.04);
+            color: var(--chat-text);
+            border: 1px solid var(--chat-border);
+            box-shadow: none;
+        }
+        html:not([data-theme="light"]) .win-card .text-emerald-700 { color: #6ee7b7; }
+        html:not([data-theme="light"]) .win-card .text-gray-500 { color: #a3adbf; }
+
+        /* 結果カードの見出しは、チャット画面の中で主張しすぎない大きさに揃える */
+        .cl-card h2.text-2xl { font-size: 1.25rem; line-height: 1.6rem; font-weight: 700; }
+
+        /* ライトテーマでは text-gray-300 のヘッダーリンクが背景に溶けて読めないため */
+        html[data-theme="light"] .cl-header-link { color: #475569; }
+        html[data-theme="light"] .cl-header-link:hover { color: #4f46e5; }
     </style>
 </head>
 <body class="min-h-screen has-minna-ticker">
@@ -1479,12 +1624,12 @@
                     <span aria-hidden="true">☰</span>
                 </button>
                 <a href="/" aria-label="Civic Lens トップページへ" class="luxury-title text-lg sm:text-xl font-extrabold tracking-tight shrink-0">🔍 Civic Lens</a>
-                <span class="hidden sm:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
-                <a href="/precedent-cases" class="hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">📚 認容事例DB</a>
-                <a href="/ledger" class="hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">⛓️ 開示請求台帳</a>
-                <span class="hidden md:flex items-center gap-1.5 text-[10px] cl-header-status font-mono shrink-0">
+                <span class="hidden xl:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
+                <a href="/precedent-cases" class="cl-header-link hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">📚 認容事例DB</a>
+                <a href="/ledger" class="cl-header-link hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">⛓️ 開示請求台帳</a>
+                <span class="hidden lg:flex items-center gap-1.5 text-[10px] cl-header-status font-mono min-w-0 max-w-[16rem]">
                     <span class="w-1.5 h-1.5 rounded-full cl-header-status-dot animate-pulse"></span>
-                    <span id="agentLogInline">起動中...</span>
+                    <span id="agentLogInline" class="truncate">起動中...</span>
                 </span>
             </div>
             <div id="authNavArea" class="shrink-0">
@@ -1506,7 +1651,7 @@
         </div>
 
         <!-- プロジェクトの請求一覧 & コメント -->
-        <section id="projectRecordsSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="projectRecordsSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
                 <span>🗂️</span> プロジェクトの請求一覧
             </h2>
@@ -1516,9 +1661,9 @@
 
         <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける（ダーク/ライトテーマ） -->
         <div class="mb-6 relative cl-hero-slim-extra">
-            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg overflow-hidden">
+            <div class="win-ticker-bar rounded-xl overflow-hidden">
                 <div class="flex items-center">
-                    <div class="shrink-0 bg-black/20 px-3 py-2 text-white text-xs font-bold flex items-center gap-1.5 z-10">
+                    <div class="win-ticker-label shrink-0 px-3 py-2 text-xs font-bold flex items-center gap-1.5 z-10">
                         <span>🏆</span><span>認容実績</span>
                     </div>
                     <div class="relative overflow-hidden py-2 flex-1">
@@ -1551,6 +1696,13 @@
                 <div class="chat-welcome-mark" aria-hidden="true">🔍</div>
                 <h2 id="mainQuestionHeading">何に怒りを感じていますか？</h2>
                 <p>思ったことをそのまま書くか、下の候補や ＋ から選んでください</p>
+                <!-- 審査員・初見のユーザーが5秒で「何をするエージェントか」を掴めるよう、処理の流れを示す -->
+                <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
+                    <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">🤖</span><span><b>AIが特定</b><small>機関・条例・行政文書</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">📝</span><span><b>請求書を作成</b><small>出すかはあなたが決める</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">⛓️</span><span><b>台帳で見守る</b><small>期限・結果を公開記録</small></span></li>
+                </ol>
             </div>
         </div>
 
@@ -1690,7 +1842,7 @@
 
         <div id="chatRightPane" class="hidden">
         <!-- STEP 2: 結果表示 -->
-        <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="resultSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">📊 怒りの分析結果</h2>
             <div id="angerDisplay" class="mb-6"></div>
 
@@ -1756,9 +1908,9 @@
         </section>
 
         <!-- STEP 4: Human-in-the-Loop & アクション -->
-        <section id="actionSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="actionSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-2 text-gray-800">⚖️ Human-in-the-Loop（市民の意思決定）</h2>
-            <p class="text-sm text-gray-600 mb-4">「開示請求書を作成」はチャット内のサジェストから選べます。ここでは不開示決定への反論(審査請求書)のみ作成できます。</p>
+            <p class="text-sm text-gray-600 mb-4">「開示請求書を作成」はチャット内のサジェストから選べます。ここでは不開示決定への反論(審査請求書)を作成できます。開示請求書の作成後は、議会の一般質問案・公安委員会への苦情申出書もチャットから提案されます。</p>
 
             <!-- 戦略選択ラジオ（開示請求書の作成はチャットのサジェストに移行したため非表示。値はrunDisclosureRequestに直接渡す） -->
             <div id="strategyOptionsContainer" class="hidden grid md:grid-cols-2 gap-4 mb-6">
@@ -1811,7 +1963,7 @@
         </section>
 
         <!-- STEP 5: 生成結果 -->
-        <section id="outputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="outputSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">✅ 生成されたアクション</h2>
             <div id="outputContent"></div>
 
@@ -2115,7 +2267,7 @@
         </section>
 
         <!-- STEP 6: 経路案内 -->
-        <section id="routeSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="routeSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">🚉 役所までのアクセス（駅すぱあとAPI）</h2>
             <div id="routeContent"></div>
         </section>
@@ -2123,10 +2275,10 @@
         </div><!-- /chatSplitGrid -->
 
         <!-- STEP 7: みんなの請求 (Public ダッシュボード) -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section class="cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-semibold text-gray-800">🌐 みんなの請求 — 集合知プラットフォーム</h2>
-                <button id="refreshPublicBtn" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                <h2 class="text-xl font-bold text-gray-800">🌐 みんなの請求</h2>
+                <button id="refreshPublicBtn" class="cl-ghost-btn text-sm px-3 py-1 rounded-full">
                     🔄 更新
                 </button>
             </div>
@@ -2184,7 +2336,7 @@
 
     <!-- 👤 ユーザー認証モーダル (Web & Web3 ハイブリッド) -->
     <div id="authModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeAuthModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             
             <div class="text-center mb-5">
@@ -2271,7 +2423,7 @@
 
     <!-- 📂 マイ請求履歴モーダル -->
     <div id="myRecordsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative border border-gray-200 max-h-[85vh] flex flex-col">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative border border-gray-200 max-h-[85vh] flex flex-col">
             <button id="closeMyRecordsModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             
             <div class="mb-4 border-b pb-3">
@@ -2289,7 +2441,7 @@
 
     <!-- 📁 新規プロジェクト作成モーダル -->
     <div id="newProjectModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeNewProjectModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             <h3 class="text-lg font-bold text-gray-800 mb-1">＋ 新規プロジェクト作成</h3>
             <p class="text-xs text-gray-500 mb-4">複数人で情報公開請求・不服審査請求を共同で進めるための作業スペースです。</p>
@@ -2312,7 +2464,7 @@
 
     <!-- 👥 プロジェクトメンバー・招待モーダル -->
     <div id="projectMembersModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeProjectMembersModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             <h3 class="text-lg font-bold text-gray-800 mb-3">👥 メンバー・招待</h3>
             <div id="projectMembersList" class="space-y-2 mb-4 text-sm"></div>
@@ -2452,7 +2604,7 @@
                 el.innerHTML = `
                     <span class="font-bold text-emerald-700">✅ ${w.result || '認容'}</span>
                     <span class="text-gray-500">${w.authority}</span>
-                    <span class="font-medium">${w.doc}</span>
+                    <span class="win-card-doc font-medium">${w.doc}</span>
                     ${w.decision_date ? `<span class="text-gray-400">（${w.decision_date}）</span>` : ''}
                 `;
                 return el;
@@ -4192,6 +4344,7 @@
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>開示請求書を作成しました。提出先窓口までのアクセス情報とあわせて右側にまとめています。`;
                 }
+                suggestFollowUpActions();
             } catch (err) {
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
@@ -4214,7 +4367,9 @@
             // 開示請求ではなく審査請求（不服申立て）を先に提案する
             if (nextAction === 'review_request') {
                 addChatBubble('assistant', `すでに非公開（不開示）の決定が出ているようです。まずはこの決定への審査請求書を作成しますか？<div class="chat-suggestion-btns" id="${groupId}">
-                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}')">⚖️ 審査請求書を作成</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'non_disclosure')">⚖️ 不開示決定への審査請求書</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'partial_disclosure')">⚖️ 一部開示決定への審査請求書</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'document_absent')">⚖️ 文書不存在への審査請求書</button>
                     <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-fast', '${groupId}', this)">📝 開示請求書を作り直す</button>
                 </div>`);
                 return;
@@ -4225,23 +4380,185 @@
             </div>`);
         }
 
-        function handleReviewSuggestion(groupId) {
+        const DECISION_TYPE_LABELS = {
+            non_disclosure: '不開示決定',
+            partial_disclosure: '一部開示決定',
+            document_absent: '文書不存在',
+        };
+
+        function handleReviewSuggestion(groupId, decisionType) {
             const group = document.getElementById(groupId);
             if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
-            addChatBubble('user', '⚖️ 審査請求書を作成');
-            const bubble = addChatBubble('assistant', '🔄 非公開決定への反論ロジックを組み立てています…');
-            runReviewRequest(bubble);
+            decisionType = decisionType || 'non_disclosure';
+            addChatBubble('user', `⚖️ ${DECISION_TYPE_LABELS[decisionType] || ''}への審査請求書を作成`);
+            const bubble = addChatBubble('assistant', '🔄 決定への反論ロジックと審査請求書を組み立てています…');
+            runReviewRequest(bubble, decisionType);
+        }
+
+        function currentAuthorityCategory() {
+            const key = document.getElementById('targetAuthority').value;
+            return allAuthorities.find(a => a.key === key)?.category || '';
+        }
+
+        // 開示請求書の作成後、行政監視を次の段階へ進める書面を提案する
+        // （議会の一般質問は開示請求と並行、公安委員会への苦情は警察組織のみ、審査請求は決定後）
+        let followUpSuggestionCount = 0;
+        function suggestFollowUpActions() {
+            const category = currentAuthorityCategory();
+            followUpSuggestionCount++;
+            const groupId = `followUpSuggest-${followUpSuggestionCount}`;
+            const buttons = [];
+            if (category !== '裁判所') {
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handleCouncilQuestionSuggestion('${groupId}')">🏛️ 議会の一般質問案（通告3問＋読み上げ原稿）</button>`);
+            }
+            if (category === '警察') {
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handlePoliceComplaintSuggestion('${groupId}', true)">🚨 公安委員会への苦情申出書（当事者として）</button>`);
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handlePoliceComplaintSuggestion('${groupId}', false)">📮 公安委員会への意見・要望書</button>`);
+            }
+            if (!buttons.length) return;
+            addChatBubble('assistant', `開示請求の決定を待つあいだにも、並行して打てる手があります。続けて作成しますか？<br><span class="text-xs text-gray-500">不開示・一部開示の決定が届いたら、その通知書を添付すると審査請求書を作成できます。</span><div class="chat-suggestion-btns" id="${groupId}">${buttons.join('')}</div>`);
+        }
+
+        function disableSuggestionGroup(groupId) {
+            const group = document.getElementById(groupId);
+            if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
+        }
+
+        function handleCouncilQuestionSuggestion(groupId) {
+            disableSuggestionGroup(groupId);
+            addChatBubble('user', '🏛️ 議会の一般質問案を作成');
+            const bubble = addChatBubble('assistant', '🔄 管轄議会の一般質問の通告案と読み上げ原稿を作成しています…');
+            runCouncilQuestion(bubble);
+        }
+
+        function handlePoliceComplaintSuggestion(groupId, isDirectParty) {
+            disableSuggestionGroup(groupId);
+            addChatBubble('user', isDirectParty ? '🚨 公安委員会への苦情申出書を作成' : '📮 公安委員会への意見・要望書を作成');
+            const bubble = addChatBubble('assistant', '🔄 公安委員会宛ての書面を作成しています…');
+            runPoliceComplaint(bubble, isDirectParty);
+        }
+
+        async function postForm(url, fields) {
+            const formData = new FormData();
+            Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+            const res = await fetch(url, { method: 'POST', body: formData });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+            }
+            return data;
+        }
+
+        function documentBlock(title, text, isMock, label) {
+            const id = `doc-${Math.random().toString(36).slice(2, 10)}`;
+            return `
+                <div class="bg-white border p-4 rounded-md mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-semibold">${title}</h3>
+                        <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="navigator.clipboard.writeText(document.getElementById('${id}').textContent).then(() => { this.textContent = '✓ コピーしました'; })">📋 コピー</button>
+                    </div>
+                    ${mockBadge(isMock, label)}
+                    <pre id="${id}" class="whitespace-pre-wrap text-sm font-mono">${escapeHtml(text || '')}</pre>
+                </div>`;
+        }
+
+        async function runCouncilQuestion(chatBubble) {
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const thinkingHandle = startThinking('actionThinking', [
+                '🏛️ 管轄議会と答弁者を特定中…',
+                '📝 通告書（3問）を組み立て中…',
+                '🎤 読み上げ原稿を作成中…',
+            ]);
+            try {
+                if (!targetAuthority) throw new Error('対象機関が特定できていません。');
+                const data = await postForm('/api/council-question', {
+                    user_input: getSubjectText(),
+                    target_authority: targetAuthority,
+                    requested_documents: (latestAnalysis?.specific_documents_requested || []).join('\n'),
+                });
+                displayCouncilQuestion(data);
+                document.getElementById('outputSection').classList.remove('hidden');
+                activateSplitView();
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>${escapeHtml(data.council)}の議員に提案する一般質問（${data.questions.length}問）と読み上げ原稿をまとめました。通告・登壇は議員が行います。`;
+                }
+            } catch (err) {
+                if (chatBubble) chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
+            } finally {
+                stopThinking(thinkingHandle);
+            }
+        }
+
+        function displayCouncilQuestion(data) {
+            const noticeText = [
+                `一般質問通告書（${data.council}）`,
+                '',
+                ...data.questions.map((q, i) => [
+                    `${i + 1}. ${q.title}（答弁者: ${q.respondent}）`,
+                    ...q.points.map((p, j) => `  (${j + 1}) ${p}`),
+                ].join('\n')),
+            ].join('\n');
+            const intents = data.questions.map((q, i) => `<li><strong>${i + 1}.</strong> ${escapeHtml(q.intent)}</li>`).join('');
+            document.getElementById('outputContent').innerHTML = `
+                <div class="bg-indigo-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-1 text-indigo-900">🏛️ 議会の一般質問案（${escapeHtml(data.council)}）</h3>
+                    <p class="text-sm text-indigo-800">答弁者（想定）: ${escapeHtml(data.respondents)}</p>
+                    <p class="text-xs text-indigo-700 mt-2">${escapeHtml(data.cover_note)}</p>
+                </div>
+                ${documentBlock('📄 通告書', noticeText, data.is_mock, 'AI通告書生成')}
+                <div class="bg-gray-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2">🎯 各質問のねらい（議員向けメモ）</h3>
+                    <ul class="text-sm space-y-1">${intents}</ul>
+                </div>
+                ${documentBlock('🎤 登壇時の読み上げ原稿', data.script, data.is_mock, 'AI原稿生成')}
+            `;
+        }
+
+        async function runPoliceComplaint(chatBubble, isDirectParty) {
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const thinkingHandle = startThinking('actionThinking', [
+                '🚔 管理する公安委員会を特定中…',
+                '📝 警察法第79条の記載事項を整理中…',
+            ]);
+            try {
+                if (!targetAuthority) throw new Error('対象機関が特定できていません。');
+                const data = await postForm('/api/police-complaint', {
+                    user_input: getSubjectText(),
+                    target_authority: targetAuthority,
+                    is_direct_party: isDirectParty ? 'true' : 'false',
+                });
+                document.getElementById('outputContent').innerHTML = `
+                    <div class="bg-red-50 p-4 rounded-md mb-4">
+                        <h3 class="font-semibold mb-1 text-red-900">🚨 ${escapeHtml(data.commission)}への${data.is_direct_party ? '苦情申出' : '意見・要望'}</h3>
+                        <p class="text-sm text-red-800">対象: ${escapeHtml(data.police_authority)}</p>
+                    </div>
+                    ${documentBlock('📄 ' + (data.is_direct_party ? '苦情申出書' : '意見・要望書'), data.complaint_text, data.is_mock, 'AI文書生成')}
+                    <div class="bg-green-50 p-4 rounded-md">
+                        <h3 class="font-semibold mb-2 text-green-900">🎯 次のステップ</h3>
+                        <ol class="text-sm text-green-800 list-decimal list-inside">${data.next_steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+                    </div>`;
+                document.getElementById('outputSection').classList.remove('hidden');
+                activateSplitView();
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>${escapeHtml(data.commission)}宛ての書面を作成しました。日時・場所・内容を事実に即して加筆してから提出してください。`;
+                }
+            } catch (err) {
+                if (chatBubble) chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
+            } finally {
+                stopThinking(thinkingHandle);
+            }
         }
 
         // 審査請求（不開示決定への不服申立て）: 決定の内容（添付の読み取り結果を含む）と
         // 非公開の根拠条文から、反論ロジックと類似の認容事例をまとめる
-        async function runReviewRequest(chatBubble) {
+        async function runReviewRequest(chatBubble, decisionType) {
             const targetAuthority = document.getElementById('targetAuthority').value;
             const btn = document.getElementById('reviewBtn');
             const formData = new FormData();
             formData.append('non_disclosure_decision', getSubjectText() || '（不開示決定の内容）');
             formData.append('target_authority', targetAuthority);
             formData.append('alleged_ground', latestAnalysis?.legal_basis || '情報公開条例の不開示事由');
+            formData.append('decision_type', decisionType || 'non_disclosure');
 
             btn.disabled = true;
             const thinkingHandle = startThinking('actionThinking', [
@@ -4264,7 +4581,7 @@
                 activateSplitView();
                 if (chatBubble) {
                     const prob = Math.round((data.counter_argument?.winning_probability || 0) * 100);
-                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>審査請求の反論ロジックをまとめました（見込み: 約${prob}%）。審査請求先は「${escapeHtml(data.review_authority || '')}」です。詳しくは分析結果の「生成されたアクション」をご覧ください。`;
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>審査請求書と反論ロジックをまとめました（見込み: 約${prob}%）。提出先は「${escapeHtml(data.review_addressee || '')}」、諮問先は「${escapeHtml(data.review_authority || '')}」です。詳しくは分析結果の「生成されたアクション」をご覧ください。`;
                 }
             } catch (err) {
                 if (chatBubble) {
@@ -4288,10 +4605,13 @@
             document.getElementById('outputContent').innerHTML = `
                 <div class="bg-orange-50 p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-1 text-orange-900">⚖️ 審査請求（不開示決定への不服申立て）</h3>
-                    <p class="text-sm text-orange-800">審査請求先: ${escapeHtml(data.review_authority || '')}</p>
+                    <p class="text-sm text-orange-800">決定の種類: ${escapeHtml(data.decision_type_label || '')}</p>
+                    <p class="text-sm text-orange-800">提出先（審査庁）: ${escapeHtml(data.review_addressee || '')} ／ 諮問先: ${escapeHtml(data.review_authority || '')}</p>
+                    <p class="text-sm text-orange-800">審査請求期間: 決定を知った日の翌日から${data.review_period_days}日以内${data.review_deadline ? `（${new Date(data.review_deadline).toLocaleDateString()}まで）` : ''}</p>
                     <p class="text-sm text-orange-800">争点: ${escapeHtml(c.ground_number || '')} ${escapeHtml(c.ground_name || '')}</p>
                     <p class="text-sm text-orange-800">認容の見込み（AI推定）: 約${prob}%</p>
                 </div>
+                ${documentBlock('📄 審査請求書', data.review_request_text, data.review_request_is_mock, 'AI文書生成')}
                 <div class="bg-white border p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">🗣️ 反論ロジック</h3>
                     ${mockBadge(c.is_mock, 'AI反論生成')}
@@ -4304,7 +4624,7 @@
 
         document.getElementById('reviewBtn').addEventListener('click', () => {
             const bubble = addChatBubble('assistant', '🔄 非公開決定への反論ロジックを組み立てています…');
-            runReviewRequest(bubble);
+            runReviewRequest(bubble, 'non_disclosure');
         });
 
         function handleDisclosureSuggestion(strategyOption, groupId, clickedBtn) {
