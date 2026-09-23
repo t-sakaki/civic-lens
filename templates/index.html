@@ -770,7 +770,7 @@
             position: absolute;
             z-index: 40;
             bottom: calc(100% + 10px);
-            left: -3.5rem;
+            left: 0;
             width: min(560px, calc(100vw - 32px));
             max-height: min(70vh, 560px);
             display: flex;
@@ -1572,37 +1572,9 @@
 
                 <div class="composer-toolbar">
                     <div class="flex items-center gap-1.5">
-                        <!-- 対象機関はチャットボックス内のタグ。ホバー（タッチ端末はタップ）で
-                             候補チップが動的に表示されるポップオーバーが開く -->
-                        <div class="relative inline-block" id="authorityTagWrap">
-                            <button type="button" id="authorityTag" class="composer-tool-tag">
-                                <span id="selectedAuthorityIcon">🏛️</span>
-                                <span id="selectedAuthorityLabel">読み込み中...</span>
-                            </button>
-                            <div id="authorityPopover" class="hidden authority-popover">
-                                <p class="text-xs text-gray-500 mb-2">タップして対象機関を選択</p>
-                                <div id="authorityChipFlow" class="flex flex-wrap gap-2 min-h-[2.5rem] mb-2"></div>
-                                <button id="detectMunicipalityBtn" type="button" class="text-xs text-indigo-600 hover:underline">
-                                    📍 現在地から自治体を特定する
-                                </button>
-                                <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
-                                <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
-                                <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
-                            </div>
-                        </div>
-                        <select id="targetAuthority" class="hidden">
-                            <option value="">読み込み中...</option>
-                        </select>
-                        <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium"></p>
-
-                        <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
-                            <span id="voiceIcon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
-                        </button>
-                        <button id="attachBtn" type="button" class="composer-tool-btn" title="ファイルを添付（画像・PDF）— Gemini Visionで読み取ります" aria-label="ファイルを添付"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
-                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）" aria-label="表情で伝える（カメラ）"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
-
                         <!-- 「+」メニュー: Windows 11 のスタートメニューのように、対象地域・機関や案件を
-                             タイルで選ぶ。コンポーザーの上に開く -->
+                             タイルで選ぶ。コンポーザーの上に開く。
+                             一般的なチャットUIに合わせてツールバーの左端に置く -->
                         <div class="relative inline-block" id="plusMenuWrap">
                             <button type="button" id="plusMenuBtn" class="composer-tool-btn" title="対象地域・案件を選ぶ" aria-haspopup="true" aria-expanded="false" aria-label="対象地域・案件を選ぶ"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                             <div id="plusMenuPopover" class="hidden start-menu" role="dialog" aria-label="対象地域・案件を選ぶ">
@@ -1647,6 +1619,35 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- 対象機関はチャットボックス内のタグ。ホバー（タッチ端末はタップ）で
+                             候補チップが動的に表示されるポップオーバーが開く -->
+                        <div class="relative inline-block" id="authorityTagWrap">
+                            <button type="button" id="authorityTag" class="composer-tool-tag">
+                                <span id="selectedAuthorityIcon">🏛️</span>
+                                <span id="selectedAuthorityLabel">読み込み中...</span>
+                            </button>
+                            <div id="authorityPopover" class="hidden authority-popover">
+                                <p class="text-xs text-gray-500 mb-2">タップして対象機関を選択</p>
+                                <div id="authorityChipFlow" class="flex flex-wrap gap-2 min-h-[2.5rem] mb-2"></div>
+                                <button id="detectMunicipalityBtn" type="button" class="text-xs text-indigo-600 hover:underline">
+                                    📍 現在地から自治体を特定する
+                                </button>
+                                <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+                                <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
+                                <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
+                            </div>
+                        </div>
+                        <select id="targetAuthority" class="hidden">
+                            <option value="">読み込み中...</option>
+                        </select>
+                        <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium"></p>
+
+                        <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
+                            <span id="voiceIcon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+                        </button>
+                        <button id="attachBtn" type="button" class="composer-tool-btn" title="ファイルを添付（画像・PDF）— Gemini Visionで読み取ります" aria-label="ファイルを添付"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
+                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）" aria-label="表情で伝える（カメラ）"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+
                         <span class="suggestion-hint">
                             <span class="thinking-dots"><span></span><span></span><span></span></span>
                             ヒントを提案中

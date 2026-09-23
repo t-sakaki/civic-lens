@@ -35,6 +35,9 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setenv("EAS_SCHEMA_UID", "0x3de8ea7980a484e5fa14166785cb0fdb7d01a9984e156bf0ee95ab894724b4ec")
     monkeypatch.setenv("LEDGER_ATTESTER_ADDRESS", "0x2a9B2cfeC60210d713dCCcE3943c8Ff0e9EE299b")
     monkeypatch.setenv("EAS_CHAIN_ID", "84532")
+    # CIではFirestoreエミュレータが有効なため、JSON経路のテストであることを明示する
+    # （Firestore経路は tests/test_storage_firestore.py で検証）
+    monkeypatch.setenv("CIVIC_LENS_STORAGE", "json")
     monkeypatch.setattr(lr, "_STORE_PATH", tmp_path / "reactions.json")
     ol._cache.update(at=0.0, entries=None)
 
