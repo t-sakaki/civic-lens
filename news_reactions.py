@@ -10,12 +10,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_STORE_PATH = Path(__file__).resolve().parent / "data" / "news_anger_records.json"
+_BUNDLED_PATH = Path(__file__).resolve().parent / "data" / "news_anger_records.json"
+# Vercel等のサーバーレス環境ではデプロイ先が読み取り専用のため /tmp に書き込む
+# （初回は同梱の記録データを読み込み、以降は /tmp 側を更新する）
+if os.getenv("VERCEL"):
+    _STORE_PATH = Path("/tmp/civic_lens_data") / "news_anger_records.json"
+else:
+    _STORE_PATH = _BUNDLED_PATH
 _LOCK = threading.Lock()
 
 REACTION_TYPES = ["heart", "angry", "shock"]
@@ -28,10 +35,11 @@ def make_news_id(link: str) -> str:
 
 
 def _load() -> Dict[str, Any]:
-    if not _STORE_PATH.exists():
+    path = _STORE_PATH if _STORE_PATH.exists() else _BUNDLED_PATH
+    if not path.exists():
         return {}
     try:
-        with _STORE_PATH.open(encoding="utf-8") as f:
+        with path.open(encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {}
