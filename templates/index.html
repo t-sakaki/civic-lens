@@ -2947,9 +2947,19 @@
         document.getElementById('analyzeBtn').addEventListener('click', () => runAnalyze());
 
         // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
-        function mockBadge(isMock, label) {
+        // reason はバックエンドの mock_reason（no_api_key / timeout / parse_error / api_error）。
+        // 未指定の呼び出し元では「AI処理に失敗」という汎用文言にフォールバックする
+        // （「APIキー未設定」固定文言はキー設定済みでも失敗しうる他の原因を誤って伝えるため使わない）。
+        const MOCK_REASON_LABELS = {
+            no_api_key: 'APIキー未設定のため',
+            timeout: 'AI応答がタイムアウトしたため',
+            parse_error: 'AIの応答を解析できなかったため',
+            api_error: 'AI呼び出しに失敗したため',
+        };
+        function mockBadge(isMock, label, reason) {
             if (!isMock) return '';
-            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ APIキー未設定のためサンプルデータです（${label}）</div>`;
+            const reasonText = MOCK_REASON_LABELS[reason] || 'AI処理に失敗したため';
+            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ ${reasonText}サンプルデータです（${label}）</div>`;
         }
 
         function displayAnalysis(data) {
@@ -2957,7 +2967,7 @@
 
             const angerPercent = (analysis.anger_level / 10) * 100;
             document.getElementById('angerDisplay').innerHTML = `
-                ${mockBadge(analysis.is_mock, 'AI怒り分析')}
+                ${mockBadge(analysis.is_mock, 'AI怒り分析', analysis.mock_reason)}
                 ${mockBadge(data.emotion_is_mock, '表情感情解析')}
                 <div class="flex items-center gap-4">
                     <div class="flex-1">

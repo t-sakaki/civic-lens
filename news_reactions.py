@@ -38,9 +38,16 @@ def _load() -> Dict[str, Any]:
 
 
 def _save(data: Dict[str, Any]) -> None:
-    _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _STORE_PATH.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    # Vercel等のサーバーレス環境では /tmp 以外が読み取り専用のファイルシステムのため、
+    # 書き込みが OSError（Read-only file system）で失敗することがある。
+    # ここで失敗しても分析結果自体は呼び出し元にそのまま返せるよう、握りつぶして継続する
+    # （履歴・リアクションの永続化だけが失われる）。他のFirestore依存箇所と同様の方針。
+    try:
+        _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _STORE_PATH.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        print(f"[news_reactions] 保存に失敗しました（読み取り専用ファイルシステムの可能性）: {e}")
 
 
 def record_analysis(
