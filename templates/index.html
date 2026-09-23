@@ -107,6 +107,43 @@
             --cl-hamburger-text: #1e293b;
             --cl-hamburger-hover-bg: rgba(15, 23, 42, 0.08);
         }
+        /* --- チャットUI用トークン（ChatGPT / Claude 風の落ち着いた配色） --- */
+        :root,
+        html[data-theme="dark"],
+        html[data-theme="golden"] {
+            --chat-text: #e6e8ee;
+            --chat-muted: #8b95a7;
+            --chat-user-bg: #252f44;
+            --chat-surface: #151d30;
+            --chat-menu-bg: #131a2b;
+            --chat-border: rgba(255, 255, 255, 0.08);
+            --chat-border-strong: rgba(255, 255, 255, 0.16);
+            --chat-hover: rgba(255, 255, 255, 0.07);
+            --chat-send-bg: #f5f5f7;
+            --chat-send-fg: #0b1120;
+            --chat-accent: #a5b4fc;
+            --chat-accent-bg: rgba(129, 140, 248, 0.16);
+            --chat-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
+        }
+        html[data-theme="golden"] {
+            --chat-accent: #f2c078;
+            --chat-accent-bg: rgba(242, 169, 59, 0.16);
+        }
+        html[data-theme="light"] {
+            --chat-text: #1f2937;
+            --chat-muted: #6b7280;
+            --chat-user-bg: #e4e8f0;
+            --chat-surface: #ffffff;
+            --chat-menu-bg: #ffffff;
+            --chat-border: rgba(15, 23, 42, 0.08);
+            --chat-border-strong: rgba(15, 23, 42, 0.16);
+            --chat-hover: rgba(15, 23, 42, 0.05);
+            --chat-send-bg: #111827;
+            --chat-send-fg: #ffffff;
+            --chat-accent: #4f46e5;
+            --chat-accent-bg: rgba(79, 70, 229, 0.10);
+            --chat-shadow: 0 10px 32px rgba(15, 23, 42, 0.10);
+        }
         body {
             font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif;
             background-color: var(--cl-bg);
@@ -132,7 +169,7 @@
         .win-ticker-track {
             display: flex;
             width: max-content;
-            animation: winTickerScroll 90s linear infinite;
+            animation: winTickerScroll 180s linear infinite;
         }
         .win-ticker-track:hover {
             animation-play-state: paused;
@@ -420,23 +457,31 @@
         }
         /* --- プロンプトを主役にした、チャット風コンポーザー --- */
         .composer-card {
-            border: 2px solid #e5e7eb;
-            border-radius: 1rem;
-            background: #fff;
+            border: 1px solid var(--chat-border-strong);
+            border-radius: 1.6rem;
+            background: var(--chat-surface);
+            box-shadow: var(--chat-shadow);
             transition: border-color 0.2s, box-shadow 0.2s;
-            overflow: hidden;
+            position: relative;
         }
         .composer-card:focus-within {
-            border-color: #818cf8;
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+            border-color: var(--chat-accent);
+        }
+        .composer-section {
+            margin-bottom: 0.25rem;
         }
         .composer-textarea {
+            display: block;
             width: 100%;
-            padding: 1rem;
+            padding: 1rem 1.25rem 0.25rem;
             border: none;
-            resize: vertical;
+            resize: none;
             font-size: 1rem;
-            line-height: 1.5;
+            line-height: 1.6;
+            max-height: 12rem;
+            overflow-y: auto;
+            background: transparent;
+            color: var(--chat-text);
         }
         .composer-textarea:focus {
             outline: none;
@@ -446,30 +491,29 @@
             align-items: center;
             justify-content: space-between;
             gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            border-top: 1px solid #f3f4f6;
+            padding: 0.35rem 0.6rem 0.6rem 0.75rem;
         }
         .composer-tool-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 2.1rem;
-            height: 2.1rem;
+            width: 2.25rem;
+            height: 2.25rem;
             border-radius: 999px;
-            border: 1px solid #e5e7eb;
-            background: #f9fafb;
-            font-size: 1rem;
+            border: none;
+            background: transparent;
+            color: var(--chat-muted);
             cursor: pointer;
-            transition: all 0.15s;
+            transition: background 0.15s, color 0.15s;
         }
-        .composer-tool-btn:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
-            transform: translateY(-1px);
+        .composer-tool-btn:hover,
+        .composer-tool-btn[aria-expanded="true"] {
+            background: var(--chat-hover);
+            color: var(--chat-text);
         }
         .composer-tool-btn.active {
-            border-color: #f87171;
-            background: #fee2e2;
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.14);
         }
 
         /* --- 対象機関タグ（チャットボックス内蔵）: ホバー/タップでポップオーバーのサジェストが動的に開く --- */
@@ -478,15 +522,15 @@
             align-items: center;
             gap: 6px;
             height: 2.1rem;
-            padding: 0 0.85rem;
+            padding: 0 0.8rem;
             border-radius: 999px;
-            border: 1px solid #e5e7eb;
-            background: #f9fafb;
+            border: 1px solid var(--chat-border-strong);
+            background: transparent;
             font-size: 0.8rem;
             font-weight: 500;
-            color: #374151;
+            color: var(--chat-text);
             cursor: pointer;
-            transition: all 0.15s;
+            transition: background 0.15s, border-color 0.15s;
             max-width: 12rem;
             white-space: nowrap;
             overflow: hidden;
@@ -494,14 +538,13 @@
         }
         .composer-tool-tag:hover,
         .composer-tool-tag.open {
-            border-color: #818cf8;
-            background: #eef2ff;
-            color: #4338ca;
+            border-color: var(--chat-accent);
+            background: var(--chat-accent-bg);
         }
         /* タイプライター例文の切り替えに合わせて対象機関タグが自動で変わったことを軽く知らせる */
         @keyframes authorityTagFlash {
-            0% { background: #e0e7ff; border-color: #818cf8; }
-            100% { background: #f9fafb; border-color: #e5e7eb; }
+            0% { background: var(--chat-accent-bg); border-color: var(--chat-accent); }
+            100% { background: transparent; border-color: var(--chat-border-strong); }
         }
         .authority-tag-flash {
             animation: authorityTagFlash 0.9s ease-out;
@@ -509,50 +552,409 @@
         .authority-popover {
             position: absolute;
             z-index: 30;
-            top: calc(100% + 8px);
+            bottom: calc(100% + 10px);
             left: 0;
             width: min(360px, 88vw);
             background: #fff;
             border: 1px solid #e5e7eb;
-            border-radius: 0.75rem;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+            border-radius: 0.9rem;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
             padding: 0.9rem;
             animation: fadeIn 0.15s ease-out;
         }
 
-        /* --- 「+」メニュー: Windowsスタートメニュー的に、低頻度操作（シチュエーション選択・
-             ニュース怒り再現エージェント等）をひとつのポップアップに集約する --- */
-        .plus-menu-popover {
-            position: absolute;
-            z-index: 30;
-            bottom: calc(100% + 8px);
-            left: 0;
-            width: min(280px, 88vw);
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.75rem;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
-            padding: 0.5rem;
-            animation: fadeIn 0.15s ease-out;
+        .composer-send-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 999px;
+            color: var(--chat-send-fg);
+            background: var(--chat-send-bg);
+            transition: transform 0.15s, opacity 0.15s, background 0.15s;
+            flex-shrink: 0;
         }
-        .plus-menu-item {
+        .composer-send-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+        .composer-send-btn:disabled,
+        .composer-send-btn.is-empty {
+            cursor: default;
+            opacity: 0.3;
+        }
+        .composer-send-btn.busy svg {
+            display: none;
+        }
+        .composer-send-btn.busy::after {
+            content: '';
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 640px) {
+            .composer-toolbar .suggestion-hint { display: none; }
+            .composer-toolbar > div:first-child { min-width: 0; }
+            .composer-tool-tag { max-width: 8.5rem; }
+        }
+        /* --- 添付ファイル（Gemini Vision） --- */
+        .attachment-tray {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.75rem 0.9rem 0;
+        }
+        .attachment-chip {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            max-width: 15rem;
+            padding: 0.35rem 1.9rem 0.35rem 0.35rem;
+            border-radius: 0.8rem;
+            border: 1px solid var(--chat-border-strong);
+            background: var(--chat-hover);
+            color: var(--chat-text);
+            animation: chatMessageIn 0.2s ease-out;
+        }
+        .attachment-thumb {
+            flex-shrink: 0;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 0.55rem;
+            object-fit: cover;
+            background: var(--chat-accent-bg);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .attachment-thumb.pdf {
+            background: #e5484d;
+        }
+        .attachment-meta {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.3;
+        }
+        .attachment-name {
+            font-size: 0.78rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attachment-size {
+            font-size: 0.66rem;
+            color: var(--chat-muted);
+        }
+        .attachment-remove {
+            position: absolute;
+            top: 50%;
+            right: 0.35rem;
+            transform: translateY(-50%);
+            width: 1.3rem;
+            height: 1.3rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            color: var(--chat-muted);
+        }
+        .attachment-remove:hover {
+            background: var(--chat-hover);
+            color: var(--chat-text);
+        }
+        .composer-drop-hint {
+            display: none;
+        }
+        .composer-card.dragover {
+            border-color: var(--chat-accent);
+            border-style: dashed;
+        }
+        .composer-card.dragover .composer-drop-hint {
+            display: flex;
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            align-items: center;
+            justify-content: center;
+            border-radius: inherit;
+            background: var(--chat-accent-bg);
+            backdrop-filter: blur(2px);
+            color: var(--chat-text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            pointer-events: none;
+        }
+        /* チャット内: 送った添付と、読み取り結果 */
+        .chat-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
+        .chat-attachments img {
+            width: 7rem;
+            height: 7rem;
+            object-fit: cover;
+            border-radius: 0.8rem;
+            border: 1px solid var(--chat-border);
+        }
+        .chat-attachments .attachment-chip {
+            padding-right: 0.7rem;
+        }
+        .vision-card {
+            margin-top: 0.4rem;
+            border: 1px solid var(--chat-border-strong);
+            border-radius: 0.9rem;
+            padding: 0.75rem 0.9rem;
+            font-size: 0.88rem;
+        }
+        .vision-card-head {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .vision-badge {
+            font-size: 0.62rem;
+            font-weight: 700;
+            padding: 0.05rem 0.45rem;
+            border-radius: 999px;
+            color: var(--chat-accent);
+            background: var(--chat-accent-bg);
+        }
+        .vision-card ul {
+            margin: 0.4rem 0 0.2rem;
+            padding-left: 1.1rem;
+            list-style: disc;
+            color: var(--chat-text);
+        }
+        .vision-card li {
+            line-height: 1.6;
+        }
+        .vision-card details {
+            margin-top: 0.4rem;
+            color: var(--chat-muted);
+        }
+        .vision-card summary {
+            cursor: pointer;
+            font-size: 0.78rem;
+        }
+        .vision-card pre {
+            margin-top: 0.4rem;
+            white-space: pre-wrap;
+            font-family: inherit;
+            font-size: 0.78rem;
+            line-height: 1.6;
+            max-height: 14rem;
+            overflow-y: auto;
+            color: var(--chat-text);
+        }
+
+        /* 結果パネルを開いて左右分割になった狭い列でも、送信ボタンがはみ出さないようにする */
+        #chatSplitGrid.split-active .composer-toolbar .suggestion-hint { display: none; }
+        #chatSplitGrid.split-active .composer-toolbar > div:first-child { min-width: 0; }
+        #chatSplitGrid.split-active .composer-tool-tag { max-width: 9rem; }
+
+        /* --- 「+」メニュー: Windows 11 のスタートメニュー風。上部に検索、中央にタイル、
+             下部に現在の選択を表示する。コンポーザーは画面下に固定なので上方向へ開く --- */
+        .start-menu {
+            position: absolute;
+            z-index: 40;
+            bottom: calc(100% + 10px);
+            left: 0;
+            width: min(560px, calc(100vw - 32px));
+            max-height: min(70vh, 560px);
+            display: flex;
+            flex-direction: column;
+            background: var(--chat-menu-bg);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--chat-border-strong);
+            border-radius: 1rem;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+            animation: startMenuIn 0.18s ease-out;
+            overflow: hidden;
+            color: var(--chat-text);
+        }
+        .start-menu.open-down {
+            bottom: auto;
+            top: calc(100% + 10px);
+        }
+        @keyframes startMenuIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 640px) {
+            .start-menu { position: fixed; left: 16px; right: 16px; bottom: 96px; width: auto; }
+        }
+        .start-menu-search {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.9rem 0.9rem 0.25rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: var(--chat-hover);
+            border: 1px solid var(--chat-border);
+            font-size: 0.85rem;
+        }
+        .start-menu-search:focus-within {
+            border-color: var(--chat-accent);
+        }
+        .start-menu-search input {
+            flex: 1;
+            min-width: 0;
+            border: none;
+            background: transparent;
+            outline: none;
+            color: var(--chat-text);
+        }
+        .start-menu-body {
+            overflow-y: auto;
+            padding: 0.25rem 0.9rem 0.75rem;
+        }
+        .start-menu-section {
+            margin-top: 0.65rem;
+        }
+        .start-menu-section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0 0.15rem 0.4rem;
+        }
+        .start-menu-section-head h4 {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--chat-muted);
+        }
+        .start-menu-link {
+            font-size: 0.72rem;
+            color: var(--chat-accent);
+        }
+        .start-menu-link:hover { text-decoration: underline; }
+        .start-menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 0.35rem;
+        }
+        .start-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            min-height: 78px;
+            padding: 0.55rem 0.35rem;
+            border-radius: 0.55rem;
+            border: 1px solid transparent;
+            text-align: center;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .start-tile:hover,
+        .start-tile:focus-visible {
+            background: var(--chat-hover);
+            border-color: var(--chat-border);
+            outline: none;
+        }
+        .start-tile.selected {
+            background: var(--chat-accent-bg);
+            border-color: var(--chat-accent);
+        }
+        .start-tile-icon {
+            font-size: 1.55rem;
+            line-height: 1;
+        }
+        .start-tile-label {
+            font-size: 0.72rem;
+            line-height: 1.25;
+            color: var(--chat-text);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .start-tile-sub {
+            font-size: 0.62rem;
+            color: var(--chat-muted);
+            margin-top: -0.15rem;
+        }
+        .start-menu-status {
+            font-size: 0.72rem;
+            color: var(--chat-muted);
+            margin: 0 0.15rem 0.4rem;
+        }
+        .start-tile-badge {
+            font-size: 0.58rem;
+            font-weight: 700;
+            color: var(--chat-accent);
+            background: var(--chat-accent-bg);
+            border-radius: 999px;
+            padding: 0 0.4rem;
+        }
+        .start-news-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .start-news-item {
             display: flex;
             align-items: center;
             gap: 0.6rem;
             width: 100%;
             text-align: left;
-            padding: 0.6rem 0.75rem;
-            border-radius: 0.5rem;
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: #374151;
-            transition: background 0.12s;
+            padding: 0.5rem 0.6rem;
+            border-radius: 0.55rem;
+            border: 1px solid var(--chat-border);
+            background: transparent;
+            transition: background 0.12s, border-color 0.12s;
         }
-        .plus-menu-item:hover {
-            background: #f3f4f6;
+        .start-news-item:hover,
+        .start-news-item:focus-visible {
+            background: var(--chat-hover);
+            border-color: rgba(244, 63, 94, 0.5);
+            outline: none;
         }
-        .plus-menu-item .emoji {
-            font-size: 1.1rem;
+        .start-news-item .title {
+            font-size: 0.78rem;
+            color: var(--chat-text);
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .start-news-item .meta {
+            font-size: 0.62rem;
+            color: var(--chat-muted);
+        }
+        .start-news-item .cta {
+            flex-shrink: 0;
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: #fff;
+            background: #f43f5e;
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+        }
+        .start-menu-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.6rem 1rem;
+            border-top: 1px solid var(--chat-border);
+            background: var(--chat-hover);
+            font-size: 0.75rem;
+            color: var(--chat-muted);
         }
         .plus-panel {
             margin-top: 0.75rem;
@@ -578,7 +980,7 @@
 
         /* --- プロンプト入力欄: タイプライター風の動的サジェスト（エージェントが常に生きて考えている感を演出） --- */
         #userInput::placeholder {
-            color: #4b5563; /* ダークグレイ */
+            color: var(--chat-muted);
             opacity: 1;
         }
         .suggestion-hint {
@@ -587,7 +989,7 @@
             gap: 5px;
             font-size: 0.7rem;
             font-weight: 400;
-            color: #9ca3af;
+            color: var(--chat-muted);
         }
         @media (prefers-reduced-motion: reduce) {
             .suggestion-hint .thinking-dots span {
@@ -599,15 +1001,9 @@
         .thinking-box {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            margin-top: 0.75rem;
-            border-radius: 0.5rem;
-            background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
-            border: 1px solid #e0e7ff;
+            gap: 0.6rem;
+            padding: 0.15rem 0;
             animation: fadeIn 0.3s ease-out;
-            overflow: hidden;
-            position: relative;
         }
         .thinking-dots {
             display: flex;
@@ -618,7 +1014,7 @@
             width: 6px;
             height: 6px;
             border-radius: 50%;
-            background: #6366f1;
+            background: var(--chat-accent);
             animation: thinkingBounce 1.1s ease-in-out infinite;
         }
         .thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -629,35 +1025,29 @@
         }
         .thinking-text {
             flex: 1;
-            font-size: 0.8rem;
-            color: #4338ca;
-            font-weight: 600;
+            min-width: 0;
+            font-size: 0.9rem;
+            font-weight: 500;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            /* テキストに光が流れるシマー表現（ChatGPT/Claudeの「考え中」風） */
+            background: linear-gradient(90deg, var(--chat-muted) 0%, var(--chat-muted) 40%, var(--chat-text) 50%, var(--chat-muted) 60%, var(--chat-muted) 100%);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: thinkingShimmer 2s linear infinite;
+        }
+        @keyframes thinkingShimmer {
+            from { background-position: 100% 0; }
+            to { background-position: -100% 0; }
         }
         .thinking-timer {
             flex-shrink: 0;
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             font-family: 'SFMono-Regular', Consolas, monospace;
-            color: #6366f1;
-            background: rgba(99, 102, 241, 0.1);
-            padding: 0.15rem 0.5rem;
-            border-radius: 999px;
-        }
-        .thinking-box::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            height: 2px;
-            width: 40%;
-            background: linear-gradient(90deg, transparent, #6366f1, transparent);
-            animation: thinkingSweep 1.4s linear infinite;
-        }
-        @keyframes thinkingSweep {
-            from { transform: translateX(-100%); }
-            to { transform: translateX(350%); }
+            color: var(--chat-muted);
         }
 
         /* --- スターのふわふわアニメーション --- */
@@ -753,26 +1143,14 @@
             background: rgba(242, 169, 59, 0.1);
         }
 
-        /* チャットタイムライン & 左右分割レイアウト */
+        /* チャットタイムライン & 左右分割レイアウト
+           分析結果が出たら、Codex / Claude Code のように画面幅いっぱいの2ペインに切り替える。
+           左右それぞれが独立してスクロールし、境界線はドラッグで動かせる */
         #chatSplitGrid {
             display: block;
         }
-        #chatSplitGrid.split-active {
-            display: grid;
-            grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-            gap: 1.25rem;
-            align-items: start;
-        }
-        #chatRightPane {
-            position: sticky;
-            top: 1rem;
-            max-height: calc(100vh - 2rem);
-            overflow-y: auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1rem;
-            align-items: start;
-            align-content: start;
+        .split-resizer {
+            display: none;
         }
         #chatRightPane > section {
             margin-bottom: 0;
@@ -780,101 +1158,437 @@
         #chatRightPane > #outputSection {
             grid-column: 1 / -1;
         }
-        @media (max-width: 900px) {
+        @media (min-width: 901px) {
             #chatSplitGrid.split-active {
-                grid-template-columns: 1fr;
+                --split-left: 42%;
+                display: grid;
+                grid-template-columns: minmax(320px, var(--split-left)) 12px minmax(360px, 1fr);
+                /* ページの中央寄せコンテナ（max-w-4xl）を抜けて画面幅いっぱいに広げる */
+                width: calc(100vw - var(--scrollbar-w, 0px) - 32px);
+                margin-left: calc(50% - (100vw - var(--scrollbar-w, 0px)) / 2 + 16px);
+                /* ワークスペースの上端から、下部のティッカー（約40px）までの高さに収める（JSで計算） */
+                height: var(--split-h, calc(100vh - 56px));
+                margin-bottom: 1.5rem;
             }
-            #chatRightPane {
+            #chatSplitGrid.split-active.resizing {
+                cursor: col-resize;
+                user-select: none;
+            }
+            #chatSplitGrid.split-active #chatLeftPane {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                min-height: 0;
+                height: 100%;
+            }
+            #chatSplitGrid.split-active #chatTimeline {
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                padding-right: 0.5rem;
+            }
+            #chatSplitGrid.split-active #chatComposerDock {
                 position: static;
-                max-height: none;
-                grid-template-columns: 1fr;
+                margin-top: 0;
+                padding-top: 0.5rem;
+            }
+            #chatSplitGrid.split-active #chatComposerDock::before {
+                display: none;
+            }
+            #chatSplitGrid.split-active .split-resizer {
+                display: block;
+                position: relative;
+                cursor: col-resize;
+                touch-action: none;
+                outline: none;
+            }
+            /* 細い境界線。ホバー・ドラッグ中・フォーカス時だけ強調する */
+            .split-resizer::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                left: 50%;
+                width: 1px;
+                transform: translateX(-50%);
+                background: var(--chat-border-strong);
+                transition: background 0.15s, width 0.15s;
+            }
+            .split-resizer::after {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 4px;
+                height: 36px;
+                border-radius: 999px;
+                transform: translate(-50%, -50%);
+                background: var(--chat-muted);
+                opacity: 0.5;
+                transition: opacity 0.15s, background 0.15s;
+            }
+            .split-resizer:hover::before,
+            .split-resizer:focus-visible::before,
+            .resizing .split-resizer::before {
+                width: 3px;
+                background: var(--chat-accent);
+            }
+            .split-resizer:hover::after,
+            .split-resizer:focus-visible::after,
+            .resizing .split-resizer::after {
+                opacity: 1;
+                background: var(--chat-accent);
+            }
+            #chatSplitGrid.split-active #chatRightPane {
+                min-width: 0;
+                height: 100%;
+                overflow-y: auto;
+                padding: 0 0.25rem 1rem 0.5rem;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                gap: 1rem;
+                align-items: start;
+                align-content: start;
+            }
+        }
+        @media (max-width: 900px) {
+            #chatSplitGrid.split-active #chatRightPane {
+                margin-top: 1rem;
+            }
+            #chatRightPane > section {
+                margin-bottom: 1rem;
             }
         }
         .chat-timeline {
             display: flex;
             flex-direction: column;
-            gap: 0.6rem;
-            margin-bottom: 1rem;
+            gap: 1.4rem;
+            padding: 0.5rem 0.25rem 1.5rem;
         }
         .chat-timeline.hidden {
+            display: none;
+        }
+        /* 会話が始まる前の、中央寄せのあいさつ（ChatGPT の空状態に近い） */
+        .chat-welcome {
+            text-align: center;
+            padding: 2.5rem 1rem 1.5rem;
+            color: var(--chat-text);
+            animation: fadeIn 0.4s ease-out;
+        }
+        .chat-welcome-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 3rem;
+            height: 3rem;
+            border-radius: 999px;
+            font-size: 1.4rem;
+            background: var(--chat-accent-bg);
+            border: 1px solid var(--chat-border-strong);
+            margin-bottom: 1rem;
+        }
+        .chat-welcome h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+        .chat-welcome p {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--chat-muted);
+        }
+        .has-messages .chat-welcome {
             display: none;
         }
         #chatComposerDock {
             position: sticky;
             bottom: 0;
             z-index: 20;
-            background: var(--cl-bg, #f9fafb);
-            padding-top: 0.75rem;
-            margin-top: -0.75rem;
+            padding-top: 1.75rem;
+            padding-bottom: 0.5rem;
+            margin-top: -1.75rem;
+        }
+        /* 固定表示の入力欄の背後を、画面幅いっぱいのグラデーションで背景になじませる
+           （コンテナ幅の四角い帯が見えないようにする） */
+        .has-messages #chatComposerDock::before {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            top: 0;
+            bottom: 0;
+            left: calc(50% - 50vw);
+            right: calc(50% - 50vw);
+            background: linear-gradient(to bottom, transparent 0, var(--cl-bg) 1.75rem);
+            pointer-events: none;
+        }
+        #chatSplitGrid.split-active #chatComposerDock::before {
+            left: 0;
+            right: 0;
+        }
+        .composer-footnote {
+            text-align: center;
+            font-size: 0.68rem;
+            color: var(--chat-muted);
+            margin-top: 0.5rem;
         }
         .chat-bubble-row {
             display: flex;
             width: 100%;
+            animation: chatMessageIn 0.25s ease-out;
+        }
+        @keyframes chatMessageIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .chat-bubble-row.user {
             justify-content: flex-end;
         }
         .chat-bubble-row.assistant {
             justify-content: flex-start;
+            gap: 0.75rem;
+        }
+        /* アシスタントの発言は吹き出しにせず、アバター＋本文で見せる */
+        .chat-bubble-row.assistant::before {
+            content: '🔍';
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            background: var(--chat-accent-bg);
+            border: 1px solid var(--chat-border-strong);
+            margin-top: 0.05rem;
         }
         .chat-bubble {
-            max-width: 82%;
-            padding: 0.6rem 0.9rem;
-            border-radius: 1rem;
-            font-size: 0.85rem;
-            line-height: 1.5;
-            white-space: pre-wrap;
+            min-width: 0;
+            font-size: 0.95rem;
+            line-height: 1.75;
+            color: var(--chat-text);
+            overflow-wrap: anywhere;
         }
         .chat-bubble-row.user .chat-bubble {
-            background: linear-gradient(135deg, #4f46e5, #6366f1);
-            color: #fff;
-            border-bottom-right-radius: 0.25rem;
+            max-width: 80%;
+            padding: 0.6rem 1.05rem;
+            border-radius: 1.35rem;
+            background: var(--chat-user-bg);
+            line-height: 1.65;
         }
         .chat-bubble-row.assistant .chat-bubble {
-            background: #f3f4f6;
-            color: #1f2937;
-            border: 1px solid #e5e7eb;
-            border-bottom-left-radius: 0.25rem;
+            flex: 1;
+            padding-top: 0.15rem;
         }
         .chat-bubble .chat-bubble-label {
-            display: block;
-            font-size: 0.65rem;
-            font-weight: 700;
-            opacity: 0.7;
-            margin-bottom: 0.15rem;
+            display: none;
         }
         .chat-read-receipt {
             display: block;
             text-align: right;
             font-size: 0.65rem;
-            opacity: 0.75;
-            margin-top: 0.25rem;
+            color: var(--chat-muted);
+            margin-top: 0.15rem;
         }
         .chat-suggestion-btns {
             display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-            margin-top: 0.6rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
         }
         .chat-suggestion-btn {
             text-align: left;
-            font-size: 0.8rem;
-            font-weight: 600;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.6rem;
-            border: 1px solid #c7d2fe;
-            background: #eef2ff;
-            color: #3730a3;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 0.5rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid var(--chat-border-strong);
+            background: transparent;
+            color: var(--chat-text);
             cursor: pointer;
-            transition: background 0.15s ease;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
         .chat-suggestion-btn:hover:not(:disabled) {
-            background: #e0e7ff;
+            background: var(--chat-hover);
+            border-color: var(--chat-accent);
         }
         .chat-suggestion-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.45;
             cursor: default;
         }
+        /* 入力欄の上の候補（シチュエーション）は1行の控えめなピルにする */
+        .quick-suggestions {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            padding: 0 0.1rem 0.6rem;
+            scrollbar-width: none;
+            -webkit-mask-image: linear-gradient(to right, #000 92%, transparent);
+            mask-image: linear-gradient(to right, #000 92%, transparent);
+        }
+        .quick-suggestions::-webkit-scrollbar {
+            display: none;
+        }
+        .quick-suggestions .situation-chip {
+            flex-shrink: 0;
+            padding: 0.4rem 0.85rem;
+            border: 1px solid var(--chat-border-strong);
+            background: var(--chat-surface);
+            color: var(--chat-text);
+            font-size: 0.8rem;
+        }
+        .quick-suggestions .situation-chip:hover {
+            border-color: var(--chat-accent);
+            background: var(--chat-accent-bg);
+        }
+        .has-messages .quick-suggestions {
+            display: none;
+        }
+
+        /* --- ウェルカムの処理フロー（4ステップ） --- */
+        .chat-welcome h2 { word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
+        .chat-welcome-flow {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin: 1.75rem auto 0;
+            padding: 0;
+            max-width: 46rem;
+        }
+        .chat-welcome-flow li {
+            position: relative;
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.85rem 0.5rem;
+            border-radius: 0.9rem;
+            background: var(--chat-hover);
+            border: 1px solid var(--chat-border);
+            animation: flowIn 0.5s ease-out both;
+        }
+        .chat-welcome-flow li:nth-child(2) { animation-delay: 0.08s; }
+        .chat-welcome-flow li:nth-child(3) { animation-delay: 0.16s; }
+        .chat-welcome-flow li:nth-child(4) { animation-delay: 0.24s; }
+        .chat-welcome-flow li + li::before {
+            content: '';
+            position: absolute;
+            left: -0.45rem;
+            top: 50%;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-top: 2px solid var(--chat-muted);
+            border-right: 2px solid var(--chat-muted);
+            transform: translate(-25%, -50%) rotate(45deg);
+            opacity: 0.6;
+        }
+        .chat-welcome-flow .flow-icon { font-size: 1.35rem; line-height: 1; }
+        .chat-welcome-flow b { display: block; font-size: 0.82rem; font-weight: 700; color: var(--chat-text); }
+        .chat-welcome-flow small { display: block; margin-top: 0.15rem; font-size: 0.68rem; color: var(--chat-muted); }
+        @keyframes flowIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: none; }
+        }
+        @media (max-width: 640px) {
+            .chat-welcome { padding-top: 1.5rem; }
+            .chat-welcome h2 { font-size: 1.35rem; }
+            .chat-welcome-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+            .chat-welcome-flow li { flex-direction: row; text-align: left; padding: 0.6rem 0.7rem; }
+            .chat-welcome-flow li + li::before { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .chat-welcome-flow li { animation: none; }
+        }
+
+        .cl-ghost-btn {
+            border: 1px solid var(--chat-border-strong);
+            color: var(--chat-text);
+            background: transparent;
+            transition: background 0.15s;
+        }
+        .cl-ghost-btn:hover { background: var(--chat-hover); }
+
+        /* --- ダーク/ゴールドテーマでの結果カード・モーダル。
+             Tailwind の白基調クラスがそのままだと、暗いチャット画面の中に白い板が浮いて見えるため、
+             カード内だけ同じ意味の色（青=情報、緑=根拠、黄=文書、紫=AI、赤=警告）を暗色向けに置き換える --- */
+        html:not([data-theme="light"]) .cl-card {
+            background: var(--chat-surface);
+            color: var(--chat-text);
+            border: 1px solid var(--chat-border);
+            border-radius: 1rem;
+            box-shadow: var(--chat-shadow);
+        }
+        html:not([data-theme="light"]) .cl-card :is(.bg-white) { background-color: rgba(255,255,255,0.03); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-gray-50,.bg-gray-100,.bg-slate-50) { background-color: rgba(255,255,255,0.045); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-gray-200) { background-color: rgba(255,255,255,0.08); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-blue-50,.bg-blue-100,.bg-indigo-50,.bg-indigo-100,.bg-sky-50) { background-color: rgba(99,102,241,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-green-50,.bg-green-100,.bg-emerald-50,.bg-emerald-100,.bg-teal-50,.bg-teal-100) { background-color: rgba(16,185,129,0.12); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-yellow-50,.bg-yellow-100,.bg-amber-50,.bg-amber-100,.bg-orange-50) { background-color: rgba(245,158,11,0.12); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-purple-50,.bg-purple-100) { background-color: rgba(168,85,247,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-red-50,.bg-red-100,.bg-rose-50) { background-color: rgba(244,63,94,0.13); }
+        html:not([data-theme="light"]) .cl-card :is(.bg-blue-200,.bg-green-200,.bg-purple-200) { background-color: rgba(255,255,255,0.1); }
+
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-900,.text-gray-800,.text-gray-700,.text-slate-800) { color: var(--chat-text); }
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-600,.text-gray-500,.text-slate-500) { color: #a3adbf; }
+        html:not([data-theme="light"]) .cl-card :is(.text-gray-400) { color: var(--chat-muted); }
+        html:not([data-theme="light"]) .cl-card :is(.text-blue-600,.text-blue-700,.text-blue-800,.text-blue-900,.text-indigo-600,.text-indigo-700,.text-indigo-800,.text-indigo-900) { color: #a5b4fc; }
+        html:not([data-theme="light"]) .cl-card :is(.text-green-600,.text-green-700,.text-green-800,.text-green-900,.text-emerald-700,.text-emerald-800,.text-teal-700,.text-teal-800,.text-teal-900) { color: #6ee7b7; }
+        html:not([data-theme="light"]) .cl-card :is(.text-yellow-700,.text-yellow-800,.text-yellow-900,.text-amber-700,.text-amber-800,.text-amber-900,.text-orange-600,.text-orange-700,.text-orange-800,.text-orange-900) { color: #fcd34d; }
+        html:not([data-theme="light"]) .cl-card :is(.text-purple-600,.text-purple-700,.text-purple-800,.text-purple-900) { color: #d8b4fe; }
+        html:not([data-theme="light"]) .cl-card :is(.text-red-600,.text-red-700) { color: #fca5a5; }
+
+        html:not([data-theme="light"]) .cl-card :is(.border-gray-100,.border-gray-200,.border-gray-300,.border-slate-200) { border-color: var(--chat-border-strong); }
+        html:not([data-theme="light"]) .cl-card :is(.border-blue-300,.border-indigo-200,.border-indigo-300,.border-purple-100,.border-purple-200,.border-purple-300) { border-color: rgba(129,140,248,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-green-500,.border-emerald-300,.border-teal-100,.border-teal-200,.border-teal-300) { border-color: rgba(52,211,153,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-amber-100,.border-amber-200,.border-amber-300,.border-yellow-300) { border-color: rgba(251,191,36,0.35); }
+        html:not([data-theme="light"]) .cl-card :is(.border-red-200,.border-red-300,.border-rose-200) { border-color: rgba(248,113,113,0.4); }
+
+        html:not([data-theme="light"]) .cl-card :is(.hover\:bg-gray-100,.hover\:bg-blue-200,.hover\:bg-indigo-100,.hover\:bg-amber-50,.hover\:bg-amber-100,.hover\:bg-green-50,.hover\:bg-purple-50,.hover\:bg-purple-100,.hover\:bg-red-50,.hover\:bg-rose-50):hover { background-color: var(--chat-hover); }
+        html:not([data-theme="light"]) .cl-card :is(.hover\:text-gray-600,.hover\:text-gray-700,.hover\:text-indigo-800,.hover\:text-teal-900,.hover\:text-purple-700):hover { color: var(--chat-text); }
+
+        html:not([data-theme="light"]) .cl-card :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select) {
+            background-color: rgba(255,255,255,0.04);
+            color: var(--chat-text);
+            border-color: var(--chat-border-strong);
+        }
+        html:not([data-theme="light"]) .cl-card :is(input,textarea)::placeholder { color: var(--chat-muted); }
+
+        /* 認容実績テロップ：原色のベタ塗りをやめ、画面になじむガラス調＋緑のアクセントにする */
+        .win-ticker-bar {
+            background: var(--chat-surface);
+            border: 1px solid var(--chat-border);
+            -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+                    mask-image: linear-gradient(90deg, #000 85%, transparent);
+        }
+        .win-ticker-label {
+            color: #34d399;
+            background: rgba(16,185,129,0.12);
+            border-right: 1px solid var(--chat-border);
+        }
+        html[data-theme="light"] .win-ticker-label { color: #047857; }
+        .win-card-doc {
+            max-width: 26em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        html:not([data-theme="light"]) .win-card {
+            background: rgba(255,255,255,0.04);
+            color: var(--chat-text);
+            border: 1px solid var(--chat-border);
+            box-shadow: none;
+        }
+        html:not([data-theme="light"]) .win-card .text-emerald-700 { color: #6ee7b7; }
+        html:not([data-theme="light"]) .win-card .text-gray-500 { color: #a3adbf; }
+
+        /* 結果カードの見出しは、チャット画面の中で主張しすぎない大きさに揃える */
+        .cl-card h2.text-2xl { font-size: 1.25rem; line-height: 1.6rem; font-weight: 700; }
+
+        /* ライトテーマでは text-gray-300 のヘッダーリンクが背景に溶けて読めないため */
+        html[data-theme="light"] .cl-header-link { color: #475569; }
+        html[data-theme="light"] .cl-header-link:hover { color: #4f46e5; }
     </style>
 </head>
 <body class="min-h-screen has-minna-ticker">
@@ -910,11 +1624,12 @@
                     <span aria-hidden="true">☰</span>
                 </button>
                 <a href="/" aria-label="Civic Lens トップページへ" class="luxury-title text-lg sm:text-xl font-extrabold tracking-tight shrink-0">🔍 Civic Lens</a>
-                <span class="hidden sm:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
-                <a href="/precedent-cases" class="hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">📚 認容事例DB</a>
-                <span class="hidden md:flex items-center gap-1.5 text-[10px] cl-header-status font-mono shrink-0">
+                <span class="hidden xl:inline text-xs cl-header-tagline truncate">市民の怒りを情報公開に変換するAIエージェント</span>
+                <a href="/precedent-cases" class="cl-header-link hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">📚 認容事例DB</a>
+                <a href="/ledger" class="cl-header-link hidden sm:inline text-xs text-gray-300 hover:text-amber-300 transition shrink-0">⛓️ 開示請求台帳</a>
+                <span class="hidden lg:flex items-center gap-1.5 text-[10px] cl-header-status font-mono min-w-0 max-w-[16rem]">
                     <span class="w-1.5 h-1.5 rounded-full cl-header-status-dot animate-pulse"></span>
-                    <span id="agentLogInline">起動中...</span>
+                    <span id="agentLogInline" class="truncate">起動中...</span>
                 </span>
             </div>
             <div id="authNavArea" class="shrink-0">
@@ -936,7 +1651,7 @@
         </div>
 
         <!-- プロジェクトの請求一覧 & コメント -->
-        <section id="projectRecordsSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="projectRecordsSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
                 <span>🗂️</span> プロジェクトの請求一覧
             </h2>
@@ -946,9 +1661,9 @@
 
         <!-- 🏆 認容事例テロップ：絶望の中の市民に希望を届ける（ダーク/ライトテーマ） -->
         <div class="mb-6 relative cl-hero-slim-extra">
-            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg overflow-hidden">
+            <div class="win-ticker-bar rounded-xl overflow-hidden">
                 <div class="flex items-center">
-                    <div class="shrink-0 bg-black/20 px-3 py-2 text-white text-xs font-bold flex items-center gap-1.5 z-10">
+                    <div class="win-ticker-label shrink-0 px-3 py-2 text-xs font-bold flex items-center gap-1.5 z-10">
                         <span>🏆</span><span>認容実績</span>
                     </div>
                     <div class="relative overflow-hidden py-2 flex-1">
@@ -977,28 +1692,85 @@
         <div id="chatSplitGrid">
         <div id="chatLeftPane">
         <div id="chatTimeline" class="chat-timeline">
-            <div class="chat-bubble-row assistant">
-                <div class="chat-bubble">
-                    <span class="chat-bubble-label">🔍 Civic Lens</span>
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-2xl">🎯</span>
-                        <h2 id="mainQuestionHeading" class="text-lg font-semibold">何に怒りを感じていますか？</h2>
-                    </div>
-                    <p class="text-sm opacity-80">思ったことをそのまま書くか、下から近いものをタップしてください</p>
-                </div>
+            <div id="chatWelcome" class="chat-welcome">
+                <div class="chat-welcome-mark" aria-hidden="true">🔍</div>
+                <h2 id="mainQuestionHeading">何に怒りを感じていますか？</h2>
+                <p>思ったことをそのまま書くか、下の候補や ＋ から選んでください</p>
+                <!-- 審査員・初見のユーザーが5秒で「何をするエージェントか」を掴めるよう、処理の流れを示す -->
+                <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
+                    <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">🤖</span><span><b>AIが特定</b><small>機関・条例・行政文書</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">📝</span><span><b>請求書を作成</b><small>出すかはあなたが決める</small></span></li>
+                    <li><span class="flow-icon" aria-hidden="true">⛓️</span><span><b>台帳で見守る</b><small>期限・結果を公開記録</small></span></li>
+                </ol>
             </div>
         </div>
 
         <!-- プロンプト入力欄は常に画面下部に固定表示し、チャットが伸びても見失わないようにする -->
         <div id="chatComposerDock">
         <!-- STEP 0: 怒り・不満の入力（プロンプトを主役にした、チャット風コンポーザー） -->
-        <section class="bg-white rounded-2xl shadow-lg p-6 mb-6 fade-in">
+        <section class="composer-section fade-in">
+            <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
+                 押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
+            <div id="situationChipFlow" class="quick-suggestions" aria-label="近いものがあればタップ（自動で入れ替わります）"></div>
             <!-- コンポーザー本体：テキスト欄が主役、音声・カメラはツールバーの小さなアイコンに集約 -->
-            <div class="composer-card">
-                <textarea id="userInput" rows="4" class="composer-textarea" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
+            <div class="composer-card" id="composerCard">
+                <!-- 添付ファイル（画像・PDF）のプレビュー。送信時に Gemini Vision で読み取る -->
+                <div id="attachmentTray" class="attachment-tray hidden" aria-label="添付ファイル"></div>
+                <input id="attachmentInput" type="file" multiple class="hidden"
+                       accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf">
+                <div class="composer-drop-hint" aria-hidden="true">ここにドロップして添付（画像・PDF）</div>
+                <textarea id="userInput" rows="1" class="composer-textarea" enterkeyhint="send" placeholder="例：市長の海外視察費用が知りたい。何百万円も使って成果が分からないのは許せない。"></textarea>
 
                 <div class="composer-toolbar">
                     <div class="flex items-center gap-1.5">
+                        <!-- 「+」メニュー: Windows 11 のスタートメニューのように、対象地域・機関や案件を
+                             タイルで選ぶ。コンポーザーの上に開く。
+                             一般的なチャットUIに合わせてツールバーの左端に置く -->
+                        <div class="relative inline-block" id="plusMenuWrap">
+                            <button type="button" id="plusMenuBtn" class="composer-tool-btn" title="対象地域・案件を選ぶ" aria-haspopup="true" aria-expanded="false" aria-label="対象地域・案件を選ぶ"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                            <div id="plusMenuPopover" class="hidden start-menu" role="dialog" aria-label="対象地域・案件を選ぶ">
+                                <div class="start-menu-search">
+                                    <span aria-hidden="true">🔍</span>
+                                    <input id="startMenuSearch" type="search" placeholder="地域・機関・案件を検索" autocomplete="off">
+                                </div>
+                                <div class="start-menu-body">
+                                    <div class="start-menu-section" data-section="nearby">
+                                        <div class="start-menu-section-head">
+                                            <h4 id="startMenuNearbyTitle">📍 現在地周辺の自治体・都道府県</h4>
+                                            <button type="button" id="startMenuGeoBtn" class="start-menu-link">現在地を再取得</button>
+                                        </div>
+                                        <p id="startMenuNearbyStatus" class="start-menu-status hidden"></p>
+                                        <div id="startMenuNearbyGrid" class="start-menu-grid"></div>
+                                    </div>
+                                    <div class="start-menu-section" data-section="news">
+                                        <div class="start-menu-section-head">
+                                            <h4 id="startMenuNewsTitle">📰 ニュースから怒りを再現</h4>
+                                            <button type="button" id="startMenuNewsReloadBtn" class="start-menu-link">再読み込み</button>
+                                        </div>
+                                        <p id="startMenuNewsStatus" class="start-menu-status hidden"></p>
+                                        <div id="startMenuNewsList" class="start-news-list"></div>
+                                    </div>
+                                    <div class="start-menu-section" data-section="situations">
+                                        <div class="start-menu-section-head">
+                                            <h4>🗂️ 案件</h4>
+                                        </div>
+                                        <div id="startMenuSituationGrid" class="start-menu-grid"></div>
+                                    </div>
+                                    <div class="start-menu-section" data-section="authorities">
+                                        <div class="start-menu-section-head">
+                                            <h4>🏛️ その他の機関</h4>
+                                        </div>
+                                        <div id="startMenuAuthorityGrid" class="start-menu-grid"></div>
+                                    </div>
+                                    <p id="startMenuEmpty" class="hidden text-xs text-gray-400 text-center py-4">一致する項目がありません</p>
+                                </div>
+                                <div class="start-menu-footer">
+                                    <span id="startMenuCurrent" class="truncate"></span>
+                                    <span class="text-gray-400 whitespace-nowrap">Esc で閉じる</span>
+                                </div>
+                            </div>
+                        </div>
                         <!-- 対象機関はチャットボックス内のタグ。ホバー（タッチ端末はタップ）で
                              候補チップが動的に表示されるポップオーバーが開く -->
                         <div class="relative inline-block" id="authorityTagWrap">
@@ -1023,29 +1795,22 @@
                         <p id="authorityFilterHint" class="hidden text-xs text-indigo-600 font-medium"></p>
 
                         <button id="voiceInputBtn" type="button" class="composer-tool-btn" title="音声入力（話して入力）">
-                            <span id="voiceIcon">🎙️</span>
+                            <span id="voiceIcon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
                         </button>
-                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）">📷</button>
+                        <button id="attachBtn" type="button" class="composer-tool-btn" title="ファイルを添付（画像・PDF）— Gemini Visionで読み取ります" aria-label="ファイルを添付"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
+                        <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）" aria-label="表情で伝える（カメラ）"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
 
-                        <!-- 「+」メニュー: シチュエーション選択・ニュース怒り再現エージェント等、
-                             低頻度操作をWindowsスタートメニュー的にひとつに集約する -->
-                        <div class="relative inline-block" id="plusMenuWrap">
-                            <button type="button" id="plusMenuBtn" class="composer-tool-btn" title="その他のメニュー">➕</button>
-                            <div id="plusMenuPopover" class="hidden plus-menu-popover">
-                                <button type="button" id="plusMenuSituationBtn" class="plus-menu-item">
-                                    <span class="emoji">🗂️</span><span>シチュエーションから選ぶ</span>
-                                </button>
-                                <button type="button" id="plusMenuNewsAgentBtn" class="plus-menu-item">
-                                    <span class="emoji">📰</span><span>ニュースから怒りを再現する</span>
-                                </button>
-                            </div>
-                        </div>
                         <span class="suggestion-hint">
                             <span class="thinking-dots"><span></span><span></span><span></span></span>
                             ヒントを提案中
                         </span>
                     </div>
-                    <span id="voiceStatusText" class="text-xs text-gray-400"></span>
+                    <div class="flex items-center gap-2">
+                        <span id="voiceStatusText" class="text-xs text-gray-400"></span>
+                        <button id="analyzeBtn" type="button" class="composer-send-btn" title="送信して怒りを分析する（Enter）" aria-label="送信して怒りを分析する">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="voiceIndicator" class="hidden mx-3 mb-3 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700 flex items-center gap-2">
@@ -1065,53 +1830,19 @@
                 </div>
             </div>
 
-            <!-- 近いシチュエーションが数秒おきにフェードで入れ替わりながら流れる。
-                 押すだけで文章とその文脈がまとまるので、悩んでいて言葉にしづらい人ほど助かる -->
-            <div class="mt-3">
-                <p class="text-xs text-gray-400 mb-1.5">↓ 近いものがあればタップ（自動で入れ替わります）</p>
-                <div id="situationChipFlow" class="flex flex-wrap gap-2 min-h-[2.75rem]"></div>
-            </div>
 
-            <!-- 「+」→シチュエーション: 全件から選びたい場合の一覧パネル -->
-            <div id="situationMenuPanel" class="hidden plus-panel">
-                <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-sm font-semibold text-gray-700">🗂️ シチュエーションを選ぶ</h4>
-                    <button type="button" id="situationMenuCloseBtn" class="text-xs text-gray-400 hover:text-gray-600">✕ 閉じる</button>
-                </div>
-                <div id="situationMenuGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
-            </div>
-
-            <!-- 「+」→ニュース怒り再現エージェント: 地域名からニュースを収集し、怒りを再現する -->
-            <div id="newsAgentPanel" class="hidden plus-panel">
-                <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-sm font-semibold text-gray-700">📰 ニュースから怒りを再現する</h4>
-                    <button type="button" id="newsAgentPanelCloseBtn" class="text-xs text-gray-400 hover:text-gray-600">✕ 閉じる</button>
-                </div>
-                <p class="text-xs text-gray-500 mb-2">地域名を入れると、その地域の自治体・警察・公的行事に関するニュースを自動収集し、論点整理と擬似的な市民の声を再現します。</p>
-                <div class="flex gap-2 mb-2">
-                    <input id="newsAgentRegion" type="text" placeholder="対象地域（例: 名古屋市）" class="flex-1 text-sm p-2 border border-gray-300 rounded-md">
-                    <input id="newsAgentKeyword" type="text" placeholder="キーワード（任意）" class="flex-1 text-sm p-2 border border-gray-300 rounded-md">
-                </div>
-                <div class="flex gap-2 mb-2">
-                    <button id="newsAgentGeoBtn" type="button" class="text-xs bg-gray-100 text-gray-700 px-3 py-2 rounded-md hover:bg-gray-200 border border-gray-200">📍 現在地から</button>
-                    <button id="newsAgentListBtn" type="button" class="flex-1 text-sm bg-rose-500 text-white px-3 py-2 rounded-md hover:bg-rose-600">ニュース一覧を取得</button>
-                </div>
-                <p id="newsAgentGeoStatus" class="text-xs text-gray-500 mb-2"></p>
-                <div id="newsAgentListItems" class="space-y-2 max-h-64 overflow-y-auto"></div>
-            </div>
+            <p class="composer-footnote">Civic Lens は AI のため誤りを含むことがあります。請求前に内容をご確認ください。</p>
         </section>
-
-        <!-- 解析ボタン -->
-        <button id="analyzeBtn" class="cl-cta mb-0 w-full text-white px-6 py-3 rounded-md font-semibold shadow-md transition">
-            🚀 怒りを分析する
-        </button>
-        <div id="analyzeThinking" class="mb-6"></div>
         </div><!-- /chatComposerDock -->
         </div><!-- /chatLeftPane -->
 
+        <!-- チャットとアウトプットの境界線。ドラッグ（またはキーボードの←→）で幅を変えられる -->
+        <div id="splitResizer" class="split-resizer" role="separator" aria-orientation="vertical"
+             aria-label="チャットと分析結果の境界（ドラッグで幅を変更、ダブルクリックで元に戻す）" tabindex="0"></div>
+
         <div id="chatRightPane" class="hidden">
         <!-- STEP 2: 結果表示 -->
-        <section id="resultSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="resultSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">📊 怒りの分析結果</h2>
             <div id="angerDisplay" class="mb-6"></div>
 
@@ -1177,9 +1908,9 @@
         </section>
 
         <!-- STEP 4: Human-in-the-Loop & アクション -->
-        <section id="actionSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="actionSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-2 text-gray-800">⚖️ Human-in-the-Loop（市民の意思決定）</h2>
-            <p class="text-sm text-gray-600 mb-4">「開示請求書を作成」はチャット内のサジェストから選べます。ここでは不開示決定への反論(審査請求書)のみ作成できます。</p>
+            <p class="text-sm text-gray-600 mb-4">「開示請求書を作成」はチャット内のサジェストから選べます。ここでは不開示決定への反論(審査請求書)を作成できます。開示請求書の作成後は、議会の一般質問案・公安委員会への苦情申出書もチャットから提案されます。</p>
 
             <!-- 戦略選択ラジオ（開示請求書の作成はチャットのサジェストに移行したため非表示。値はrunDisclosureRequestに直接渡す） -->
             <div id="strategyOptionsContainer" class="hidden grid md:grid-cols-2 gap-4 mb-6">
@@ -1232,7 +1963,7 @@
         </section>
 
         <!-- STEP 5: 生成結果 -->
-        <section id="outputSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="outputSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">✅ 生成されたアクション</h2>
             <div id="outputContent"></div>
 
@@ -1331,18 +2062,30 @@
                 </div>
             </div>
 
-            <!-- Web3: EAS オンチェーン確定日付・デジタル公証証明 -->
+            <!-- Web3: EAS オンチェーン存在証明（タイムスタンプ） -->
             <div class="mt-6 bg-gradient-to-r from-emerald-50 to-teal-50 p-5 rounded-lg border-2 border-teal-200">
                 <div class="flex items-center justify-between mb-2">
                     <h3 class="font-bold text-teal-900 flex items-center gap-2">
-                        <span>🔏 Web3 EAS オンチェーン確定日付・存在証明</span>
+                        <span>🔏 Web3 EAS オンチェーン存在証明（タイムスタンプ）</span>
                         <span class="text-xs bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full border border-teal-300 font-mono">EAS / Base L2</span>
                     </h3>
-                    <span class="text-xs text-teal-700 bg-white px-2 py-1 rounded shadow-sm font-medium">法的確定日付・公証</span>
+                    <span class="text-xs text-teal-700 bg-white px-2 py-1 rounded shadow-sm font-medium">存在証明・タイムスタンプ</span>
                 </div>
                 <p class="text-xs text-teal-800 mb-3 leading-relaxed">
-                    自治体による「請求書を受け取っていない」「日付を事後改ざんした」という隠蔽主張を封じるため、<strong>Ethereum Attestation Service (EAS)</strong> を用いてブロックチェーン上に確定日付と文書暗号ハッシュを刻印します。
+                    自治体による「請求書を受け取っていない」「日付を事後改ざんした」という隠蔽主張を封じるため、<strong>Ethereum Attestation Service (EAS)</strong> を用いてブロックチェーン上に記録時刻と文書暗号ハッシュを刻印します。
+                    <span class="block mt-1 text-teal-700/80">※ブロックチェーンの時刻は、法律上の「確定日付」（公証役場の日付印など）とは異なる技術的な存在証明です。</span>
                 </p>
+
+                <div class="bg-white p-3 rounded-md border border-teal-200 mb-3 space-y-2">
+                    <label class="flex items-start gap-2 text-xs font-semibold text-gray-700">
+                        <input type="checkbox" id="attestationPublicCheckbox" class="mt-0.5">
+                        <span>公開の請求として、請求する公文書の特定内容を平文でオンチェーンに記録する
+                            <span class="block font-normal text-gray-500">誰でも「何が請求されたか」を参照できる台帳になります。記録は削除できません。氏名・住所を含む請求書全文は、常にハッシュのみ記録されます。</span>
+                        </span>
+                    </label>
+                    <textarea id="attestationRequestedDocs" rows="3" maxlength="330" placeholder="請求する公文書の特定内容（個人名・住所・連絡先は書かないでください）" class="w-full text-xs border rounded px-2.5 py-1.5 focus:outline-none focus:border-teal-500 disabled:bg-gray-50 disabled:text-gray-400" disabled></textarea>
+                    <div id="attestationPiiWarnings" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2"></div>
+                </div>
 
                 <div class="bg-white p-3 rounded-md border border-teal-200 mb-3">
                     <label class="block text-xs font-semibold text-gray-700 mb-1">
@@ -1353,7 +2096,7 @@
 
                 <div class="flex flex-col sm:flex-row gap-3 items-center">
                     <button id="issueAttestationBtn" class="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 text-white px-5 py-2.5 rounded-md hover:from-teal-700 hover:to-emerald-700 font-semibold shadow flex items-center justify-center gap-2 transition">
-                        <span>🔏</span> オンチェーン確定日付を刻印 (EAS公証)
+                        <span>🔏</span> オンチェーンに存在証明を刻印 (EAS)
                     </button>
                     <span id="attestationStatus" class="text-xs text-gray-500"></span>
                 </div>
@@ -1365,7 +2108,7 @@
                             <span>📜</span> 公証アテステーション証明書 (Digital Notary Certificate)
                         </span>
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-                            ✅ 確定日付オンチェーン刻印済
+                            ✅ オンチェーン刻印済
                         </span>
                     </div>
 
@@ -1383,7 +2126,7 @@
                     <div class="flex flex-wrap items-center gap-y-2 gap-x-4 text-xs text-gray-600 bg-teal-50/50 p-2.5 rounded">
                         <span>⛓️ ネットワーク: <strong id="attestNetworkText">Base Mainnet</strong></span>
                         <span>📦 ブロック高: <strong id="attestBlockText">-</strong></span>
-                        <span>⏱️ 刻印確定日付: <strong id="attestDateText">-</strong></span>
+                        <span>⏱️ 記録時刻: <strong id="attestDateText">-</strong></span>
                         <a id="attestExplorerLink" href="#" target="_blank" rel="noopener noreferrer" class="text-teal-700 hover:underline font-bold ml-auto flex items-center gap-1">
                             🔎 EAS Scanでオンチェーン検証 ↗
                         </a>
@@ -1391,10 +2134,18 @@
 
                     <!-- 原本検証テストフォーム -->
                     <div class="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-                        <span class="text-gray-500">この証明書は裁判所・行政不服審査会での確定日付証拠として活用できます。</span>
+                        <span class="text-gray-500">この時刻に同じ内容の文書が存在したことを、誰でも検証できます。</span>
                         <button type="button" id="verifyAttestBtn" class="text-teal-700 hover:text-teal-900 font-semibold underline">
                             ⚖️ 原本文書の同一性を再照合
                         </button>
+                    </div>
+                    <div class="text-xs bg-amber-50 border border-amber-200 rounded p-2.5 flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+                        <span class="text-amber-900">📦 <strong>検証キット</strong>（原本とUIDをまとめたファイル）を必ず保存してください。原本はサーバーに保存されないため、後で照合するときに必要です。個人情報を含むので取り扱いにご注意ください。</span>
+                        <button type="button" id="downloadVerificationKitBtn" class="shrink-0 bg-amber-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-amber-700">検証キットを保存</button>
+                    </div>
+                    <div id="attestPublicDocsRow" class="hidden text-xs bg-gray-50 p-2 rounded border border-gray-100">
+                        <div class="text-gray-500 font-medium">オンチェーンに公開した請求文書の特定内容:</div>
+                        <div id="attestPublicDocsText" class="text-gray-800 mt-0.5 whitespace-pre-wrap"></div>
                     </div>
                     <div id="attestVerificationFeedback" class="text-xs"></div>
                 </div>
@@ -1516,7 +2267,7 @@
         </section>
 
         <!-- STEP 6: 経路案内 -->
-        <section id="routeSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section id="routeSection" class="hidden cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800">🚉 役所までのアクセス（駅すぱあとAPI）</h2>
             <div id="routeContent"></div>
         </section>
@@ -1524,10 +2275,10 @@
         </div><!-- /chatSplitGrid -->
 
         <!-- STEP 7: みんなの請求 (Public ダッシュボード) -->
-        <section class="bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
+        <section class="cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-semibold text-gray-800">🌐 みんなの請求 — 集合知プラットフォーム</h2>
-                <button id="refreshPublicBtn" class="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                <h2 class="text-xl font-bold text-gray-800">🌐 みんなの請求</h2>
+                <button id="refreshPublicBtn" class="cl-ghost-btn text-sm px-3 py-1 rounded-full">
                     🔄 更新
                 </button>
             </div>
@@ -1585,7 +2336,7 @@
 
     <!-- 👤 ユーザー認証モーダル (Web & Web3 ハイブリッド) -->
     <div id="authModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeAuthModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             
             <div class="text-center mb-5">
@@ -1672,7 +2423,7 @@
 
     <!-- 📂 マイ請求履歴モーダル -->
     <div id="myRecordsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative border border-gray-200 max-h-[85vh] flex flex-col">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative border border-gray-200 max-h-[85vh] flex flex-col">
             <button id="closeMyRecordsModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             
             <div class="mb-4 border-b pb-3">
@@ -1690,7 +2441,7 @@
 
     <!-- 📁 新規プロジェクト作成モーダル -->
     <div id="newProjectModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeNewProjectModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             <h3 class="text-lg font-bold text-gray-800 mb-1">＋ 新規プロジェクト作成</h3>
             <p class="text-xs text-gray-500 mb-4">複数人で情報公開請求・不服審査請求を共同で進めるための作業スペースです。</p>
@@ -1713,7 +2464,7 @@
 
     <!-- 👥 プロジェクトメンバー・招待モーダル -->
     <div id="projectMembersModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
+        <div class="cl-card bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-200">
             <button id="closeProjectMembersModalBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
             <h3 class="text-lg font-bold text-gray-800 mb-3">👥 メンバー・招待</h3>
             <div id="projectMembersList" class="space-y-2 mb-4 text-sm"></div>
@@ -1853,7 +2604,7 @@
                 el.innerHTML = `
                     <span class="font-bold text-emerald-700">✅ ${w.result || '認容'}</span>
                     <span class="text-gray-500">${w.authority}</span>
-                    <span class="font-medium">${w.doc}</span>
+                    <span class="win-card-doc font-medium">${w.doc}</span>
                     ${w.decision_date ? `<span class="text-gray-400">（${w.decision_date}）</span>` : ''}
                 `;
                 return el;
@@ -1931,6 +2682,7 @@
                 const userInputElem = document.getElementById('userInput');
                 if (transcript) {
                     userInputElem.value = transcript;
+                    autoResizeComposer();
                 }
             };
 
@@ -1951,12 +2703,10 @@
             const indicator = document.getElementById('voiceIndicator');
 
             if (recording) {
-                if (icon) icon.textContent = '🔴';
                 if (text) text.textContent = '聞き取り中...（完了時はクリック）';
                 if (btn) btn.classList.add('active');
                 if (indicator) indicator.classList.remove('hidden');
             } else {
-                if (icon) icon.textContent = '🎙️';
                 if (text) text.textContent = '';
                 if (btn) btn.classList.remove('active');
                 if (indicator) indicator.classList.add('hidden');
@@ -2016,14 +2766,16 @@
             const match = allAuthorities.find(a => a.category === category);
             if (!match) return;
             setSelectedAuthority(match.key, { auto: true });
+            flashAuthorityTag();
+        }
 
+        function flashAuthorityTag() {
             const tag = document.getElementById('authorityTag');
-            if (tag) {
-                tag.classList.remove('authority-tag-flash');
-                // リフローを挟んでクラスを付け直すことでアニメーションを再トリガーする
-                void tag.offsetWidth;
-                tag.classList.add('authority-tag-flash');
-            }
+            if (!tag) return;
+            tag.classList.remove('authority-tag-flash');
+            // リフローを挟んでクラスを付け直すことでアニメーションを再トリガーする
+            void tag.offsetWidth;
+            tag.classList.add('authority-tag-flash');
         }
 
         function startPromptSuggestionAnimation() {
@@ -2219,6 +2971,7 @@
             icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
             const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
             label.textContent = `${current.name}（${current.type}${autoTag}）`;
+            updateNewsRegionLabel();
         }
 
         // 対象機関も、シチュエーションと同じ「流れるチップ」で選ぶ。<select>は状態保持専用で非表示。
@@ -2305,85 +3058,317 @@
         authorityPopover.addEventListener('click', (e) => e.stopPropagation());
         document.addEventListener('click', () => closeAuthorityPopover());
 
-        // 「+」メニュー: シチュエーション選択・ニュース怒り再現エージェントをひとつに集約する
+        // 「+」メニュー（スタートメニュー風）: 現在地周辺の自治体・都道府県、そのニュース、
+        // 案件、その他の機関をひとつの画面で選ぶ
         const plusMenuBtn = document.getElementById('plusMenuBtn');
         const plusMenuPopover = document.getElementById('plusMenuPopover');
+        const startMenuSearch = document.getElementById('startMenuSearch');
+
+        function authorityIcon(a) {
+            return a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+        }
+
+        // 対象機関から、ニュース収集に使う「対象地域」を導く（例: 愛知県警察本部→愛知県、警視庁→東京都）
+        function authorityRegion(a) {
+            if (!a) return '';
+            if (a.name === '警視庁') return '東京都';
+            return a.name.replace(/(警察本部|議会)$/, '');
+        }
+
+        function currentAuthority() {
+            const key = document.getElementById('targetAuthority').value;
+            return allAuthorities.find(a => a.key === key) || null;
+        }
+
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function isStartMenuOpen() {
+            const el = document.getElementById('plusMenuPopover');
+            return !!el && !el.classList.contains('hidden');
+        }
+
+        // 現在地の検出結果（ページ読み込み時の自動検出、または「現在地を再取得」で更新）
+        const nearbyState = { status: 'idle', location: null, candidates: [], message: '' };
+
+        function setNearbyState(patch) {
+            Object.assign(nearbyState, patch);
+            if (isStartMenuOpen()) renderStartMenu();
+        }
+
+        function makeStartTile({ icon, label, sub, badge, search, selected, onClick }) {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'start-tile' + (selected ? ' selected' : '');
+            tile.dataset.search = search;
+            tile.innerHTML = `<span class="start-tile-icon">${icon}</span><span class="start-tile-label"></span>`
+                + (sub ? '<span class="start-tile-sub"></span>' : '')
+                + (badge ? '<span class="start-tile-badge"></span>' : '');
+            tile.querySelector('.start-tile-label').textContent = label;
+            if (sub) tile.querySelector('.start-tile-sub').textContent = sub;
+            if (badge) tile.querySelector('.start-tile-badge').textContent = badge;
+            tile.addEventListener('click', onClick);
+            return tile;
+        }
+
+        function chooseAuthorityFromMenu(a) {
+            closePlusMenu();
+            if (a.key === document.getElementById('targetAuthority').value) return;
+            setSelectedAuthority(a.key);
+            flashAuthorityTag();
+            addChatBubble('assistant', `${authorityIcon(a)} 対象を「${escapeHtml(a.name)}（${escapeHtml(a.type)}）」にしました。対象地域は「${escapeHtml(authorityRegion(a))}」です。`);
+        }
+
+        function renderNearbySection(selectedKey) {
+            const grid = document.getElementById('startMenuNearbyGrid');
+            const statusEl = document.getElementById('startMenuNearbyStatus');
+            const title = document.getElementById('startMenuNearbyTitle');
+            grid.innerHTML = '';
+
+            title.textContent = nearbyState.location
+                ? `📍 現在地周辺（${nearbyState.location.full_name}）`
+                : '📍 現在地周辺の自治体・都道府県';
+
+            const statusText = {
+                idle: '',
+                loading: '📍 現在地を取得中…',
+                error: nearbyState.message || '📍 現在地を取得できませんでした。「現在地を再取得」を押すか、下の一覧から選んでください',
+            }[nearbyState.status] || '';
+            statusEl.textContent = statusText;
+            statusEl.classList.toggle('hidden', !statusText);
+
+            nearbyState.candidates.forEach((c, idx) => {
+                grid.appendChild(makeStartTile({
+                    icon: authorityIcon(c),
+                    label: c.name,
+                    sub: c.distance_km > 0 ? `${c.type}・約${c.distance_km}km` : c.type,
+                    badge: idx === 0 && c.distance_km === 0 ? '現在地' : '',
+                    search: `${c.name} ${c.type} ${c.category} ${authorityRegion(c)} 現在地 周辺`,
+                    selected: c.key === selectedKey,
+                    onClick: () => {
+                        if (!allAuthorities.some(a => a.key === c.key)) {
+                            addDynamicAuthorityOption(c.key, c.name, c.type);
+                        }
+                        chooseAuthorityFromMenu(allAuthorities.find(a => a.key === c.key) || c);
+                    },
+                }));
+            });
+        }
+
+        // ニュースは地域ごとにキャッシュし、メニューを開くたびに取り直さない
+        const newsCache = {};
+
+        async function loadNewsForRegion(region, { force = false } = {}) {
+            if (!region) return;
+            if (!force && newsCache[region] && newsCache[region].status !== 'error') return;
+            newsCache[region] = { status: 'loading', items: [] };
+            if (isStartMenuOpen()) renderNewsSection();
+            try {
+                const params = new URLSearchParams({ region, max_items: '6' });
+                const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(typeof errData.detail === 'string' ? errData.detail : `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                newsCache[region] = { status: 'ready', items: data.items || [] };
+            } catch (err) {
+                newsCache[region] = { status: 'error', items: [], message: err.message };
+            }
+            if (isStartMenuOpen()) {
+                renderNewsSection();
+                filterStartMenu();
+            }
+        }
+
+        function formatNewsDate(published) {
+            const d = published ? new Date(published) : null;
+            if (!d || isNaN(d)) return published || '';
+            return d.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderNewsSection() {
+            const region = getNewsRegion();
+            const list = document.getElementById('startMenuNewsList');
+            const statusEl = document.getElementById('startMenuNewsStatus');
+            document.getElementById('startMenuNewsTitle').textContent = region
+                ? `📰 ${region}のニュースから怒りを再現`
+                : '📰 ニュースから怒りを再現';
+            list.innerHTML = '';
+
+            const entry = region ? newsCache[region] : null;
+            let statusText = '';
+            if (!region) statusText = '対象地域が決まると、その地域のニュースを表示します';
+            else if (!entry || entry.status === 'loading') statusText = '🔄 ニュースを収集中…';
+            else if (entry.status === 'error') statusText = `⚠️ ${entry.message}`;
+            else if (entry.items.length === 0) statusText = 'この地域のニュースは見つかりませんでした';
+            statusEl.textContent = statusText;
+            statusEl.classList.toggle('hidden', !statusText);
+
+            (entry && entry.items || []).forEach(item => {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'start-news-item';
+                row.dataset.search = `${item.title} ${region} ニュース`;
+                row.innerHTML = `
+                    <span class="min-w-0 flex-1">
+                        <span class="title">${escapeHtml(item.title)}</span>
+                        <span class="meta">${escapeHtml(formatNewsDate(item.published))}</span>
+                    </span>
+                    <span class="cta">怒りを再現</span>
+                `;
+                row.addEventListener('click', () => {
+                    closePlusMenu();
+                    analyzeNewsItemInChat(item);
+                });
+                list.appendChild(row);
+            });
+        }
+
+        function renderStartMenu() {
+            const selectedKey = document.getElementById('targetAuthority').value;
+
+            renderNearbySection(selectedKey);
+
+            const region = getNewsRegion();
+            if (region && !newsCache[region]) loadNewsForRegion(region);
+            renderNewsSection();
+
+            const situationGrid = document.getElementById('startMenuSituationGrid');
+            situationGrid.innerHTML = '';
+            allSituations.forEach(sit => {
+                situationGrid.appendChild(makeStartTile({
+                    icon: sit.emoji,
+                    label: sit.label,
+                    search: `${sit.label} ${sit.description || ''} ${sit.category || ''}`,
+                    selected: selectedSituation && selectedSituation.key === sit.key,
+                    onClick: () => {
+                        closePlusMenu();
+                        selectSituation(sit);
+                    },
+                }));
+            });
+
+            // 周辺に出ている機関は重複させない
+            const nearbyKeys = new Set(nearbyState.candidates.map(c => c.key));
+            const authorityGrid = document.getElementById('startMenuAuthorityGrid');
+            authorityGrid.innerHTML = '';
+            const categoryOrder = ['自治体', '警察', '裁判所'];
+            [...allAuthorities]
+                .filter(a => !nearbyKeys.has(a.key))
+                .sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category))
+                .forEach(a => {
+                    authorityGrid.appendChild(makeStartTile({
+                        icon: authorityIcon(a),
+                        label: a.name,
+                        sub: a.type + (a.key.startsWith('pool:') ? '・自動調査' : ''),
+                        search: `${a.name} ${a.type} ${a.category} ${authorityRegion(a)}`,
+                        selected: a.key === selectedKey,
+                        onClick: () => chooseAuthorityFromMenu(a),
+                    }));
+                });
+
+            const current = currentAuthority();
+            document.getElementById('startMenuCurrent').textContent = current
+                ? `選択中: ${authorityIcon(current)} ${current.name}（${current.type}）／対象地域 ${authorityRegion(current)}`
+                : '対象機関が未選択です';
+            filterStartMenu();
+        }
+
+        function filterStartMenu() {
+            const q = startMenuSearch.value.trim().toLowerCase();
+            let visibleCount = 0;
+            plusMenuPopover.querySelectorAll('.start-menu-section').forEach(section => {
+                let sectionVisible = 0;
+                section.querySelectorAll('.start-tile, .start-news-item').forEach(el => {
+                    const hit = !q || el.dataset.search.toLowerCase().includes(q);
+                    el.classList.toggle('hidden', !hit);
+                    if (hit) sectionVisible++;
+                });
+                // 検索していないときは、読み込み中や空の状態も見えるようにセクションを残す
+                const emptyNearby = section.dataset.section === 'nearby' && nearbyState.status === 'idle' && sectionVisible === 0;
+                section.classList.toggle('hidden', q ? sectionVisible === 0 : emptyNearby);
+                visibleCount += sectionVisible;
+            });
+            document.getElementById('startMenuEmpty').classList.toggle('hidden', !q || visibleCount > 0);
+        }
+
+        function openPlusMenu() {
+            closeAuthorityPopover();
+            startMenuSearch.value = '';
+            // まだ現在地を取れていなければ、開いたタイミングで取得する
+            if (nearbyState.status === 'idle' || nearbyState.status === 'error') {
+                detectMunicipalityFromLocation();
+            }
+            plusMenuPopover.classList.remove('hidden');
+            plusMenuBtn.setAttribute('aria-expanded', 'true');
+            renderStartMenu();
+            fitStartMenuToViewport();
+            plusMenuPopover.querySelector('.start-menu-body').scrollTop = 0;
+            // タッチ端末では検索欄にフォーカスするとキーボードがタイルを隠すため、PCのみ
+            if (window.matchMedia('(pointer: fine)').matches) startMenuSearch.focus();
+        }
+
+        // 入力欄が画面の上の方にあるとメニュー上端（検索欄）が切れるため、
+        // 上に十分な余白がなければ下向きに開き、高さも空いている分に収める
+        function fitStartMenuToViewport() {
+            if (window.matchMedia('(max-width: 640px)').matches) {
+                plusMenuPopover.classList.remove('open-down');
+                plusMenuPopover.style.maxHeight = '';
+                return;
+            }
+            const rect = plusMenuBtn.getBoundingClientRect();
+            const margin = 16;
+            const spaceAbove = rect.top - margin - 10;
+            const spaceBelow = window.innerHeight - rect.bottom - margin - 10;
+            const openDown = spaceAbove < 420 && spaceBelow > spaceAbove;
+            plusMenuPopover.classList.toggle('open-down', openDown);
+            plusMenuPopover.style.maxHeight = `${Math.min(560, Math.max(240, openDown ? spaceBelow : spaceAbove))}px`;
+        }
+        window.addEventListener('resize', () => { if (isStartMenuOpen()) fitStartMenuToViewport(); });
 
         function closePlusMenu() {
             plusMenuPopover.classList.add('hidden');
+            plusMenuBtn.setAttribute('aria-expanded', 'false');
         }
+
         plusMenuBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            plusMenuPopover.classList.toggle('hidden');
+            if (plusMenuPopover.classList.contains('hidden')) openPlusMenu(); else closePlusMenu();
         });
         plusMenuPopover.addEventListener('click', (e) => e.stopPropagation());
         document.addEventListener('click', () => closePlusMenu());
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !plusMenuPopover.classList.contains('hidden')) {
+                closePlusMenu();
+                plusMenuBtn.focus();
+            }
+        });
+        startMenuSearch.addEventListener('input', filterStartMenu);
+        startMenuSearch.addEventListener('keydown', (e) => {
+            // 検索中にEnterで最初に一致した項目を選ぶ
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                plusMenuPopover.querySelector('.start-tile:not(.hidden), .start-news-item:not(.hidden)')?.click();
+            }
+        });
 
-        function closeAllPlusPanels() {
-            document.getElementById('situationMenuPanel').classList.add('hidden');
-            document.getElementById('newsAgentPanel').classList.add('hidden');
+        document.getElementById('startMenuGeoBtn').addEventListener('click', () => {
+            detectMunicipalityFromLocation();
+        });
+        document.getElementById('startMenuNewsReloadBtn').addEventListener('click', () => {
+            loadNewsForRegion(getNewsRegion(), { force: true });
+        });
+
+        function getNewsRegion() {
+            return authorityRegion(currentAuthority());
         }
 
-        // 「+」→ シチュエーションから選ぶ（全件グリッド表示）
-        document.getElementById('plusMenuSituationBtn').addEventListener('click', () => {
-            closePlusMenu();
-            closeAllPlusPanels();
-            const panel = document.getElementById('situationMenuPanel');
-            const grid = document.getElementById('situationMenuGrid');
-            grid.innerHTML = '';
-            allSituations.forEach(s => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'situation-chip';
-                btn.innerHTML = `<span class="situation-chip-emoji">${s.emoji}</span><span>${s.label}</span>`;
-                btn.addEventListener('click', () => {
-                    panel.classList.add('hidden');
-                    selectSituation(s);
-                });
-                grid.appendChild(btn);
-            });
-            panel.classList.remove('hidden');
-        });
-        document.getElementById('situationMenuCloseBtn').addEventListener('click', () => {
-            document.getElementById('situationMenuPanel').classList.add('hidden');
-        });
-
-        // 「+」→ ニュースから怒りを再現する
-        document.getElementById('plusMenuNewsAgentBtn').addEventListener('click', () => {
-            closePlusMenu();
-            closeAllPlusPanels();
-            document.getElementById('newsAgentPanel').classList.remove('hidden');
-        });
-        document.getElementById('newsAgentPanelCloseBtn').addEventListener('click', () => {
-            document.getElementById('newsAgentPanel').classList.add('hidden');
-        });
-
-        document.getElementById('newsAgentGeoBtn').addEventListener('click', () => {
-            const statusEl = document.getElementById('newsAgentGeoStatus');
-            if (!navigator.geolocation) {
-                statusEl.textContent = 'このブラウザは位置情報に対応していません。地域名を直接入力してください。';
-                return;
-            }
-            statusEl.textContent = '📍 現在地を取得中...';
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                try {
-                    const formData = new FormData();
-                    formData.append('lat', pos.coords.latitude);
-                    formData.append('lon', pos.coords.longitude);
-                    const res = await fetch('/api/municipality/detect', { method: 'POST', body: formData });
-                    if (!res.ok) throw new Error('現在地から地域を特定できませんでした');
-                    const data = await res.json();
-                    const municipality = data.location?.municipality;
-                    if (!municipality) throw new Error('地域を特定できませんでした');
-                    document.getElementById('newsAgentRegion').value = municipality;
-                    statusEl.textContent = `✅ 現在地から「${municipality}」と特定しました`;
-                } catch (err) {
-                    statusEl.textContent = 'エラー: ' + err.message;
-                }
-            }, (err) => {
-                statusEl.textContent = '位置情報の取得を許可してください（' + err.message + '）';
-            }, { timeout: 10000 });
-        });
+        // 対象機関が変わったら、開いているメニューのニュース・選択状態を更新する
+        function updateNewsRegionLabel() {
+            if (isStartMenuOpen()) renderStartMenu();
+        }
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
 
@@ -2489,8 +3474,6 @@
 
         // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
         async function analyzeNewsItemInChat(item) {
-            document.getElementById('newsAgentPanel').classList.add('hidden');
-
             addChatBubble('user', `📰 「${item.title}」のニュースから怒りを再現して`);
             const assistantBubble = addChatBubble('assistant', '🔄 ニュースを読み解いて、怒りを再現しています…（数十秒かかる場合があります）');
 
@@ -2500,7 +3483,7 @@
                 formData.append('link', item.link);
                 formData.append('summary', item.summary || '');
                 if (item.published) formData.append('published', item.published);
-                const region = document.getElementById('newsAgentRegion').value.trim();
+                const region = getNewsRegion();
                 if (region) formData.append('region', region);
 
                 const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData });
@@ -2526,7 +3509,7 @@
                 renderNewsShareButtons(assistantBubble, record.news_id);
 
                 // 既存の怒り分析結果パネル（右ペイン）に接続
-                document.getElementById('userInput').value = record.pseudo_citizen_voice;
+                lastSubmittedText = record.pseudo_citizen_voice;
                 displayAnalysis({ anger_analysis: record.anger_analysis, emotion_is_mock: null });
                 document.getElementById('resultSection').classList.remove('hidden');
                 document.getElementById('actionSection').classList.remove('hidden');
@@ -2538,55 +3521,6 @@
                 assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
             }
         }
-
-        document.getElementById('newsAgentListBtn').addEventListener('click', async () => {
-            const region = document.getElementById('newsAgentRegion').value.trim();
-            const keyword = document.getElementById('newsAgentKeyword').value.trim();
-            if (!region) {
-                alert('対象地域を入力してください（例: 名古屋市）');
-                return;
-            }
-
-            const btn = document.getElementById('newsAgentListBtn');
-            btn.disabled = true;
-            btn.textContent = '🔄 収集中...';
-
-            try {
-                const params = new URLSearchParams({ region });
-                if (keyword) params.append('keyword', keyword);
-                const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    throw new Error(errData.detail || `HTTP ${res.status}`);
-                }
-                const data = await res.json();
-
-                const container = document.getElementById('newsAgentListItems');
-                container.innerHTML = '';
-                data.items.forEach(item => {
-                    const row = document.createElement('div');
-                    row.className = 'news-agent-item';
-                    row.innerHTML = `
-                        <div class="min-w-0">
-                            <div class="text-xs font-medium text-gray-800 truncate">${item.title}</div>
-                            <div class="text-[10px] text-gray-400">${item.published || ''}</div>
-                        </div>
-                    `;
-                    const selectBtn = document.createElement('button');
-                    selectBtn.type = 'button';
-                    selectBtn.className = 'flex-shrink-0 text-xs bg-rose-500 text-white px-2.5 py-1.5 rounded-md hover:bg-rose-600 whitespace-nowrap';
-                    selectBtn.textContent = '怒りを再現';
-                    selectBtn.addEventListener('click', () => analyzeNewsItemInChat(item));
-                    row.appendChild(selectBtn);
-                    container.appendChild(row);
-                });
-            } catch (err) {
-                alert('エラー: ' + err.message);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'ニュース一覧を取得';
-            }
-        });
 
         // 未ログイン時でも履歴を紐付けられるよう、匿名IDをlocalStorageに永続化する
         function getOrCreateSessionId() {
@@ -2609,11 +3543,13 @@
             const silent = options.silent === true;
             const statusEl = document.getElementById('detectMunicipalityStatus');
             if (!navigator.geolocation) {
+                setNearbyState({ status: 'error', message: '📍 このブラウザは位置情報に対応していません。下の一覧から選んでください' });
                 if (!silent) statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
                 return;
             }
 
             if (!silent) statusEl.textContent = '📍 現在地を取得中...';
+            setNearbyState({ status: 'loading', message: '' });
             navigator.geolocation.getCurrentPosition(async (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
@@ -2629,11 +3565,15 @@
                     if (!res.ok) throw new Error('自治体の特定に失敗しました');
                     const data = await res.json();
                     await handleMunicipalityDetectResult(data, statusEl);
+                    setNearbyState({ status: 'ready', location: data.location, candidates: data.candidates || [] });
+                    loadNewsForRegion(getNewsRegion());
                     loadMunicipalityHistory();
                 } catch (e) {
                     statusEl.textContent = `❌ ${e.message}`;
+                    setNearbyState({ status: 'error', message: `📍 ${e.message}` });
                 }
             }, (err) => {
+                setNearbyState({ status: 'error', message: '' });
                 // silent時（自動判定）は、位置情報が許可されていないだけの状況が大半のため
                 // ❌表示で不安を与えず、手動ボタンを促す穏やかな文言にとどめる
                 statusEl.textContent = silent
@@ -2784,6 +3724,8 @@
         function addChatBubble(role, html) {
             const timeline = document.getElementById('chatTimeline');
             timeline.classList.remove('hidden');
+            // 最初の発言でウェルカム表示と候補ピルを畳み、会話に集中させる
+            document.getElementById('chatLeftPane')?.classList.add('has-messages');
 
             const row = document.createElement('div');
             row.className = `chat-bubble-row ${role}`;
@@ -2792,14 +3734,121 @@
             bubble.innerHTML = `<span class="chat-bubble-label">${role === 'user' ? 'あなた' : '🔍 Civic Lens'}</span>${html}`;
             row.appendChild(bubble);
             timeline.appendChild(row);
-            row.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            if (timeline.scrollHeight > timeline.clientHeight + 4 && getComputedStyle(timeline).overflowY === 'auto') {
+                timeline.scrollTo({ top: timeline.scrollHeight, behavior: 'smooth' });
+            } else {
+                row.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
             return bubble;
         }
 
         function activateSplitView() {
-            document.getElementById('chatSplitGrid').classList.add('split-active');
+            const grid = document.getElementById('chatSplitGrid');
+            const firstTime = !grid.classList.contains('split-active');
+            updateScrollbarWidth();
+            grid.classList.add('split-active');
             document.getElementById('chatRightPane').classList.remove('hidden');
+            applySavedSplitWidth();
+            updateSplitHeight();
+            if (firstTime) {
+                const timeline = document.getElementById('chatTimeline');
+                timeline.scrollTop = timeline.scrollHeight;
+            }
         }
+
+        // ページ先頭にいるときに入力欄まで画面内に収まるよう、ワークスペースの上端から
+        // 画面下（ティッカーの上）までを高さにする
+        function updateSplitHeight() {
+            const grid = document.getElementById('chatSplitGrid');
+            const top = grid.getBoundingClientRect().top + window.scrollY;
+            const tickerSpace = 56;
+            const h = Math.max(480, window.innerHeight - top - tickerSpace);
+            grid.style.setProperty('--split-h', `${h}px`);
+        }
+        window.addEventListener('resize', () => {
+            if (document.getElementById('chatSplitGrid').classList.contains('split-active')) updateSplitHeight();
+        });
+
+        // 画面幅いっぱいに広げるとき、縦スクロールバーの分だけ横にはみ出さないようにする
+        function updateScrollbarWidth() {
+            const w = window.innerWidth - document.documentElement.clientWidth;
+            document.documentElement.style.setProperty('--scrollbar-w', `${Math.max(0, w)}px`);
+        }
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        // --- チャット／アウトプットの境界線をドラッグで動かす（幅はlocalStorageに保存） ---
+        const SPLIT_STORAGE_KEY = 'cl-split-left';
+        const SPLIT_DEFAULT = 42;
+        const SPLIT_MIN_LEFT_PX = 320;
+        const SPLIT_MIN_RIGHT_PX = 360;
+
+        function clampSplitPercent(percent) {
+            const grid = document.getElementById('chatSplitGrid');
+            const width = grid.getBoundingClientRect().width || window.innerWidth;
+            const min = (SPLIT_MIN_LEFT_PX / width) * 100;
+            const max = 100 - ((SPLIT_MIN_RIGHT_PX + 12) / width) * 100;
+            return Math.min(Math.max(percent, min), Math.max(min, max));
+        }
+
+        function setSplitPercent(percent, { save = true } = {}) {
+            const grid = document.getElementById('chatSplitGrid');
+            const clamped = clampSplitPercent(percent);
+            grid.style.setProperty('--split-left', `${clamped.toFixed(2)}%`);
+            document.getElementById('splitResizer').setAttribute('aria-valuenow', Math.round(clamped));
+            if (save) {
+                try { localStorage.setItem(SPLIT_STORAGE_KEY, String(clamped)); } catch (e) {}
+            }
+        }
+
+        function applySavedSplitWidth() {
+            let saved = null;
+            try { saved = parseFloat(localStorage.getItem(SPLIT_STORAGE_KEY)); } catch (e) {}
+            setSplitPercent(Number.isFinite(saved) ? saved : SPLIT_DEFAULT, { save: false });
+        }
+
+        (function initSplitResizer() {
+            const resizer = document.getElementById('splitResizer');
+            const grid = document.getElementById('chatSplitGrid');
+            if (!resizer || !grid) return;
+            resizer.setAttribute('aria-valuemin', '0');
+            resizer.setAttribute('aria-valuemax', '100');
+
+            resizer.addEventListener('pointerdown', (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                resizer.setPointerCapture(e.pointerId);
+                grid.classList.add('resizing');
+            });
+            resizer.addEventListener('pointermove', (e) => {
+                if (!grid.classList.contains('resizing')) return;
+                const rect = grid.getBoundingClientRect();
+                setSplitPercent(((e.clientX - rect.left) / rect.width) * 100, { save: false });
+            });
+            const endDrag = (e) => {
+                if (!grid.classList.contains('resizing')) return;
+                grid.classList.remove('resizing');
+                if (resizer.hasPointerCapture(e.pointerId)) resizer.releasePointerCapture(e.pointerId);
+                const current = parseFloat(grid.style.getPropertyValue('--split-left'));
+                if (Number.isFinite(current)) setSplitPercent(current);
+            };
+            resizer.addEventListener('pointerup', endDrag);
+            resizer.addEventListener('pointercancel', endDrag);
+            resizer.addEventListener('dblclick', () => setSplitPercent(SPLIT_DEFAULT));
+            resizer.addEventListener('keydown', (e) => {
+                const current = parseFloat(grid.style.getPropertyValue('--split-left')) || SPLIT_DEFAULT;
+                const step = e.shiftKey ? 10 : 2;
+                if (e.key === 'ArrowLeft') { e.preventDefault(); setSplitPercent(current - step); }
+                if (e.key === 'ArrowRight') { e.preventDefault(); setSplitPercent(current + step); }
+                if (e.key === 'Home') { e.preventDefault(); setSplitPercent(0); }
+                if (e.key === 'End') { e.preventDefault(); setSplitPercent(100); }
+            });
+            // ウィンドウ幅が変わっても最小幅を守る
+            window.addEventListener('resize', () => {
+                if (!grid.classList.contains('split-active')) return;
+                const current = parseFloat(grid.style.getPropertyValue('--split-left'));
+                if (Number.isFinite(current)) setSplitPercent(current, { save: false });
+            });
+        })();
 
         // 既読リアクション（👀）をユーザーの発言に付ける
         function addReadReceipt(bubble) {
@@ -2824,7 +3873,6 @@
 
             // シチュエーションに応じたサンプルテキストを自動入力し、共感の返事とともに分析を自動実行
             fetch(`/api/situations/${s.key}`).then(r => r.json()).then(detail => {
-                document.getElementById('userInput').value = detail.sample_anger_text;
 
                 setTimeout(() => addReadReceipt(userBubble), 350);
 
@@ -2873,6 +3921,7 @@
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
             capturedImageData = canvas.toDataURL('image/jpeg');
+            if (typeof autoResizeComposer === 'function') autoResizeComposer();
             document.getElementById('cameraStatus').textContent = '✅ 撮影完了';
 
             if (cameraStream) {
@@ -2884,29 +3933,217 @@
             }
         });
 
+        // --- 添付ファイル（画像・PDF）: 送信時に Gemini Vision で読み取る ---
+        // Vercel のリクエスト本文上限（約4.5MB）に収まるよう、画像は送信前に縮小する
+        const ATTACHMENT_MAX_COUNT = 5;
+        const ATTACHMENT_MAX_TOTAL_BYTES = 4 * 1024 * 1024;
+        const ATTACHMENT_IMAGE_MAX_EDGE = 2000;
+        const ATTACHMENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
+        let pendingAttachments = [];
+
+        function formatBytes(n) {
+            if (n < 1024) return `${n}B`;
+            if (n < 1024 * 1024) return `${Math.round(n / 1024)}KB`;
+            return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+        }
+
+        // 大きな写真（スマホで撮った通知書など）は、文字が読める解像度を保ったままJPEGに縮小する
+        async function shrinkImageIfNeeded(file) {
+            if (!file.type.startsWith('image/') || file.type === 'image/heic' || file.type === 'image/heif') return file;
+            try {
+                const bitmap = await createImageBitmap(file);
+                const scale = Math.min(1, ATTACHMENT_IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+                if (scale === 1 && file.size < 1.5 * 1024 * 1024) return file;
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(bitmap.width * scale);
+                canvas.height = Math.round(bitmap.height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+                if (!blob || blob.size >= file.size) return file;
+                const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+                return new File([blob], name, { type: 'image/jpeg' });
+            } catch (e) {
+                return file;
+            }
+        }
+
+        function showComposerNotice(message) {
+            const el = document.getElementById('voiceStatusText');
+            if (!el) return;
+            el.textContent = message;
+            clearTimeout(showComposerNotice.timer);
+            showComposerNotice.timer = setTimeout(() => { if (el.textContent === message) el.textContent = ''; }, 5000);
+        }
+
+        async function addAttachmentFiles(fileList) {
+            const incoming = [...fileList];
+            for (const original of incoming) {
+                if (pendingAttachments.length >= ATTACHMENT_MAX_COUNT) {
+                    showComposerNotice(`添付は${ATTACHMENT_MAX_COUNT}件までです`);
+                    break;
+                }
+                const type = (original.type || '').toLowerCase();
+                if (!ATTACHMENT_TYPES.includes(type)) {
+                    showComposerNotice(`「${original.name}」は添付できません（画像・PDFのみ）`);
+                    continue;
+                }
+                const file = await shrinkImageIfNeeded(original);
+                const total = pendingAttachments.reduce((sum, a) => sum + a.file.size, 0) + file.size;
+                if (total > ATTACHMENT_MAX_TOTAL_BYTES) {
+                    showComposerNotice(`添付の合計は${formatBytes(ATTACHMENT_MAX_TOTAL_BYTES)}までです`);
+                    continue;
+                }
+                pendingAttachments.push({
+                    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    file,
+                    previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+                });
+            }
+            renderAttachmentTray();
+            autoResizeComposer();
+        }
+
+        function attachmentChipHtml(att, { removable }) {
+            const thumb = att.previewUrl
+                ? `<img class="attachment-thumb" src="${att.previewUrl}" alt="">`
+                : `<span class="attachment-thumb pdf">PDF</span>`;
+            return `
+                <div class="attachment-chip" data-id="${att.id}">
+                    ${thumb}
+                    <span class="attachment-meta">
+                        <span class="attachment-name">${escapeHtml(att.file.name)}</span>
+                        <span class="attachment-size">${formatBytes(att.file.size)}</span>
+                    </span>
+                    ${removable ? `<button type="button" class="attachment-remove" aria-label="${escapeHtml(att.file.name)} を削除">✕</button>` : ''}
+                </div>`;
+        }
+
+        function renderAttachmentTray() {
+            const tray = document.getElementById('attachmentTray');
+            tray.innerHTML = pendingAttachments.map(a => attachmentChipHtml(a, { removable: true })).join('');
+            tray.classList.toggle('hidden', pendingAttachments.length === 0);
+            tray.querySelectorAll('.attachment-remove').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.closest('.attachment-chip').dataset.id;
+                    const removed = pendingAttachments.find(a => a.id === id);
+                    if (removed && removed.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+                    pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+                    renderAttachmentTray();
+                    autoResizeComposer();
+                });
+            });
+        }
+
+        // 送信した添付をチャットの自分の発言に表示する（画像はサムネイル、PDFはチップ）
+        function sentAttachmentsHtml(atts) {
+            if (!atts.length) return '';
+            return `<div class="chat-attachments">${atts.map(a => a.previewUrl
+                ? `<img src="${a.previewUrl}" alt="${escapeHtml(a.file.name)}">`
+                : attachmentChipHtml(a, { removable: false })).join('')}</div>`;
+        }
+
+        function visionReadingHtml(reading) {
+            const files = (reading.files || []).map(f => `<li><strong>${escapeHtml(f.filename)}</strong>（${escapeHtml(f.document_type)}）: ${escapeHtml(f.summary)}</li>`).join('');
+            const facts = (reading.key_facts || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+            return `
+                <div class="vision-card">
+                    <div class="vision-card-head">📎 添付資料を読み取りました <span class="vision-badge">${reading.is_mock ? '読み取り不可' : 'Gemini Vision'}</span></div>
+                    <div>${escapeHtml(reading.overall_summary || '')}</div>
+                    ${files ? `<ul>${files}</ul>` : ''}
+                    ${facts ? `<div class="mt-2 text-xs" style="color: var(--chat-muted)">読み取った重要な事実</div><ul>${facts}</ul>` : ''}
+                    ${reading.extracted_text ? `<details><summary>読み取った本文を表示</summary><pre>${escapeHtml(reading.extracted_text)}</pre></details>` : ''}
+                </div>`;
+        }
+
+        document.getElementById('attachBtn').addEventListener('click', () => document.getElementById('attachmentInput').click());
+        document.getElementById('attachmentInput').addEventListener('change', (e) => {
+            addAttachmentFiles(e.target.files);
+            e.target.value = '';
+        });
+        // スクリーンショットなどをそのまま貼り付けて添付できる
+        document.getElementById('userInput').addEventListener('paste', (e) => {
+            const files = [...(e.clipboardData?.files || [])];
+            if (files.length) {
+                e.preventDefault();
+                addAttachmentFiles(files);
+            }
+        });
+        (function initComposerDrop() {
+            const card = document.getElementById('composerCard');
+            let depth = 0;
+            const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+            card.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; card.classList.add('dragover'); });
+            card.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+            card.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) card.classList.remove('dragover'); });
+            card.addEventListener('drop', (e) => {
+                if (!hasFiles(e)) return;
+                e.preventDefault();
+                depth = 0;
+                card.classList.remove('dragover');
+                addAttachmentFiles(e.dataTransfer.files);
+            });
+        })();
+
+        // チャットらしく送信後は入力欄を空にするため、最後に送った内容を保持して
+        // 開示請求書の生成や記録の保存で使う
+        let lastSubmittedText = '';
+        function getSubjectText() {
+            return lastSubmittedText || document.getElementById('userInput').value.trim();
+        }
+
+        function autoResizeComposer() {
+            const el = document.getElementById('userInput');
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+            const hasAttachments = typeof pendingAttachments !== 'undefined' && pendingAttachments.length > 0;
+            document.getElementById('analyzeBtn').classList.toggle('is-empty', !el.value.trim() && !capturedImageData && !hasAttachments);
+        }
+
         // 怒り分析
+        let analyzeInFlight = false;
         async function runAnalyze(options = {}) {
-            const userInput = (options.userText !== undefined ? options.userText : document.getElementById('userInput').value).trim();
+            if (analyzeInFlight) return;
+            const inputEl = document.getElementById('userInput');
+            const userInput = (options.userText !== undefined ? options.userText : inputEl.value).trim();
             const targetAuthority = document.getElementById('targetAuthority').value;
 
-            if (!userInput && !capturedImageData) {
-                alert('テキストを入力してください');
+            // 添付は、入力欄から送ったときだけ一緒に送る（シチュエーション選択などの自動送信では送らない）
+            const attachments = options.userText === undefined ? pendingAttachments : [];
+            if (!userInput && !capturedImageData && attachments.length === 0) {
+                inputEl.focus();
                 return;
+            }
+            analyzeInFlight = true;
+            lastSubmittedText = userInput;
+            if (options.userText === undefined) {
+                inputEl.value = '';
+                pendingAttachments = [];
+                renderAttachmentTray();
+                autoResizeComposer();
             }
 
             if (!options.skipUserBubble) {
-                addChatBubble('user', userInput ? userInput.replace(/\n/g, '<br>') : '（画像を送信しました）');
+                const textHtml = userInput ? escapeHtml(userInput).replace(/\n/g, '<br>') : (attachments.length ? '' : '（画像を送信しました）');
+                addChatBubble('user', sentAttachmentsHtml(attachments) + textHtml);
             }
-            const assistantBubble = addChatBubble('assistant', '🔄 分析しています…');
+            // 考え中の表示は、これから返答が入るアシスタントの発言の中に出す
+            const thinkingId = `analyzeThinking-${Date.now()}`;
+            const assistantBubble = addChatBubble('assistant', `<div id="${thinkingId}"></div>`);
 
             const formData = new FormData();
             formData.append('user_input', userInput);
             formData.append('target_authority', targetAuthority);
             if (capturedImageData) formData.append('image_data', capturedImageData);
+            attachments.forEach(a => formData.append('attachments', a.file, a.file.name));
 
-            document.getElementById('analyzeBtn').textContent = '🔄 分析中...';
-            document.getElementById('analyzeBtn').disabled = true;
-            const thinkingHandle = startThinking('analyzeThinking', [
+            const sendBtn = document.getElementById('analyzeBtn');
+            sendBtn.classList.add('busy');
+            sendBtn.disabled = true;
+            const thinkingHandle = startThinking(thinkingId, [
+                ...(attachments.length ? ['📎 添付資料を読み取り中（Gemini Vision）…', '🔎 日付・金額・文書番号を抽出中…'] : []),
                 '🧠 怒りのレベルを分析中…',
                 '🏛️ 対象機関を照合中…',
                 '📜 法的根拠を検索中…',
@@ -2915,10 +4152,12 @@
 
             try {
                 const res = await fetchWithRetry('/api/analyze', { method: 'POST', body: formData });
-                const data = await res.json();
                 if (!res.ok) {
-                    throw new Error(data.detail || '分析に失敗しました。');
+                    const errData = await res.json().catch(() => ({}));
+                    const detail = typeof errData.detail === 'string' ? errData.detail : '';
+                    throw new Error(detail || `分析に失敗しました（HTTP ${res.status}）。`);
                 }
+                const data = await res.json();
 
                 displayAnalysis(data);
                 document.getElementById('resultSection').classList.remove('hidden');
@@ -2927,24 +4166,40 @@
 
                 const analysis = data.anger_analysis;
                 const authorityName = analysis.target_authority || '対象機関';
-                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>分析が完了しました。怒りレベル ${analysis.anger_level}/10、対象機関「${authorityName}」への開示請求案を右側にまとめました。`;
+                // 添付の読み取り結果も含めた内容を、開示請求書の生成・記録の保存に引き継ぐ
+                if (data.analysis_input) lastSubmittedText = data.analysis_input;
+                const actionLabel = analysis.next_action === 'review_request'
+                    ? '審査請求（不服申立て）の方針'
+                    : (analysis.next_action === 'consultation' ? '相談の進め方' : '開示請求案');
+                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>`
+                    + (data.attachments_reading ? visionReadingHtml(data.attachments_reading) + '<div class="mt-3"></div>' : '')
+                    + `分析が完了しました。怒りレベル ${analysis.anger_level}/10、対象機関「${escapeHtml(authorityName)}」への${actionLabel}を分析結果にまとめました。`;
 
                 if (data.anger_analysis.target_authority_key) {
                     setSelectedAuthority(data.anger_analysis.target_authority_key);
                 }
 
-                suggestDisclosureAction();
+                suggestDisclosureAction(analysis.next_action);
             } catch (err) {
                 assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
-                alert('エラー: ' + err.message);
             } finally {
                 stopThinking(thinkingHandle);
-                document.getElementById('analyzeBtn').textContent = '🚀 怒りを分析する';
-                document.getElementById('analyzeBtn').disabled = false;
+                sendBtn.classList.remove('busy');
+                sendBtn.disabled = false;
+                analyzeInFlight = false;
             }
         }
 
         document.getElementById('analyzeBtn').addEventListener('click', () => runAnalyze());
+        // Enterで送信、Shift+Enterで改行（日本語変換の確定Enterでは送信しない）
+        document.getElementById('userInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+                e.preventDefault();
+                runAnalyze();
+            }
+        });
+        document.getElementById('userInput').addEventListener('input', autoResizeComposer);
+        autoResizeComposer();
 
         // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
         // reason はバックエンドの mock_reason（no_api_key / timeout / parse_error / api_error）。
@@ -2962,8 +4217,10 @@
             return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ ${reasonText}サンプルデータです（${label}）</div>`;
         }
 
+        let latestAnalysis = null;
         function displayAnalysis(data) {
             const analysis = data.anger_analysis;
+            latestAnalysis = analysis;
 
             const angerPercent = (analysis.anger_level / 10) * 100;
             document.getElementById('angerDisplay').innerHTML = `
@@ -3056,7 +4313,7 @@
 
         // 開示請求書生成（チャットのサジェスト or 旧ボタンの両方から呼べる）
         async function runDisclosureRequest(strategyOption, chatBubble) {
-            const userInput = document.getElementById('userInput').value.trim();
+            const userInput = getSubjectText();
             const targetAuthority = document.getElementById('targetAuthority').value;
             strategyOption = strategyOption || document.querySelector('input[name="strategyOption"]:checked')?.value || 'option-fast';
 
@@ -3097,6 +4354,7 @@
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>開示請求書を作成しました。提出先窓口までのアクセス情報とあわせて右側にまとめています。`;
                 }
+                suggestFollowUpActions();
             } catch (err) {
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
@@ -3112,14 +4370,272 @@
 
         // 分析完了後にチャット内で「開示請求書を作成しますか？」とサジェストする
         let disclosureSuggestionCount = 0;
-        function suggestDisclosureAction() {
+        function suggestDisclosureAction(nextAction) {
             disclosureSuggestionCount++;
             const groupId = `disclosureSuggest-${disclosureSuggestionCount}`;
+            // 添付の決定通知書などから「すでに非公開と決定された」と判断した場合は、
+            // 開示請求ではなく審査請求（不服申立て）を先に提案する
+            if (nextAction === 'review_request') {
+                addChatBubble('assistant', `すでに非公開（不開示）の決定が出ているようです。まずはこの決定への審査請求書を作成しますか？<div class="chat-suggestion-btns" id="${groupId}">
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'non_disclosure')">⚖️ 不開示決定への審査請求書</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'partial_disclosure')">⚖️ 一部開示決定への審査請求書</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleReviewSuggestion('${groupId}', 'document_absent')">⚖️ 文書不存在への審査請求書</button>
+                    <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-fast', '${groupId}', this)">📝 開示請求書を作り直す</button>
+                </div>`);
+                return;
+            }
             addChatBubble('assistant', `この内容で開示請求書を作成しますか？方針を選んでください。<div class="chat-suggestion-btns" id="${groupId}">
                 <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-fast', '${groupId}', this)">📝 プランA：迅速開示重視で作成</button>
                 <button type="button" class="chat-suggestion-btn" onclick="handleDisclosureSuggestion('option-thorough', '${groupId}', this)">🗂 プランB：網羅的に作成</button>
             </div>`);
         }
+
+        const DECISION_TYPE_LABELS = {
+            non_disclosure: '不開示決定',
+            partial_disclosure: '一部開示決定',
+            document_absent: '文書不存在',
+        };
+
+        function handleReviewSuggestion(groupId, decisionType) {
+            const group = document.getElementById(groupId);
+            if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
+            decisionType = decisionType || 'non_disclosure';
+            addChatBubble('user', `⚖️ ${DECISION_TYPE_LABELS[decisionType] || ''}への審査請求書を作成`);
+            const bubble = addChatBubble('assistant', '🔄 決定への反論ロジックと審査請求書を組み立てています…');
+            runReviewRequest(bubble, decisionType);
+        }
+
+        function currentAuthorityCategory() {
+            const key = document.getElementById('targetAuthority').value;
+            return allAuthorities.find(a => a.key === key)?.category || '';
+        }
+
+        // 開示請求書の作成後、行政監視を次の段階へ進める書面を提案する
+        // （議会の一般質問は開示請求と並行、公安委員会への苦情は警察組織のみ、審査請求は決定後）
+        let followUpSuggestionCount = 0;
+        function suggestFollowUpActions() {
+            const category = currentAuthorityCategory();
+            followUpSuggestionCount++;
+            const groupId = `followUpSuggest-${followUpSuggestionCount}`;
+            const buttons = [];
+            if (category !== '裁判所') {
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handleCouncilQuestionSuggestion('${groupId}')">🏛️ 議会の一般質問案（通告3問＋読み上げ原稿）</button>`);
+            }
+            if (category === '警察') {
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handlePoliceComplaintSuggestion('${groupId}', true)">🚨 公安委員会への苦情申出書（当事者として）</button>`);
+                buttons.push(`<button type="button" class="chat-suggestion-btn" onclick="handlePoliceComplaintSuggestion('${groupId}', false)">📮 公安委員会への意見・要望書</button>`);
+            }
+            if (!buttons.length) return;
+            addChatBubble('assistant', `開示請求の決定を待つあいだにも、並行して打てる手があります。続けて作成しますか？<br><span class="text-xs text-gray-500">不開示・一部開示の決定が届いたら、その通知書を添付すると審査請求書を作成できます。</span><div class="chat-suggestion-btns" id="${groupId}">${buttons.join('')}</div>`);
+        }
+
+        function disableSuggestionGroup(groupId) {
+            const group = document.getElementById(groupId);
+            if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
+        }
+
+        function handleCouncilQuestionSuggestion(groupId) {
+            disableSuggestionGroup(groupId);
+            addChatBubble('user', '🏛️ 議会の一般質問案を作成');
+            const bubble = addChatBubble('assistant', '🔄 管轄議会の一般質問の通告案と読み上げ原稿を作成しています…');
+            runCouncilQuestion(bubble);
+        }
+
+        function handlePoliceComplaintSuggestion(groupId, isDirectParty) {
+            disableSuggestionGroup(groupId);
+            addChatBubble('user', isDirectParty ? '🚨 公安委員会への苦情申出書を作成' : '📮 公安委員会への意見・要望書を作成');
+            const bubble = addChatBubble('assistant', '🔄 公安委員会宛ての書面を作成しています…');
+            runPoliceComplaint(bubble, isDirectParty);
+        }
+
+        async function postForm(url, fields) {
+            const formData = new FormData();
+            Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+            const res = await fetch(url, { method: 'POST', body: formData });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+            }
+            return data;
+        }
+
+        function documentBlock(title, text, isMock, label) {
+            const id = `doc-${Math.random().toString(36).slice(2, 10)}`;
+            return `
+                <div class="bg-white border p-4 rounded-md mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-semibold">${title}</h3>
+                        <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="navigator.clipboard.writeText(document.getElementById('${id}').textContent).then(() => { this.textContent = '✓ コピーしました'; })">📋 コピー</button>
+                    </div>
+                    ${mockBadge(isMock, label)}
+                    <pre id="${id}" class="whitespace-pre-wrap text-sm font-mono">${escapeHtml(text || '')}</pre>
+                </div>`;
+        }
+
+        async function runCouncilQuestion(chatBubble) {
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const thinkingHandle = startThinking('actionThinking', [
+                '🏛️ 管轄議会と答弁者を特定中…',
+                '📝 通告書（3問）を組み立て中…',
+                '🎤 読み上げ原稿を作成中…',
+            ]);
+            try {
+                if (!targetAuthority) throw new Error('対象機関が特定できていません。');
+                const data = await postForm('/api/council-question', {
+                    user_input: getSubjectText(),
+                    target_authority: targetAuthority,
+                    requested_documents: (latestAnalysis?.specific_documents_requested || []).join('\n'),
+                });
+                displayCouncilQuestion(data);
+                document.getElementById('outputSection').classList.remove('hidden');
+                activateSplitView();
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>${escapeHtml(data.council)}の議員に提案する一般質問（${data.questions.length}問）と読み上げ原稿をまとめました。通告・登壇は議員が行います。`;
+                }
+            } catch (err) {
+                if (chatBubble) chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
+            } finally {
+                stopThinking(thinkingHandle);
+            }
+        }
+
+        function displayCouncilQuestion(data) {
+            const noticeText = [
+                `一般質問通告書（${data.council}）`,
+                '',
+                ...data.questions.map((q, i) => [
+                    `${i + 1}. ${q.title}（答弁者: ${q.respondent}）`,
+                    ...q.points.map((p, j) => `  (${j + 1}) ${p}`),
+                ].join('\n')),
+            ].join('\n');
+            const intents = data.questions.map((q, i) => `<li><strong>${i + 1}.</strong> ${escapeHtml(q.intent)}</li>`).join('');
+            document.getElementById('outputContent').innerHTML = `
+                <div class="bg-indigo-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-1 text-indigo-900">🏛️ 議会の一般質問案（${escapeHtml(data.council)}）</h3>
+                    <p class="text-sm text-indigo-800">答弁者（想定）: ${escapeHtml(data.respondents)}</p>
+                    <p class="text-xs text-indigo-700 mt-2">${escapeHtml(data.cover_note)}</p>
+                </div>
+                ${documentBlock('📄 通告書', noticeText, data.is_mock, 'AI通告書生成')}
+                <div class="bg-gray-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2">🎯 各質問のねらい（議員向けメモ）</h3>
+                    <ul class="text-sm space-y-1">${intents}</ul>
+                </div>
+                ${documentBlock('🎤 登壇時の読み上げ原稿', data.script, data.is_mock, 'AI原稿生成')}
+            `;
+        }
+
+        async function runPoliceComplaint(chatBubble, isDirectParty) {
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const thinkingHandle = startThinking('actionThinking', [
+                '🚔 管理する公安委員会を特定中…',
+                '📝 警察法第79条の記載事項を整理中…',
+            ]);
+            try {
+                if (!targetAuthority) throw new Error('対象機関が特定できていません。');
+                const data = await postForm('/api/police-complaint', {
+                    user_input: getSubjectText(),
+                    target_authority: targetAuthority,
+                    is_direct_party: isDirectParty ? 'true' : 'false',
+                });
+                document.getElementById('outputContent').innerHTML = `
+                    <div class="bg-red-50 p-4 rounded-md mb-4">
+                        <h3 class="font-semibold mb-1 text-red-900">🚨 ${escapeHtml(data.commission)}への${data.is_direct_party ? '苦情申出' : '意見・要望'}</h3>
+                        <p class="text-sm text-red-800">対象: ${escapeHtml(data.police_authority)}</p>
+                    </div>
+                    ${documentBlock('📄 ' + (data.is_direct_party ? '苦情申出書' : '意見・要望書'), data.complaint_text, data.is_mock, 'AI文書生成')}
+                    <div class="bg-green-50 p-4 rounded-md">
+                        <h3 class="font-semibold mb-2 text-green-900">🎯 次のステップ</h3>
+                        <ol class="text-sm text-green-800 list-decimal list-inside">${data.next_steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+                    </div>`;
+                document.getElementById('outputSection').classList.remove('hidden');
+                activateSplitView();
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>${escapeHtml(data.commission)}宛ての書面を作成しました。日時・場所・内容を事実に即して加筆してから提出してください。`;
+                }
+            } catch (err) {
+                if (chatBubble) chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
+            } finally {
+                stopThinking(thinkingHandle);
+            }
+        }
+
+        // 審査請求（不開示決定への不服申立て）: 決定の内容（添付の読み取り結果を含む）と
+        // 非公開の根拠条文から、反論ロジックと類似の認容事例をまとめる
+        async function runReviewRequest(chatBubble, decisionType) {
+            const targetAuthority = document.getElementById('targetAuthority').value;
+            const btn = document.getElementById('reviewBtn');
+            const formData = new FormData();
+            formData.append('non_disclosure_decision', getSubjectText() || '（不開示決定の内容）');
+            formData.append('target_authority', targetAuthority);
+            formData.append('alleged_ground', latestAnalysis?.legal_basis || '情報公開条例の不開示事由');
+            formData.append('decision_type', decisionType || 'non_disclosure');
+
+            btn.disabled = true;
+            const thinkingHandle = startThinking('actionThinking', [
+                '⚖️ 非公開の根拠条文を分析中…',
+                '📚 類似の認容事例を検索中…',
+                '✍️ 反論ロジックを組み立て中…',
+            ]);
+            try {
+                if (!targetAuthority) {
+                    throw new Error('対象機関が特定できていません。入力欄の🏛️タグから対象機関を選択してください。');
+                }
+                const res = await fetch('/api/review-request', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(typeof errData.detail === 'string' ? errData.detail : `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                displayReviewRequest(data);
+                document.getElementById('outputSection').classList.remove('hidden');
+                activateSplitView();
+                if (chatBubble) {
+                    const prob = Math.round((data.counter_argument?.winning_probability || 0) * 100);
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>審査請求書と反論ロジックをまとめました（見込み: 約${prob}%）。提出先は「${escapeHtml(data.review_addressee || '')}」、諮問先は「${escapeHtml(data.review_authority || '')}」です。詳しくは分析結果の「生成されたアクション」をご覧ください。`;
+                }
+            } catch (err) {
+                if (chatBubble) {
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
+                }
+            } finally {
+                stopThinking(thinkingHandle);
+                btn.disabled = false;
+            }
+        }
+
+        function displayReviewRequest(data) {
+            const c = data.counter_argument || {};
+            const prob = Math.round((c.winning_probability || 0) * 100);
+            const precedents = (data.precedents || []).map(p => `
+                <li class="mb-2">
+                    <div class="font-medium">${escapeHtml(p.title)}</div>
+                    <div class="text-xs text-gray-500">${escapeHtml(p.source)}・${escapeHtml(p.date)}</div>
+                    <div class="text-sm text-gray-700">${escapeHtml(p.summary)}</div>
+                </li>`).join('');
+            document.getElementById('outputContent').innerHTML = `
+                <div class="bg-orange-50 p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-1 text-orange-900">⚖️ 審査請求（不開示決定への不服申立て）</h3>
+                    <p class="text-sm text-orange-800">決定の種類: ${escapeHtml(data.decision_type_label || '')}</p>
+                    <p class="text-sm text-orange-800">提出先（審査庁）: ${escapeHtml(data.review_addressee || '')} ／ 諮問先: ${escapeHtml(data.review_authority || '')}</p>
+                    <p class="text-sm text-orange-800">審査請求期間: 決定を知った日の翌日から${data.review_period_days}日以内${data.review_deadline ? `（${new Date(data.review_deadline).toLocaleDateString()}まで）` : ''}</p>
+                    <p class="text-sm text-orange-800">争点: ${escapeHtml(c.ground_number || '')} ${escapeHtml(c.ground_name || '')}</p>
+                    <p class="text-sm text-orange-800">認容の見込み（AI推定）: 約${prob}%</p>
+                </div>
+                ${documentBlock('📄 審査請求書', data.review_request_text, data.review_request_is_mock, 'AI文書生成')}
+                <div class="bg-white border p-4 rounded-md mb-4">
+                    <h3 class="font-semibold mb-2">🗣️ 反論ロジック</h3>
+                    ${mockBadge(c.is_mock, 'AI反論生成')}
+                    <ol class="text-sm list-decimal list-inside space-y-1">${(c.counter_arguments || []).map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ol>
+                </div>
+                ${(c.precedent_cases || []).length ? `<div class="bg-gray-50 p-4 rounded-md mb-4"><h3 class="font-semibold mb-2">📌 参考になる判例・事例</h3><ul class="text-sm list-disc list-inside">${c.precedent_cases.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>` : ''}
+                ${precedents ? `<div class="bg-green-50 p-4 rounded-md"><h3 class="font-semibold mb-2 text-green-900">📚 類似の認容事例</h3><ul>${precedents}</ul></div>` : ''}
+            `;
+        }
+
+        document.getElementById('reviewBtn').addEventListener('click', () => {
+            const bubble = addChatBubble('assistant', '🔄 非公開決定への反論ロジックを組み立てています…');
+            runReviewRequest(bubble, 'non_disclosure');
+        });
 
         function handleDisclosureSuggestion(strategyOption, groupId, clickedBtn) {
             const group = document.getElementById(groupId);
@@ -3189,7 +4705,7 @@
 
         document.getElementById('saveRecordBtn').addEventListener('click', async () => {
             const visibility = document.querySelector('input[name="visibility"]:checked').value;
-            const userInput = document.getElementById('userInput').value.trim();
+            const userInput = getSubjectText();
             const targetAuthority = document.getElementById('targetAuthority').value;
             const situationKey = selectedSituation ? selectedSituation.key : null;
 
@@ -3232,6 +4748,7 @@
         let activeBountyId = null;
         let currentRecordId = null;
         let latestAttestationUid = null;
+        let latestVerificationKit = null;
 
         const originalDisplayDisclosure = displayDisclosure;
         displayDisclosure = function(data) {
@@ -3249,6 +4766,7 @@
             document.getElementById('attestationResultCard').classList.add('hidden');
             document.getElementById('attestationStatus').textContent = '';
             document.getElementById('attestVerificationFeedback').innerHTML = '';
+            document.getElementById('attestationPiiWarnings').classList.add('hidden');
             latestAttestationUid = null;
 
             // IPFS状態をリセット
@@ -3389,7 +4907,20 @@
             }
         });
 
-        // EAS オンチェーン確定日付・公証ボタンのハンドラ
+        // 公開チェック時は、生成済みの「請求すべき文書」一覧を初期値として入れる（本人が編集できる）
+        document.getElementById('attestationPublicCheckbox').addEventListener('change', (e) => {
+            const docsInput = document.getElementById('attestationRequestedDocs');
+            docsInput.disabled = !e.target.checked;
+            if (e.target.checked && !docsInput.value.trim()) {
+                const items = Array.from(document.querySelectorAll('#documentsList li'))
+                    .map(li => li.textContent.replace(' ← シチュエーション推奨', '').trim())
+                    .filter(Boolean);
+                docsInput.value = items.join('、');
+            }
+            document.getElementById('attestationPiiWarnings').classList.add('hidden');
+        });
+
+        // EAS オンチェーン存在証明ボタンのハンドラ
         document.getElementById('issueAttestationBtn').addEventListener('click', async () => {
             if (!currentDisclosureText) {
                 alert('先に開示請求書を生成してください。');
@@ -3402,24 +4933,58 @@
             const walletInput = document.getElementById('attestationWalletInput').value.trim();
 
             btn.disabled = true;
+            const publish = document.getElementById('attestationPublicCheckbox').checked;
+            const requestedDocs = document.getElementById('attestationRequestedDocs').value.trim();
+            const warningsEl = document.getElementById('attestationPiiWarnings');
+            if (publish && !requestedDocs) {
+                statusEl.innerHTML = '<span class="text-red-500">公開する請求文書の特定内容を入力してください。</span>';
+                return;
+            }
+            if (publish && !confirm(`次の内容を平文でオンチェーンに記録します。記録は削除できません。\n\n${requestedDocs}`)) {
+                return;
+            }
+
+            btn.disabled = true;
             btn.innerHTML = '<span>⏳</span> 暗号ハッシュ計算・Base L2オンチェーン刻印中...';
             statusEl.textContent = 'EASコントラクトへアテステーションを発行中...';
 
-            try {
+            const buildForm = (acknowledge) => {
                 const formData = new FormData();
                 formData.append('title', currentRecordTitle);
                 formData.append('content', currentDisclosureText);
                 formData.append('authority', currentTargetAuthority || '自治体');
                 if (walletInput) formData.append('user_wallet_address', walletInput);
+                formData.append('publish_plaintext', publish ? 'true' : 'false');
+                if (publish) formData.append('requested_documents', requestedDocs);
+                if (acknowledge) formData.append('acknowledge_warnings', 'true');
+                return formData;
+            };
 
-                const res = await fetch('/api/web3/attestation/issue', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!res.ok) throw new Error('オンチェーン確定日付の発行に失敗しました');
+            try {
+                let res = await fetch('/api/web3/attestation/issue', { method: 'POST', body: buildForm(false) });
+
+                // 個人情報らしき記述の警告 → 本人が確認した場合のみ再送
+                if (res.status === 422) {
+                    const detail = (await res.json()).detail || {};
+                    const warnings = detail.personal_info_warnings || [];
+                    warningsEl.innerHTML = '⚠ 個人情報の可能性がある記述が見つかりました：<br>' +
+                        warnings.map(w => `・${escapeHtml(w.type)}：「${escapeHtml(w.match)}」`).join('<br>');
+                    warningsEl.classList.remove('hidden');
+                    if (!confirm('個人情報の可能性がある記述が見つかりました（画面の警告を確認してください）。\n問題がないことを確認したうえで、このまま公開して記録しますか？')) {
+                        statusEl.textContent = '記録を中止しました。内容を修正してから再度お試しください。';
+                        return;
+                    }
+                    res = await fetch('/api/web3/attestation/issue', { method: 'POST', body: buildForm(true) });
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(typeof err.detail === 'string' ? err.detail : 'オンチェーン存在証明の発行に失敗しました');
+                }
+                warningsEl.classList.add('hidden');
 
                 const data = await res.json();
                 latestAttestationUid = data.uid;
+                latestVerificationKit = data.verification_kit || null;
 
                 // UI更新
                 document.getElementById('attestUidText').textContent = data.uid;
@@ -3427,6 +4992,8 @@
                 document.getElementById('attestNetworkText').textContent = data.network;
                 document.getElementById('attestBlockText').textContent = `#${data.block_number}`;
                 document.getElementById('attestDateText').textContent = data.formatted_date;
+                document.getElementById('attestPublicDocsRow').classList.toggle('hidden', !data.requested_documents);
+                document.getElementById('attestPublicDocsText').textContent = data.requested_documents || '';
 
                 const explorerLink = document.getElementById('attestExplorerLink');
                 explorerLink.href = data.explorer_url;
@@ -3437,8 +5004,19 @@
                 statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '<span>🔏</span> オンチェーン確定日付を刻印 (EAS公証)';
+                btn.innerHTML = '<span>🔏</span> オンチェーンに存在証明を刻印 (EAS)';
             }
+        });
+
+        // 検証キット（原本を含む）をダウンロード。サーバーには保存されないため本人が保管する
+        document.getElementById('downloadVerificationKitBtn').addEventListener('click', () => {
+            if (!latestVerificationKit) return;
+            const blob = new Blob([JSON.stringify(latestVerificationKit, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `civic-lens-verification-kit-${latestVerificationKit.record_id || latestVerificationKit.uid.slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
         });
 
         // 原本同一性再照合ボタン
@@ -3460,7 +5038,7 @@
                 const result = await res.json();
 
                 if (result.verified) {
-                    feedback.innerHTML = `<span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded">✅ 原本証明成功: オンチェーンに刻印された確定日付（${result.formatted_date}）と1文字の相違もなく一致します。</span>`;
+                    feedback.innerHTML = `<span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded">✅ 原本証明成功: オンチェーンに記録された時刻（${result.formatted_date}）の内容と1文字の相違もなく一致します。</span>`;
                 } else {
                     feedback.innerHTML = `<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded">❌ 改ざん検知: 文書内容がアテステーション刻印時から変更されています。</span>`;
                 }
