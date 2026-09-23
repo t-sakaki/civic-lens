@@ -22,8 +22,9 @@ pydantic>=2.10.0
 python-dotenv>=1.0.0
 httpx>=0.28.0
 
-# Web3 (SIWE署名検証)
+# Web3 (SIWE署名検証 & EAS実チェーン刻印)
 eth-account>=0.13.0
+web3>=6.20.0
 
 # SNSシェア機能（疑似市民の声のX.com / Blueskyシェア）
 atproto>=0.0.55        # Bluesky (AT Protocol) 投稿用

@@ -51,3 +51,9 @@ firestore-debug.log
 firebase-debug.log
 ui-debug.log
 .firebase/
+
+# オンチェーン記録の照合用原本（申請番号等を含むためコミットしない）
+data/attestation_sources/
+
+# 開示請求台帳への市民リアクション（実行時データ）
+data/ledger_reactions.json

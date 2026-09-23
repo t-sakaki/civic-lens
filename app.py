@@ -2,11 +2,12 @@
 
 市民の怒りを情報公開に変換するエンドポイント
 """
+import asyncio
 import os
 import io
 import base64
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 import uuid
 from dotenv import load_dotenv
@@ -38,6 +39,14 @@ from municipality_pool import get_pooled
 from municipality_agent import research_municipality_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
+from attachment_reader import (
+    ALLOWED_MIME_TYPES,
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENTS,
+    Attachment,
+    build_analysis_input,
+    read_attachments,
+)
 from gmi_client import search_ordinances, search_precedents
 from precedent_cases import search_cases, get_case as get_precedent_case
 from situations import get_situation_list, get_situation
@@ -61,9 +70,13 @@ from fork_star import (
 from web3_bounty import (
     create_bounty, pledge_bounty, claim_bounty, get_bounty, list_all_bounties
 )
+from web3_chain_client import ChainClientNotConfigured
 from web3_attestation import (
-    issue_attestation, get_attestation, verify_attestation, list_all_attestations
+    issue_attestation, get_attestation, verify_attestation, list_all_attestations,
+    PersonalInfoWarning, build_verification_kit,
 )
+from onchain_ledger import fetch_ledger_entries, get_ledger_entry, ledger_meta, LedgerNotConfigured
+from ledger_reactions import get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES
 from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
@@ -306,15 +319,34 @@ async def get_municipality_detection_history(
 
 @app.post("/api/analyze")
 async def analyze_anger(
-    user_input: str = Form(...),
+    user_input: str = Form(""),
     image_data: Optional[str] = Form(None),
     target_authority: Optional[str] = Form(None),
+    attachments: List[UploadFile] = File(default=[]),
 ):
     """市民の怒りを分析
 
     target_authority: フロントエンドの対象機関<select>の現在値（Geolocationによる
     自動特定結果を含む）。請求内容から対象機関を判別できない場合のデフォルト候補として使う。
+    attachments: 市民が添付した画像・PDF（通知書、現場写真など）。Gemini Visionで読み取り、
+    その内容を分析の入力に加える。
     """
+    user_input = user_input.strip()
+    if not user_input and not image_data and not attachments:
+        raise HTTPException(400, "怒りの内容を入力するか、資料を添付してください。")
+    if len(attachments) > MAX_ATTACHMENTS:
+        raise HTTPException(400, f"添付できるファイルは{MAX_ATTACHMENTS}件までです。")
+
+    files: List[Attachment] = []
+    for upload in attachments:
+        mime_type = (upload.content_type or "").lower()
+        if mime_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(400, f"「{upload.filename}」は対応していない形式です（画像またはPDFを添付してください）。")
+        data = await upload.read()
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(400, f"「{upload.filename}」のサイズが大きすぎます（{MAX_ATTACHMENT_BYTES // (1024 * 1024)}MBまで）。")
+        files.append(Attachment(filename=upload.filename or "添付ファイル", mime_type=mime_type, data=data))
+
     hint_authority_key = target_authority if target_authority in AUTHORITIES else None
     # 1. 感情解析（画像があれば）
     anger_level = None
@@ -334,14 +366,24 @@ async def analyze_anger(
         except Exception as e:
             print(f"画像処理エラー: {e}")
 
-    # 2. テキストのみの場合は簡易推定
-    if anger_level is None:
-        anger_level = text_to_anger_level(user_input)
-
-    # 3. Geminiエージェントで詳細分析
     agent = get_agent()
+
+    # 2. 添付資料があれば Gemini Vision で読み取り、分析の入力に加える
+    attachments_reading = None
+    analysis_input = user_input
+    if files:
+        attachments_reading = await asyncio.to_thread(read_attachments, files, user_input, agent.genai_client)
+        analysis_input = build_analysis_input(user_input, attachments_reading)
+    if not analysis_input:
+        analysis_input = "（写真のみ送信）"
+
+    # 3. テキストのみの場合は簡易推定
+    if anger_level is None:
+        anger_level = text_to_anger_level(analysis_input)
+
+    # 4. Geminiエージェントで詳細分析
     try:
-        anger_analysis = agent.analyze_anger(user_input, hint_authority_key)
+        anger_analysis = agent.analyze_anger(analysis_input, hint_authority_key)
         anger_analysis.anger_level = anger_level
     except Exception as e:
         print(f"Gemini エラー: {e}")
@@ -353,7 +395,7 @@ async def analyze_anger(
             emotion_keywords=["怒り", "不信"],
             target_authority=fallback_authority.authority,
             target_authority_key=fallback_key,
-            pain_summary=user_input[:100],
+            pain_summary=analysis_input[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
             legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
             next_action="disclosure_request",
@@ -366,6 +408,8 @@ async def analyze_anger(
         "anger_analysis": anger_analysis.model_dump(),
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
+        "attachments_reading": attachments_reading.model_dump() if attachments_reading else None,
+        "analysis_input": analysis_input,
     }
 
 
@@ -683,6 +727,55 @@ async def precedent_cases_page():
     template_file = BASE_DIR / "templates" / "precedent_cases.html"
     with open(template_file, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
+
+
+@app.get("/ledger", response_class=HTMLResponse)
+async def ledger_page():
+    """オンチェーン開示請求台帳の閲覧ページ"""
+    template_file = BASE_DIR / "templates" / "ledger.html"
+    with open(template_file, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/api/ledger")
+async def api_ledger(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """オンチェーン（EAS）に記録された開示請求の一覧と、市民リアクションの件数。
+
+    記録はCivic Lensのデータベースではなく、チェーン（easscan GraphQL）から直接読み出す。
+    """
+    try:
+        entries = fetch_ledger_entries()
+        meta = ledger_meta()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"オンチェーン台帳の読み込みに失敗しました: {e}")
+    user_id = current_user.user_id if current_user else None
+    return {
+        **meta,
+        "logged_in": current_user is not None,
+        "entries": [{**e, "reactions": get_reactions(e["uid"], user_id)} for e in entries],
+    }
+
+
+@app.post("/api/ledger/{uid}/react")
+async def api_ledger_react(
+    uid: str,
+    reaction: str = Form(...),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """台帳の記録へのリアクション（👀見守る / 🙋私も知りたい / 🔁自分の自治体でも）。ログイン必須・トグル。"""
+    if current_user is None:
+        raise HTTPException(401, "リアクションにはログインが必要です。")
+    if reaction not in LEDGER_REACTION_TYPES:
+        raise HTTPException(400, f"未対応のリアクションです: {reaction}")
+    try:
+        entry = get_ledger_entry(uid)
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    if entry is None:
+        raise HTTPException(404, "オンチェーン台帳に該当する記録がありません。")
+    return {"uid": entry["uid"], "reactions": toggle_reaction(entry["uid"], current_user.user_id, reaction)}
 
 
 @app.get("/api/precedent-cases")
@@ -1047,33 +1140,47 @@ async def api_create_bounty(
     requester_wallet: Optional[str] = Form(None),
 ):
     """開示請求に対するバウンティプールを作成"""
-    campaign = create_bounty(
-        record_id=record_id,
-        title=title,
-        authority=authority,
-        target_pages=target_pages,
-        cost_per_page_jpy=cost_per_page_jpy,
-        requester_wallet=requester_wallet,
-    )
+    try:
+        campaign = create_bounty(
+            record_id=record_id,
+            title=title,
+            authority=authority,
+            target_pages=target_pages,
+            cost_per_page_jpy=cost_per_page_jpy,
+            requester_wallet=requester_wallet,
+        )
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
     return campaign.model_dump()
 
 
 @app.post("/api/web3/bounty/pledge")
 async def api_pledge_bounty(
     bounty_id_or_record_id: str = Form(...),
+    wallet_address: str = Form(...),
+    tx_hash: str = Form(...),
     amount_jpy: int = Form(500),
     backer_id: str = Form("市民"),
-    wallet_address: Optional[str] = Form(None),
     message: str = Form("応援しています！"),
 ):
-    """バウンティプールにコピー代・調査費を出資（マイクロプレッジ）"""
-    campaign = pledge_bounty(
-        bounty_id_or_record_id=bounty_id_or_record_id,
-        amount_jpy=amount_jpy,
-        backer_id=backer_id,
-        wallet_address=wallet_address,
-        message=message,
-    )
+    """バウンティプールにコピー代・調査費を出資（マイクロプレッジ）。
+
+    tx_hash は出資者のウォレットからエスクローアドレスへ実際に送金した
+    USDC送金トランザクションのハッシュで、サーバー側でオンチェーン検証される。
+    """
+    try:
+        campaign = pledge_bounty(
+            bounty_id_or_record_id=bounty_id_or_record_id,
+            wallet_address=wallet_address,
+            tx_hash=tx_hash,
+            amount_jpy=amount_jpy,
+            backer_id=backer_id,
+            message=message,
+        )
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return campaign.model_dump()
 
 
@@ -1112,7 +1219,7 @@ async def api_get_bounty(bounty_id_or_record_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Web3 / EAS (Ethereum Attestation Service) 確定日付・オンチェーン存在証明
+# Web3 / EAS (Ethereum Attestation Service) オンチェーン存在証明（タイムスタンプ）
 # ---------------------------------------------------------------------------
 
 @app.post("/api/web3/attestation/issue")
@@ -1123,31 +1230,58 @@ async def api_issue_attestation(
     authority: str = Form("自治体"),
     legal_basis: str = Form("情報公開法・各自治体情報公開条例"),
     user_wallet_address: Optional[str] = Form(None),
+    requested_documents: str = Form(""),
+    publish_plaintext: bool = Form(False),
+    acknowledge_warnings: bool = Form(False),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
-    """開示請求書に対する EAS オンチェーン存在証明（確定日付）を発行"""
+    """開示請求書に対する EAS オンチェーン存在証明（タイムスタンプ）を発行
+
+    publish_plaintext=true の場合、requested_documents（請求する公文書の特定内容）を
+    平文でオンチェーンに記録する。個人情報らしき記述があれば 422 で警告を返し、
+    本人が確認して acknowledge_warnings=true で再送した場合のみ記録する。
+    """
     rec_id = record_id or f"req-{uuid.uuid4().hex[:8]}"
-    attestation = issue_attestation(
-        record_id=rec_id,
-        title=title,
-        content=content,
-        authority=authority,
-        legal_basis=legal_basis,
-        user_wallet_address=user_wallet_address,
-    )
-    return attestation.model_dump()
+    try:
+        attestation = issue_attestation(
+            record_id=rec_id,
+            title=title,
+            content=content,
+            authority=authority,
+            legal_basis=legal_basis,
+            user_wallet_address=user_wallet_address,
+            requested_documents=requested_documents,
+            publish_plaintext=publish_plaintext,
+            acknowledge_warnings=acknowledge_warnings,
+            owner_user_id=current_user.user_id if current_user else None,
+        )
+    except PersonalInfoWarning as e:
+        raise HTTPException(422, {"message": str(e), "personal_info_warnings": e.warnings})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    # 検証キット（原本を含む）は請求者本人へのこのレスポンスでのみ返し、サーバーには保存しない
+    return {**attestation.model_dump(), "verification_kit": build_verification_kit(attestation, content)}
 
 
 @app.get("/api/web3/attestation/records")
 async def api_list_attestations():
     """発行されたすべてのアテステーション一覧を取得"""
-    records = list_all_attestations()
+    try:
+        records = list_all_attestations()
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
     return {"attestations": [r.model_dump() for r in records]}
 
 
 @app.get("/api/web3/attestation/{uid_or_record_id}")
 async def api_get_attestation(uid_or_record_id: str):
-    """UID または record_id からアテステーション証明書を取得"""
-    record = get_attestation(uid_or_record_id)
+    """UID または record_id からアテステーション証明書を取得（内容はチェーンから読み出す）"""
+    try:
+        record = get_attestation(uid_or_record_id)
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
     if not record:
         raise HTTPException(404, "Attestation record not found")
     return record.model_dump()
@@ -1159,8 +1293,10 @@ async def api_verify_attestation(
     content: str = Form(...),
 ):
     """現在の請求文書が発行済みアテステーションと改ざんなく一致するかオンチェーン検証"""
-    res = verify_attestation(uid_or_record_id, content)
-    return res
+    try:
+        return verify_attestation(uid_or_record_id, content)
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -1211,14 +1347,20 @@ async def api_list_ipfs_records():
 async def api_mint_sbt(
     recipient_id: str = Form("市民#00001"),
     badge_key: str = Form("first_request"),
-    wallet_address: Optional[str] = Form(None),
+    wallet_address: str = Form(...),
 ):
-    """市民の開示請求・集合知貢献に対して譲渡不能SBTバッジを発行"""
-    record = mint_sbt(
-        recipient_id=recipient_id,
-        badge_key=badge_key,
-        wallet_address=wallet_address,
-    )
+    """市民の開示請求・集合知貢献に対して、実チェーン上のEASアテステーションとして
+    譲渡不能バッジを発行する"""
+    try:
+        record = mint_sbt(
+            recipient_id=recipient_id,
+            badge_key=badge_key,
+            wallet_address=wallet_address,
+        )
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return record.model_dump()
 
 

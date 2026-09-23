@@ -1,4 +1,11 @@
-# Civic Lens — Web3 Civic Reputation SBT (Soulbound Token / 譲渡不能バッジNFT)
+# Civic Lens — Web3 Civic Reputation SBT (Soulbound Token / 譲渡不能バッジ)
+#
+# 実際のERC-721/ERC-5192コントラクトを新規デプロイする代わりに、既に実チェーンに
+# 接続済みのEAS (web3_chain_client.py) を利用し、バッジ発行を「recipientに紐づく
+# 撤回不能なオンチェーンアテステーション」として実装する。EASアテステーションは
+# もともと譲渡機構を持たないためソウルバウンドの性質を満たし、新規コントラクト
+# デプロイなしに実チェーン上の検証可能な発行記録を得られる。
+# BADGE_EAS_SCHEMA_UID が未設定の場合は例外を送出し、疑似tx_hashは生成しない。
 
 import os
 import json
@@ -7,6 +14,9 @@ import time
 from typing import Optional, Dict, List
 from datetime import datetime
 from pydantic import BaseModel
+from eth_abi import encode as abi_encode
+
+from web3_chain_client import submit_attestation_onchain, ChainClientNotConfigured, EAS_CONTRACT_ADDRESS
 
 DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
 if os.getenv("VERCEL"):
@@ -16,9 +26,13 @@ if os.getenv("VERCEL"):
 else:
     SBT_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "sbt_records.json")
 
-SBT_CONTRACT_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-CHAIN_NAME = "Base Mainnet (EVM L2)"
-CHAIN_ID = 8453
+# バッジ用EASスキーマ: バッジ種別, 受給者ID, 発行時刻
+BADGE_SCHEMA_RAW = "string badgeKey, string recipientId, uint256 mintedAt"
+
+EAS_EXPLORER_HOSTS = {
+    8453: "https://base.easscan.org",
+    84532: "https://base-sepolia.easscan.org",
+}
 
 BADGE_TYPES = {
     "first_request": {
@@ -61,7 +75,7 @@ BADGE_TYPES = {
 
 
 class SBTRecord(BaseModel):
-    token_id: str
+    token_id: str          # = EASアテステーションUID
     badge_key: str
     badge_name: str
     recipient_id: str
@@ -69,8 +83,9 @@ class SBTRecord(BaseModel):
     minted_at: str
     tx_hash: str
     svg_image: str
-    contract_address: str = SBT_CONTRACT_ADDRESS
-    chain: str = CHAIN_NAME
+    contract_address: str  # = EASコントラクトアドレス (chain_id依存)
+    chain_id: int
+    chain: str
     is_soulbound: bool = True
 
 
@@ -122,7 +137,7 @@ def generate_badge_svg(badge_key: str, recipient_id: str, minted_date: str) -> s
   <text x="200" y="262" font-family="monospace, sans-serif" font-size="12" font-weight="bold" fill="{c2}" text-anchor="middle">{tier.upper()} SBT</text>
   <text x="200" y="300" font-family="sans-serif" font-size="16" font-weight="bold" fill="#F8FAFC" text-anchor="middle">{name[:22]}</text>
   <text x="200" y="328" font-family="monospace, sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Civic ID: {recipient_id}</text>
-  <text x="200" y="355" font-family="monospace, sans-serif" font-size="11" fill="#64748B" text-anchor="middle">Minted: {minted_date} | ERC-5192</text>
+  <text x="200" y="355" font-family="monospace, sans-serif" font-size="11" fill="#64748B" text-anchor="middle">Minted: {minted_date} | EAS Attestation</text>
 </svg>'''
     return svg
 
@@ -130,38 +145,64 @@ def generate_badge_svg(badge_key: str, recipient_id: str, minted_date: str) -> s
 def mint_sbt(
     recipient_id: str,
     badge_key: str = "first_request",
-    wallet_address: Optional[str] = None
+    wallet_address: str = None,
 ) -> SBTRecord:
+    """バッジを実チェーン上のEASアテステーションとして発行する。
+
+    wallet_address (受給者の実ウォレットアドレス) が必須で、
+    BADGE_EAS_SCHEMA_UID / CHAIN_RPC_URL / CHAIN_PRIVATE_KEY が未設定の場合は
+    ChainClientNotConfiguredを送出する。疑似tx_hashへのフォールバックは行わない。
+    """
     if badge_key not in BADGE_TYPES:
         badge_key = "first_request"
+    if not wallet_address:
+        raise ValueError("wallet_address は必須です（EASアテステーションの受給者アドレス）")
 
     badge = BADGE_TYPES[badge_key]
-    token_id = f"sbt-{badge_key[:3]}-{hashlib.sha256(f'{recipient_id}:{time.time()}'.encode()).hexdigest()[:8]}"
     minted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    tx_hash = "0x" + hashlib.sha256(f"sbt:{token_id}:{minted_at}".encode()).hexdigest()
-    
-    wallet = wallet_address or f"0x{hashlib.sha256(recipient_id.encode()).hexdigest()[:40]}"
+    now_ts = int(time.time())
+
+    encoded_data = abi_encode(
+        ["string", "string", "uint256"],
+        [badge_key, recipient_id, now_ts],
+    )
+
+    schema_uid = os.getenv("BADGE_EAS_SCHEMA_UID")
+    chain_result = submit_attestation_onchain(
+        schema_uid=schema_uid,
+        recipient=wallet_address,
+        encoded_data=encoded_data,
+        revocable=False,
+    )
+
+    chain_id = chain_result["chain_id"]
+    chain_name = EAS_EXPLORER_HOSTS.get(chain_id, f"Chain ID {chain_id}")
     svg = generate_badge_svg(badge_key, recipient_id, minted_at)
 
     record = SBTRecord(
-        token_id=token_id,
+        token_id=chain_result["uid"],
         badge_key=badge_key,
         badge_name=badge["name"],
         recipient_id=recipient_id,
-        wallet_address=wallet,
+        wallet_address=wallet_address,
         minted_at=minted_at,
-        tx_hash=tx_hash,
+        tx_hash=chain_result["tx_hash"],
         svg_image=svg,
-        contract_address=SBT_CONTRACT_ADDRESS,
-        chain=CHAIN_NAME,
+        contract_address=_eas_contract_address(),
+        chain_id=chain_id,
+        chain=f"Chain ID {chain_id}",
         is_soulbound=True,
     )
 
     records = _load_sbt_records()
-    records[token_id] = record.model_dump()
+    records[record.token_id] = record.model_dump()
     _save_sbt_records(records)
 
     return record
+
+
+def _eas_contract_address() -> str:
+    return EAS_CONTRACT_ADDRESS
 
 
 def get_sbt_metadata(token_id: str) -> Optional[dict]:

@@ -1,4 +1,9 @@
 # Civic Lens — Web3 Civic Bounty（開示請求コピー代・調査費分散型ファンディング）
+#
+# 出資(pledge)は実際の資金移動を伴うため、ユーザー申告のamount_jpyをそのまま記録せず、
+# ユーザーのウォレットからエスクローアドレスへの実USDC送金トランザクション(tx_hash)を
+# web3_chain_client.verify_erc20_transfer() でオンチェーン検証してから記録する。
+# 検証に失敗した場合は例外を送出し、疑似tx_hashへのフォールバックは行わない。
 
 import os
 import json
@@ -8,6 +13,8 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from pydantic import BaseModel
 
+from web3_chain_client import verify_erc20_transfer, ChainClientNotConfigured
+
 DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
 if os.getenv("VERCEL"):
     STORAGE_DIR = "/tmp/civic_lens_data"
@@ -16,8 +23,19 @@ if os.getenv("VERCEL"):
 else:
     BOUNTY_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "bounties.json")
 
-ESCROW_CONTRACT_ADDRESS = "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE"
 DEFAULT_TOKEN = "USDC"
+USDC_DECIMALS = 6
+
+
+def _escrow_address() -> str:
+    """出資金の実際の着金先ウォレット。運営が管理する実アドレスを環境変数で設定する。"""
+    address = os.getenv("BOUNTY_ESCROW_ADDRESS")
+    if not address:
+        raise ChainClientNotConfigured(
+            "環境変数 BOUNTY_ESCROW_ADDRESS が未設定です。実USDCエスクローの受取先"
+            "ウォレットアドレスを設定してください。"
+        )
+    return address
 
 
 class Pledge(BaseModel):
@@ -45,7 +63,8 @@ class BountyCampaign(BaseModel):
     created_at: str
     claimed_at: Optional[str] = None
     proof_document_cid: Optional[str] = None
-    escrow_address: str = ESCROW_CONTRACT_ADDRESS
+    escrow_address: str
+    payout_note: str = "資金の解放(payout)は運営による実USDC送金で行われ、本システムは自動送金しません。"
 
 
 def _ensure_storage():
@@ -93,9 +112,10 @@ def create_bounty(
         current_amount_usdc=0.0,
         current_amount_jpy=0,
         status="funding",
-        requester_wallet=requester_wallet or "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        requester_wallet=requester_wallet or "",
         pledges=[],
         created_at=now_iso,
+        escrow_address=_escrow_address(),
     )
 
     records = _load_bounties()
@@ -108,11 +128,19 @@ def create_bounty(
 
 def pledge_bounty(
     bounty_id_or_record_id: str,
+    wallet_address: str,
+    tx_hash: str,
     amount_jpy: int = 500,
     backer_id: str = "市民",
-    wallet_address: Optional[str] = None,
-    message: str = "応援しています！"
+    message: str = "応援しています！",
+    jpy_per_usdc: float = 150.0,
 ) -> BountyCampaign:
+    """出資を記録する。
+
+    wallet_address からエスクローアドレスへの実USDC送金である tx_hash を
+    オンチェーンで検証し、検証されたオンチェーン金額のみを記録する。
+    amount_jpy はUI表示用の目安換算にのみ使い、検証済みオンチェーン金額を上書きしない。
+    """
     records = _load_bounties()
     key = bounty_id_or_record_id
     if key not in records:
@@ -131,22 +159,31 @@ def pledge_bounty(
     data = records[b_id]
     campaign = BountyCampaign(**data)
 
-    amount_usdc = round(amount_jpy / 150.0, 2)
-    tx_hash = "0x" + hashlib.sha256(f"{b_id}:{time.time()}:{amount_jpy}".encode()).hexdigest()
+    claimed_amount_usdc = round(amount_jpy / jpy_per_usdc, 2)
+    min_amount_units = int(claimed_amount_usdc * (10 ** USDC_DECIMALS))
+
+    verification = verify_erc20_transfer(
+        tx_hash=tx_hash,
+        expected_from=wallet_address,
+        expected_to=campaign.escrow_address,
+        min_amount_units=min_amount_units,
+    )
+    verified_amount_usdc = verification["amount_units"] / (10 ** USDC_DECIMALS)
+    verified_amount_jpy = round(verified_amount_usdc * jpy_per_usdc)
 
     pledge = Pledge(
         backer_id=backer_id,
-        wallet_address=wallet_address or f"0x{hashlib.sha256(backer_id.encode()).hexdigest()[:40]}",
-        amount_usdc=amount_usdc,
-        amount_jpy=amount_jpy,
+        wallet_address=wallet_address,
+        amount_usdc=verified_amount_usdc,
+        amount_jpy=verified_amount_jpy,
         tx_hash=tx_hash,
         timestamp=datetime.utcnow().isoformat() + "Z",
         message=message,
     )
 
     campaign.pledges.append(pledge)
-    campaign.current_amount_jpy += amount_jpy
-    campaign.current_amount_usdc = round(campaign.current_amount_usdc + amount_usdc, 2)
+    campaign.current_amount_jpy += verified_amount_jpy
+    campaign.current_amount_usdc = round(campaign.current_amount_usdc + verified_amount_usdc, 2)
 
     if campaign.current_amount_jpy >= campaign.target_amount_jpy and campaign.status == "funding":
         campaign.status = "funded"
