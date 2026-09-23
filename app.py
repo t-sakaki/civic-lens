@@ -32,11 +32,12 @@ from ordinance_data import (
     is_police_authority,
     match_authority_by_text,
     list_nearby_authorities,
+    find_authority_by_prefecture,
 )
 from station_guide import find_nearest_government_office, get_office_info
-from geolocation import detect_municipality
+from geolocation import detect_municipality, prefecture_code
 from municipality_pool import get_pooled
-from municipality_agent import research_municipality_now
+from municipality_agent import research_municipality_now, research_prefecture_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from attachment_reader import (
@@ -234,6 +235,44 @@ async def detect_municipality_from_location(
 
     user_id = current_user.user_id if current_user else None
     candidates = list_nearby_authorities(location.lat, location.lon)
+
+    # 都道府県（県庁）は、条例が別立てで距離に関係なく請求先になり得るため、
+    # list_nearby_authorities() の半径判定とは独立して必ず候補に含める。
+    pref_authority = find_authority_by_prefecture(location.prefecture)
+    if pref_authority:
+        if not any(c["key"] == pref_authority.key for c in candidates):
+            candidates = [{
+                "key": pref_authority.key,
+                "name": pref_authority.authority,
+                "type": pref_authority.authority_type,
+                "category": pref_authority.category,
+                "distance_km": None,
+            }] + candidates
+    else:
+        pref_code = prefecture_code(location.prefecture)
+        try:
+            pref_pooled = get_pooled(pref_code)
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（都道府県・Firestore未設定の可能性）: {e}")
+            pref_pooled = None
+
+        if not pref_pooled or pref_pooled.get("status") != "ready":
+            try:
+                pref_pooled = research_prefecture_now(pref_code, location.prefecture)
+            except Exception as e:
+                print(f"都道府県調査エラー: {e}")
+                pref_pooled = None
+
+        if pref_pooled and pref_pooled.get("status") == "ready":
+            pref_key = f"pref:{pref_code}"
+            if not any(c["key"] == pref_key for c in candidates):
+                candidates = [{
+                    "key": pref_key,
+                    "name": pref_pooled.get("prefecture") or location.prefecture,
+                    "type": pref_pooled.get("authority_type") or "知事",
+                    "category": "自治体",
+                    "distance_km": 0.0,
+                }] + candidates
 
     matched_key = match_authority_by_text(location.municipality, default="")
     exact_match = AUTHORITIES[matched_key] if matched_key else None

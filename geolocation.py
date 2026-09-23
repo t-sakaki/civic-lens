@@ -32,6 +32,15 @@ def _muni_code(prefecture: str, municipality: str) -> str:
     return hashlib.sha1(f"{prefecture}{municipality}".encode("utf-8")).hexdigest()[:12]
 
 
+def prefecture_code(prefecture: str) -> str:
+    """都道府県名から、都道府県レベルのプールキーとして使う安定なハッシュ値を生成する
+
+    "prefecture:" 接頭辞を付けることで、同名の市区町村が万一存在しても
+    _muni_code() のキー空間と衝突しないようにしている。
+    """
+    return hashlib.sha1(f"prefecture:{prefecture}".encode("utf-8")).hexdigest()[:12]
+
+
 def _mock_location(lat: float, lon: float) -> MunicipalityLocation:
     """API未到達時のフォールバック（安城市をデフォルトとする）"""
     return MunicipalityLocation(
