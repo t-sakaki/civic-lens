@@ -25,6 +25,7 @@ from typing import Optional
 from datetime import datetime
 
 import requests
+from google.api_core import exceptions as gcloud_exceptions
 from pydantic import BaseModel
 from eth_account import Account
 from eth_account.messages import encode_defunct
@@ -46,12 +47,22 @@ if _AUTH_EMULATOR_HOST:
 else:
     SIGN_IN_WITH_PASSWORD_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 
-SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "civic-lens-super-secret-key-2026")
+SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "")
+if not SECRET_KEY:
+    if os.getenv("FIREBASE_AUTH_EMULATOR_HOST") or os.getenv("CIVIC_LENS_ALLOW_INSECURE_DEV_SECRET"):
+        # ローカル/CI環境ではエミュレータ等で完結するため固定値でも許容する
+        SECRET_KEY = "civic-lens-dev-only-insecure-secret"
+    else:
+        raise RuntimeError(
+            "AUTH_SECRET_KEY が未設定です。セッショントークンの署名鍵が固定値のままだと"
+            "誰でも任意ユーザーとしてログインできてしまうため、本番相当の環境では起動を停止します。"
+        )
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7日間有効
 NONCE_EXPIRY_SECONDS = 5 * 60  # SIWE Nonceは5分間のみ有効（ワンタイム）
 MAGIC_LINK_EXPIRY_SECONDS = 15 * 60  # マジックリンクは15分間のみ有効（ワンタイム）
 
 USERS_COLLECTION = "users"
+USERNAME_RESERVATIONS_COLLECTION = "username_reservations"
 NONCES_COLLECTION = "wallet_nonces"
 MAGIC_LINKS_COLLECTION = "magic_links"
 
@@ -75,6 +86,10 @@ class User(BaseModel):
 
 def _users_ref():
     return get_firestore_client().collection(USERS_COLLECTION)
+
+
+def _username_reservations_ref():
+    return get_firestore_client().collection(USERNAME_RESERVATIONS_COLLECTION)
 
 
 def _nonces_ref():
@@ -163,11 +178,18 @@ def register_user(username: str, password: str, email: Optional[str] = None) -> 
         raise ValueError("パスワードは6文字以上で入力してください")
 
     users_ref = _users_ref()
-    if list(users_ref.where("username_lower", "==", clean_username.lower()).limit(1).stream()):
-        raise ValueError("このユーザー名は既に使用されています")
     clean_email = email.strip().lower() if email else None
     if clean_email and list(users_ref.where("email", "==", clean_email).limit(1).stream()):
         raise ValueError("このメールアドレスは既に登録されています")
+
+    username_lower = clean_username.lower()
+    reservation_ref = _username_reservations_ref().document(username_lower)
+    try:
+        # ドキュメントIDの一意性はFirestore側で保証されるため、同時登録が来ても
+        # create()はどちらか一方でしか成功しない（TOCTOUの排除）。
+        reservation_ref.create({"username_lower": username_lower, "reserved_at": time.time()})
+    except gcloud_exceptions.AlreadyExists:
+        raise ValueError("このユーザー名は既に使用されています")
 
     auth_email = email.strip() if email else _synthetic_email(clean_username)
     try:
@@ -177,7 +199,11 @@ def register_user(username: str, password: str, email: Optional[str] = None) -> 
             display_name=clean_username,
         )
     except firebase_auth.EmailAlreadyExistsError:
+        reservation_ref.delete()
         raise ValueError("このメールアドレスは既に登録されています")
+    except Exception:
+        reservation_ref.delete()
+        raise
 
     now_iso = datetime.utcnow().isoformat() + "Z"
     user = User(
@@ -191,9 +217,10 @@ def register_user(username: str, password: str, email: Optional[str] = None) -> 
     )
     users_ref.document(firebase_user.uid).set({
         **user.model_dump(),
-        "username_lower": clean_username.lower(),
+        "username_lower": username_lower,
         "auth_email": auth_email,
     })
+    reservation_ref.set({"username_lower": username_lower, "user_id": firebase_user.uid}, merge=True)
     create_personal_project(owner_id=user.user_id, display_name=clean_username)
     return user
 
