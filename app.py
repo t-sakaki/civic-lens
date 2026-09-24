@@ -32,11 +32,19 @@ from ordinance_data import (
     is_police_authority,
     match_authority_by_text,
     list_nearby_authorities,
+    find_authority_by_prefecture,
 )
 from station_guide import find_nearest_government_office, get_office_info
-from geolocation import detect_municipality
+from geolocation import (
+    detect_municipality,
+    prefecture_code,
+    list_prefectures,
+    build_manual_location,
+    find_nearby_municipalities,
+    MunicipalityLocation,
+)
 from municipality_pool import get_pooled
-from municipality_agent import research_municipality_now
+from municipality_agent import research_municipality_now, research_prefecture_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
 from emotion_analyzer import analyze_anger_from_image, anger_to_text_prompt, text_to_anger_level
 from attachment_reader import (
@@ -106,12 +114,48 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-)
+# Cloud Run実行時は K_SERVICE が自動設定される。HTTPSで配信される本番/Cloud Run環境では
+# Cookieの Secure 属性を必ず付与し、ローカルのHTTP開発サーバーでのみ省略する。
+_IS_SECURE_CONTEXT = bool(os.getenv("K_SERVICE")) or os.getenv("FORCE_SECURE_COOKIES") == "1"
+
+_cors_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if _cors_allowed_origins:
+    # 認証はCookieで行っているため、allow_credentials=Trueと
+    # allow_origins=["*"]の組み合わせは、ブラウザによる制限を回避して
+    # 任意オリジンから被害者のセッションでAPIを叩けてしまう脆弱な構成になる。
+    # CORS_ALLOWED_ORIGINS未設定時（＝フロントエンドを同一オリジンで配信している
+    # 通常構成）はクロスオリジンでのCookie送信自体を許可しない。
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    """未捕捉の例外をJSONで返す
+
+    FastAPI/Starlette はデフォルトで未捕捉の例外に対し text/plain の
+    "Internal Server Error" を返す。フロントエンドは基本的に res.json() で
+    レスポンスをパースしているため、このプレーンテキストが
+    `Unexpected token 'I', "Internal S"... is not valid JSON` という
+    分かりにくいエラーとして表示されてしまう。ここでJSONに統一して、
+    せめて原因が追いやすいメッセージを返す。
+    """
+    import traceback
+    print(f"[unhandled_exception] {request.method} {request.url.path}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"サーバー内部エラーが発生しました: {exc}"},
+    )
 
 
 def get_current_user_optional(
@@ -189,34 +233,72 @@ async def get_authorities():
     }
 
 
-@app.post("/api/municipality/detect")
-async def detect_municipality_from_location(
-    lat: float = Form(...),
-    lon: float = Form(...),
-    session_id: Optional[str] = Form(None),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
-    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
+def _resolve_municipality_candidates(
+    location: MunicipalityLocation,
+    session_id: Optional[str],
+    user_id: Optional[str],
+) -> Dict:
+    """MunicipalityLocation から対象機関候補を組み立て、履歴に保存して結果を返す
 
-    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
-    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
-    機関をすべて候補として返す（`candidates`）。
-    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
-    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
-    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
-    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
-    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
-    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    /api/municipality/detect（GPS由来）と /api/municipality/lookup（手動選択）の
+    両方から共有するロジック。lat/lon が無い（手動選択）場合は距離ベースの
+    周辺候補列挙（list_nearby_authorities）をスキップする。
     """
-    location = detect_municipality(lat, lon)
-    if location is None:
-        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
+    candidates: List[Dict] = []
+    if location.lat is not None and location.lon is not None:
+        candidates = list_nearby_authorities(location.lat, location.lon)
 
-    user_id = current_user.user_id if current_user else None
-    candidates = list_nearby_authorities(location.lat, location.lon)
+    # 都道府県（県庁）は、条例が別立てで距離に関係なく請求先になり得るため、
+    # list_nearby_authorities() の半径判定とは独立して必ず候補に含める。
+    pref_authority = find_authority_by_prefecture(location.prefecture)
+    if pref_authority:
+        if not any(c["key"] == pref_authority.key for c in candidates):
+            candidates = [{
+                "key": pref_authority.key,
+                "name": pref_authority.authority,
+                "type": pref_authority.authority_type,
+                "category": pref_authority.category,
+                "distance_km": None,
+            }] + candidates
+    else:
+        pref_code = prefecture_code(location.prefecture)
+        try:
+            pref_pooled = get_pooled(pref_code)
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（都道府県・Firestore未設定の可能性）: {e}")
+            pref_pooled = None
+
+        if not pref_pooled or pref_pooled.get("status") != "ready":
+            try:
+                pref_pooled = research_prefecture_now(pref_code, location.prefecture)
+            except Exception as e:
+                print(f"都道府県調査エラー: {e}")
+                pref_pooled = None
+
+        if pref_pooled and pref_pooled.get("status") == "ready":
+            pref_key = f"pref:{pref_code}"
+            if not any(c["key"] == pref_key for c in candidates):
+                candidates = [{
+                    "key": pref_key,
+                    "name": pref_pooled.get("prefecture") or location.prefecture,
+                    "type": pref_pooled.get("authority_type") or "知事",
+                    "category": "自治体",
+                    "distance_km": 0.0,
+                }] + candidates
 
     matched_key = match_authority_by_text(location.municipality, default="")
     exact_match = AUTHORITIES[matched_key] if matched_key else None
+
+    # 静的データに一致する市区町村があれば、距離ベースの列挙（GPS無しの手動選択では
+    # スキップされる）に含まれていなくても必ず候補に加える。
+    if exact_match and not any(c["key"] == matched_key for c in candidates):
+        candidates = [{
+            "key": matched_key,
+            "name": exact_match.authority,
+            "type": exact_match.authority_type,
+            "category": exact_match.category,
+            "distance_km": None,
+        }] + candidates
 
     # プール参照・調査・履歴保存はFirestoreに依存する部分があるが、候補一覧（静的データの
     # みで完結）は Firebase未設定/接続失敗時でも必ず返す
@@ -280,6 +362,124 @@ async def detect_municipality_from_location(
         "candidates": candidates,
         "pooled": pooled,
     }
+
+
+@app.post("/api/municipality/detect")
+async def detect_municipality_from_location(
+    lat: float = Form(...),
+    lon: float = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
+
+    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
+    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
+    機関をすべて候補として返す（`candidates`）。
+    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
+    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
+    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
+    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
+    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
+    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    """
+    location = detect_municipality(lat, lon)
+    if location is None:
+        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
+
+    user_id = current_user.user_id if current_user else None
+    return _resolve_municipality_candidates(location, session_id, user_id)
+
+
+@app.get("/api/municipality/nearby")
+async def list_nearby_municipalities(lat: float, lon: float, muni_code: str = ""):
+    """現在地の周辺（東西南北など複数方位）にある未調査の市区町村候補を返す
+
+    Nominatimへの複数回の逆ジオコーディングが必要で数秒かかるため、
+    /api/municipality/detect とは別に、フロントエンドが背後で追加取得する
+    低優先度のエンドポイントとして設計している。周辺自治体をまとめて
+    自動調査すると応答が大幅に遅延するため、ここでは発見と状態確認のみ行い、
+    実際の情報公開制度の調査はユーザーが選んだ候補についてのみ
+    /api/municipality/lookup で行う。
+    """
+    found = find_nearby_municipalities(lat, lon, exclude_muni_code=muni_code or None)
+
+    candidates = []
+    for f in found:
+        matched_key = match_authority_by_text(f["municipality"], default="")
+        if matched_key:
+            authority = AUTHORITIES[matched_key]
+            candidates.append({
+                "key": matched_key,
+                "name": authority.authority,
+                "type": authority.authority_type,
+                "category": authority.category,
+                "distance_km": f["distance_km"],
+                "researched": True,
+            })
+            continue
+
+        try:
+            pooled = get_pooled(f["muni_code"])
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（周辺自治体・Firestore未設定の可能性）: {e}")
+            pooled = None
+
+        if pooled and pooled.get("status") == "ready":
+            candidates.append({
+                "key": f"pool:{f['muni_code']}",
+                "name": pooled.get("municipality") or f["municipality"],
+                "type": pooled.get("authority_type") or "市長",
+                "category": "自治体",
+                "distance_km": f["distance_km"],
+                "researched": True,
+            })
+        else:
+            # 未調査: フロントエンドで選択されたら /api/municipality/lookup で調査する
+            candidates.append({
+                "key": f"unresearched:{f['prefecture']}:{f['municipality']}",
+                "name": f["municipality"],
+                "type": "未調査",
+                "category": "自治体",
+                "distance_km": f["distance_km"],
+                "researched": False,
+                "prefecture": f["prefecture"],
+                "municipality": f["municipality"],
+            })
+
+    return {"candidates": candidates}
+
+
+@app.get("/api/municipality/prefectures")
+async def list_prefecture_master():
+    """任意選択UI用の都道府県マスタ（47件）を返す"""
+    return {"prefectures": list_prefectures()}
+
+
+@app.post("/api/municipality/lookup")
+async def lookup_municipality_manually(
+    prefecture: str = Form(...),
+    municipality: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """GPSを使わず、ユーザーが指定した都道府県・市区町村から対象機関の候補を特定する
+
+    出張先やニュースで見た自治体など、現在地に依存せず任意の地域を対象機関に
+    設定したい場合の入口。ロジックは /api/municipality/detect と共通
+    （_resolve_municipality_candidates）だが、緯度経度が無いため周辺市区町村の
+    距離ベース列挙は行わない。
+    """
+    prefecture = prefecture.strip()
+    municipality = municipality.strip()
+    if prefecture not in list_prefectures():
+        raise HTTPException(status_code=400, detail=f"未知の都道府県です: {prefecture}")
+    if not municipality:
+        raise HTTPException(status_code=400, detail="市区町村名を入力してください")
+
+    location = build_manual_location(prefecture, municipality)
+    user_id = current_user.user_id if current_user else None
+    return _resolve_municipality_candidates(location, session_id, user_id)
 
 
 @app.get("/api/municipality/status/{muni_code}")
@@ -1503,6 +1703,7 @@ async def api_register(
             max_age=7 * 24 * 3600,
             httponly=True,
             samesite="lax",
+            secure=_IS_SECURE_CONTEXT,
         )
         return {
             "success": True,
@@ -1538,6 +1739,7 @@ async def api_login(
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return {
         "success": True,
@@ -1582,6 +1784,7 @@ async def api_login_wallet(
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return {
         "success": True,
@@ -1622,6 +1825,7 @@ async def api_verify_magic_link(token: str):
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return response
 

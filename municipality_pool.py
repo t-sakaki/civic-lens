@@ -27,6 +27,7 @@ class PooledMunicipality(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     status: str  # "researching" / "ready" / "failed"
+    level: str = "municipality"  # "municipality" / "prefecture"
     ordinance_name: Optional[str] = None
     authority_type: Optional[str] = None
     request_deadline_days: Optional[int] = None
@@ -57,6 +58,7 @@ def mark_researching(
     full_name: str,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
+    level: str = "municipality",
 ) -> Dict:
     """調査開始を仮登録する（既存レコードがあれば上書きしない）"""
     existing = get_pooled(muni_code)
@@ -72,6 +74,7 @@ def mark_researching(
         lat=lat,
         lon=lon,
         status="researching",
+        level=level,
         created_at=now,
         updated_at=now,
     ).model_dump()

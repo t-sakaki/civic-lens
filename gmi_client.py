@@ -152,6 +152,62 @@ def research_municipality_disclosure_system(
         return _mock_municipality_research(municipality)
 
 
+def research_prefecture_disclosure_system(prefecture: str) -> Dict:
+    """未収録の都道府県について、情報公開条例の概要をLLMで調査する
+
+    自治体特定エージェントから、現在地の都道府県が data/authorities/*.json に
+    未収録の場合に呼び出される。GMI_API_KEY未設定・API失敗時は一般的な
+    都道府県条例のひな形（is_mock=True）を返す。
+    """
+    query = f"{prefecture} の情報公開条例について教えてください。"
+
+    if not GMI_API_KEY:
+        return _mock_prefecture_research(prefecture)
+
+    try:
+        content = _call_gmi(_MUNICIPALITY_RESEARCH_SYSTEM_PROMPT, query)
+        parsed = _extract_json(content)
+        parsed["is_mock"] = False
+        return parsed
+    except Exception as e:
+        print(f"GMI Cloud エラー（都道府県情報公開制度調査）: {e}")
+        return _mock_prefecture_research(prefecture)
+
+
+def _mock_prefecture_research(prefecture: str) -> Dict:
+    """GMI_API_KEY未設定・API失敗時の一般的な都道府県条例ひな形"""
+    return {
+        "ordinance_name": f"{prefecture}情報公開条例",
+        "authority_type": "知事",
+        "request_deadline_days": 15,
+        "extension_days": 30,
+        "review_period_days": 90,
+        "non_disclosure_grounds": [
+            {
+                "number": "第1号",
+                "name": "個人情報",
+                "description": "個人に関する情報で、特定の個人を識別することができるもの",
+                "exception": "人の生命、健康、生活又は財産を保護するため、公にすることが必要であると認められる情報は開示",
+            },
+            {
+                "number": "第2号",
+                "name": "法人情報",
+                "description": "法人その他の団体に関する情報であって、公にすることにより当該法人等の正当な利益を害するおそれがあるもの",
+                "exception": "",
+            },
+            {
+                "number": "第3号",
+                "name": "事務執行影響",
+                "description": "県が行う事務又は事業に関する情報のうち、その性質上、公にすることにより当該事務の適正な執行に支障を及ぼすおそれがあるもの",
+                "exception": "",
+            },
+        ],
+        "review_authority": f"{prefecture}情報公開審査会",
+        "contact": f"{prefecture}庁 県民文化部 広報広聴室",
+        "is_mock": True,
+    }
+
+
 def _mock_municipality_research(municipality: str) -> Dict:
     """GMI_API_KEY未設定・API失敗時の一般的な条例ひな形"""
     return {

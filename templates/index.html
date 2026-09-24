@@ -1786,6 +1786,17 @@
                                 </button>
                                 <p id="detectMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
                                 <ul id="municipalityCandidateList" class="hidden mt-1 space-y-1"></ul>
+                                <div class="mt-2 pt-2 border-t border-gray-200">
+                                    <p class="text-xs text-gray-500 mb-1">📝 都道府県・市区町村を指定する（現在地を使わない）</p>
+                                    <div class="flex gap-1">
+                                        <select id="manualPrefectureSelect" class="text-xs border border-gray-300 rounded px-1 py-1 flex-shrink-0">
+                                            <option value="">都道府県</option>
+                                        </select>
+                                        <input id="manualMunicipalityInput" type="text" placeholder="市区町村（例: 札幌市）" class="text-xs border border-gray-300 rounded px-2 py-1 flex-1 min-w-0">
+                                        <button id="manualMunicipalityBtn" type="button" class="text-xs bg-indigo-600 text-white rounded px-2 py-1 flex-shrink-0 hover:bg-indigo-700">設定</button>
+                                    </div>
+                                    <p id="manualMunicipalityStatus" class="mt-1 text-xs text-gray-500"></p>
+                                </div>
                                 <p class="mt-2 text-xs text-gray-500">🕒 特定履歴は左上の <span aria-hidden="true">☰</span> メニューから確認できます</p>
                             </div>
                         </div>
@@ -2891,6 +2902,19 @@
             renderAuthorityOptions(currentAuthorityFilter);
         }
 
+        function autoTagFor(a) {
+            if (a.category === '履歴') return '・履歴';
+            if (a.key.startsWith('pool:') || a.key.startsWith('pref:')) return '・自動調査';
+            return '';
+        }
+
+        function categoryIconFor(category) {
+            if (category === '警察') return '🚔';
+            if (category === '裁判所') return '⚖️';
+            if (category === '履歴') return '🕘';
+            return '🏛️';
+        }
+
         function renderAuthorityOptions(filterCategory) {
             currentAuthorityFilter = filterCategory;
             const select = document.getElementById('targetAuthority');
@@ -2907,7 +2931,7 @@
                 groups[a.category].push(a);
             });
 
-            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const categoryOrder = ['自治体', '警察', '裁判所', '履歴'];
             const allCategories = [
                 ...categoryOrder.filter(c => groups[c]),
                 ...Object.keys(groups).filter(c => !categoryOrder.includes(c)),
@@ -2919,8 +2943,8 @@
                 groups[category].forEach(a => {
                     const option = document.createElement('option');
                     option.value = a.key;
-                    const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
-                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    const icon = categoryIconFor(category) + ' ';
+                    const autoTag = autoTagFor(a);
                     option.textContent = `${icon}${a.name}（${a.type}${autoTag}）`;
                     optgroup.appendChild(option);
                 });
@@ -2968,8 +2992,8 @@
                 label.textContent = '未選択';
                 return;
             }
-            icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
-            const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
+            icon.textContent = categoryIconFor(current.category);
+            const autoTag = autoTagFor(current);
             label.textContent = `${current.name}（${current.type}${autoTag}）`;
             updateNewsRegionLabel();
         }
@@ -3001,8 +3025,8 @@
                     const a = pool[authorityChipCursor % pool.length];
                     authorityChipCursor++;
 
-                    const icon = a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
-                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    const icon = categoryIconFor(a.category) + ' ';
+                    const autoTag = autoTagFor(a);
 
                     const chip = document.createElement('button');
                     chip.type = 'button';
@@ -3065,7 +3089,7 @@
         const startMenuSearch = document.getElementById('startMenuSearch');
 
         function authorityIcon(a) {
-            return a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+            return categoryIconFor(a.category);
         }
 
         // 対象機関から、ニュース収集に使う「対象地域」を導く（例: 愛知県警察本部→愛知県、警視庁→東京都）
@@ -3254,7 +3278,7 @@
             const nearbyKeys = new Set(nearbyState.candidates.map(c => c.key));
             const authorityGrid = document.getElementById('startMenuAuthorityGrid');
             authorityGrid.innerHTML = '';
-            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const categoryOrder = ['自治体', '警察', '裁判所', '履歴'];
             [...allAuthorities]
                 .filter(a => !nearbyKeys.has(a.key))
                 .sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category))
@@ -3262,7 +3286,7 @@
                     authorityGrid.appendChild(makeStartTile({
                         icon: authorityIcon(a),
                         label: a.name,
-                        sub: a.type + (a.key.startsWith('pool:') ? '・自動調査' : ''),
+                        sub: a.type + autoTagFor(a),
                         search: `${a.name} ${a.type} ${a.category} ${authorityRegion(a)}`,
                         selected: a.key === selectedKey,
                         onClick: () => chooseAuthorityFromMenu(a),
@@ -3594,13 +3618,16 @@
             }
             const categoryIcon = { '警察': '🚔', '裁判所': '⚖️' };
             listEl.innerHTML = candidates.map(c => {
-                const icon = categoryIcon[c.category] || '🏛️';
+                const icon = c.researched === false ? '❓' : (categoryIcon[c.category] || '🏛️');
                 const active = c.key === selectedKey;
+                const distanceLabel = (c.distance_km === null || c.distance_km === undefined) ? '' : `・約${c.distance_km}km`;
+                const prefAttr = c.prefecture ? ` data-prefecture="${c.prefecture}"` : '';
+                const muniAttr = c.municipality ? ` data-municipality="${c.municipality}"` : '';
                 return `
                     <li>
-                        <button type="button" data-authority-key="${c.key}"
+                        <button type="button" data-authority-key="${c.key}"${prefAttr}${muniAttr}
                             class="municipality-candidate-btn text-xs px-2 py-1 rounded-md border ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400'}">
-                            ${icon} ${c.name}（${c.type}）・約${c.distance_km}km
+                            ${icon} ${c.name}（${c.type}）${distanceLabel}
                         </button>
                     </li>
                 `;
@@ -3610,15 +3637,43 @@
             listEl.querySelectorAll('.municipality-candidate-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const key = btn.dataset.authorityKey;
+                    if (key.startsWith('unresearched:')) {
+                        // 未調査の周辺自治体: クリックされたタイミングで初めて調査する
+                        // （周辺自治体をまとめて自動調査すると応答が大幅に遅延するため）
+                        const statusEl = document.getElementById('detectMunicipalityStatus');
+                        runMunicipalityLookup(btn.dataset.prefecture, btn.dataset.municipality, statusEl);
+                        return;
+                    }
                     setSelectedAuthority(key);
                     renderMunicipalityCandidates(candidates, key);
                 });
             });
         }
 
+        // 現在地・手動選択の候補一覧に、周辺市区町村（未調査を含む）を背後で追加取得して合流させる。
+        // Nominatimへの複数回リクエストで数秒かかるため、メインの特定処理をブロックしない
+        // 低優先度の追加読み込みとして扱う。
+        async function loadNearbyMunicipalityCandidates(loc, baseCandidates, selectedKey) {
+            if (!loc || loc.lat === null || loc.lat === undefined || loc.lon === null || loc.lon === undefined) return;
+            try {
+                const params = new URLSearchParams({ lat: loc.lat, lon: loc.lon, muni_code: loc.muni_code || '' });
+                const res = await fetch(`/api/municipality/nearby?${params.toString()}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const nearby = (data.candidates || []).filter(c => !baseCandidates.some(b => b.key === c.key));
+                if (nearby.length === 0) return;
+                const currentKey = document.getElementById('targetAuthority').value || selectedKey;
+                renderMunicipalityCandidates([...baseCandidates, ...nearby], currentKey);
+            } catch (e) {
+                // 周辺自治体の追加取得は補助機能のため、失敗しても本体機能に影響させない
+            }
+        }
+
         async function handleMunicipalityDetectResult(data, statusEl) {
             const loc = data.location;
             renderMunicipalityCandidates(data.candidates, data.authority_key);
+            // 周辺市区町村の候補は背後で追加取得する（await しない）
+            loadNearbyMunicipalityCandidates(loc, data.candidates || [], data.authority_key);
 
             if (data.status === 'found') {
                 setSelectedAuthority(data.authority_key);
@@ -3641,6 +3696,64 @@
                 renderMunicipalityCandidates(data.candidates, nearestKnown.key);
             }
             statusEl.textContent = `⚠️ ${loc.full_name} の情報公開制度の調査に失敗しました。近隣の候補（${nearestKnown ? nearestKnown.name : '一覧'}）から選択してください`;
+        }
+
+        // 現在地（GPS）を使わず、都道府県・市区町村を手動指定して対象機関候補を取得する。
+        // ロジックは detectMunicipalityFromLocation と共通のレスポンス形式なので、
+        // handleMunicipalityDetectResult をそのまま再利用する。
+        async function loadPrefectureMasterOptions() {
+            const select = document.getElementById('manualPrefectureSelect');
+            if (!select) return;
+            try {
+                const res = await fetch('/api/municipality/prefectures');
+                const data = await res.json();
+                (data.prefectures || []).forEach(pref => {
+                    const option = document.createElement('option');
+                    option.value = pref;
+                    option.textContent = pref;
+                    select.appendChild(option);
+                });
+            } catch (e) {
+                console.error('都道府県マスタの取得に失敗しました', e);
+            }
+        }
+
+async function runMunicipalityLookup(prefecture, municipality, statusEl) {
+            statusEl.textContent = '🔎 対象機関を特定中...（未収録の自治体は情報公開制度の調査に数秒かかる場合があります）';
+            try {
+                const formData = new FormData();
+                formData.append('prefecture', prefecture);
+                formData.append('municipality', municipality);
+                const sessionId = getOrCreateSessionId();
+                if (sessionId) formData.append('session_id', sessionId);
+                const res = await fetch('/api/municipality/lookup', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || '対象機関の特定に失敗しました');
+                }
+                const data = await res.json();
+                await handleMunicipalityDetectResult(data, statusEl);
+                setNearbyState({ status: 'ready', location: data.location, candidates: data.candidates || [] });
+                loadNewsForRegion(getNewsRegion());
+                loadMunicipalityHistory();
+            } catch (e) {
+                statusEl.textContent = `❌ ${e.message}`;
+            }
+        }
+
+        async function lookupMunicipalityManually() {
+            const prefecture = document.getElementById('manualPrefectureSelect').value;
+            const municipality = document.getElementById('manualMunicipalityInput').value.trim();
+            const statusEl = document.getElementById('manualMunicipalityStatus');
+            if (!prefecture) {
+                statusEl.textContent = '⚠️ 都道府県を選択してください';
+                return;
+            }
+            if (!municipality) {
+                statusEl.textContent = '⚠️ 市区町村名を入力してください（例: 札幌市）';
+                return;
+            }
+            await runMunicipalityLookup(prefecture, municipality, statusEl);
         }
 
         const municipalityHistoryStatusLabels = {
@@ -3677,9 +3790,34 @@
                         </div>
                     `;
                 }).join('');
+                addHistoryAuthorityCandidates(records);
             } catch (e) {
                 // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
             }
+        }
+
+        const HISTORY_AUTHORITY_CHIP_LIMIT = 5;
+
+        // 過去に特定・選択したことのある対象機関（pool:/pref: キー）を「履歴」カテゴリの
+        // 候補として対象機関チップに加える。data/authorities/*.json 収録済みの機関は
+        // 既に通常の候補として選べるため、ここでは追加しない（重複防止）。
+        function addHistoryAuthorityCandidates(records) {
+            const seen = new Set();
+            let added = 0;
+            for (const r of records) {
+                if (added >= HISTORY_AUTHORITY_CHIP_LIMIT) break;
+                const key = r.authority_key;
+                if (!key || !r.authority_name) continue;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                if (allAuthorities.some(a => a.key === key)) continue;
+                if (!key.startsWith('pool:') && !key.startsWith('pref:')) continue;
+
+                const type = key.startsWith('pref:') ? '知事' : '市長';
+                allAuthorities.push({ key, name: r.authority_name, type, category: '履歴' });
+                added++;
+            }
+            if (added > 0) renderAuthorityOptions(currentAuthorityFilter);
         }
 
         // --- 左サイドメニュー（履歴一覧）の開閉。Claude Codeのようにハンバーガーで開閉できる ---
@@ -4202,9 +4340,19 @@
         autoResizeComposer();
 
         // APIキー未設定/API失敗によるサンプルデータの場合に表示する注意バッジ
-        function mockBadge(isMock, label) {
+        // reason はバックエンドの mock_reason（no_api_key / timeout / parse_error / api_error）。
+        // 未指定の呼び出し元では「AI処理に失敗」という汎用文言にフォールバックする
+        // （「APIキー未設定」固定文言はキー設定済みでも失敗しうる他の原因を誤って伝えるため使わない）。
+        const MOCK_REASON_LABELS = {
+            no_api_key: 'APIキー未設定のため',
+            timeout: 'AI応答がタイムアウトしたため',
+            parse_error: 'AIの応答を解析できなかったため',
+            api_error: 'AI呼び出しに失敗したため',
+        };
+        function mockBadge(isMock, label, reason) {
             if (!isMock) return '';
-            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ APIキー未設定のためサンプルデータです（${label}）</div>`;
+            const reasonText = MOCK_REASON_LABELS[reason] || 'AI処理に失敗したため';
+            return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ ${reasonText}サンプルデータです（${label}）</div>`;
         }
 
         let latestAnalysis = null;
@@ -4214,7 +4362,7 @@
 
             const angerPercent = (analysis.anger_level / 10) * 100;
             document.getElementById('angerDisplay').innerHTML = `
-                ${mockBadge(analysis.is_mock, 'AI怒り分析')}
+                ${mockBadge(analysis.is_mock, 'AI怒り分析', analysis.mock_reason)}
                 ${mockBadge(data.emotion_is_mock, '表情感情解析')}
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
@@ -6009,18 +6157,35 @@
             detectMunicipalityBtn.addEventListener('click', detectMunicipalityFromLocation);
         }
 
+        const manualMunicipalityBtn = document.getElementById('manualMunicipalityBtn');
+        if (manualMunicipalityBtn) {
+            manualMunicipalityBtn.addEventListener('click', lookupMunicipalityManually);
+        }
+        const manualMunicipalityInput = document.getElementById('manualMunicipalityInput');
+        if (manualMunicipalityInput) {
+            manualMunicipalityInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    lookupMunicipalityManually();
+                }
+            });
+        }
+        loadPrefectureMasterOptions();
+
         // 起動
         checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
         loadPublicFeed();
-        loadMunicipalityHistory();
         startPromptSuggestionAnimation();
         // 見出しは最初のチャット発言として静的に表示するため、タイプライター切り替えは行わない
 
         (async () => {
             // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
-            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定を行う
+            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定・
+            // 履歴由来の候補追加を行う（loadMunicipalityHistory は allAuthorities への
+            // 追記を行うため、loadAuthorities が allAuthorities を差し替えた後に呼ぶ必要がある）
             await loadAuthorities();
+            loadMunicipalityHistory();
             detectMunicipalityFromLocation({ silent: true });
         })();
     </script>

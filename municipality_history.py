@@ -26,8 +26,8 @@ class MunicipalityHistoryRecord(BaseModel):
     prefecture: str
     municipality: str
     full_name: str
-    lat: float
-    lon: float
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     status: str  # "found" / "found_pooled" / "researching" / "failed"
     authority_key: Optional[str] = None
     authority_name: Optional[str] = None
@@ -50,9 +50,9 @@ def create_record(
     prefecture: str,
     municipality: str,
     full_name: str,
-    lat: float,
-    lon: float,
     status: str,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
     authority_key: Optional[str] = None,
     authority_name: Optional[str] = None,
     candidates: Optional[List[str]] = None,

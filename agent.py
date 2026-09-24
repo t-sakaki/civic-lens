@@ -16,7 +16,7 @@ from precedent_cases import (
     find_relevant_precedents_by_embedding,
     format_precedent_case_for_prompt,
 )
-from timeout_utils import call_with_timeout
+from timeout_utils import call_with_timeout, GeminiCallTimeout
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -89,6 +89,10 @@ class AngerAnalysis(BaseModel):
     critique: Optional[MetaCognitiveCritique] = Field(default=None, description="メタ認知批評結果")
     safeguard_options: Optional[List[Dict[str, str]]] = Field(default=None, description="Human-in-the-loop選択肢")
     is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるルールベースのフォールバック結果")
+    mock_reason: Optional[str] = Field(
+        default=None,
+        description="is_mock=True の場合のフォールバック理由: no_api_key / timeout / parse_error / api_error のいずれか",
+    )
 
 
 class CounterArgument(BaseModel):
@@ -455,7 +459,7 @@ def create_adk_agent():
     # 怒り分析 & メタ認知批評エージェント
     anger_agent = LlmAgent(
         name="anger_analyzer",
-        model="gemini-3.1-pro-preview",
+        model="gemini-pro-latest",
         description="市民の怒り・不満を構造化データに変換し、メタ認知批評とタスクDAGを構築する",
         instruction="""
 あなたは情報公開請求の専門家AIエージェントです。
@@ -486,7 +490,7 @@ def create_adk_agent():
     # 反論構築エージェント
     counter_agent = LlmAgent(
         name="counter_argument_builder",
-        model="gemini-3.1-pro-preview",
+        model="gemini-pro-latest",
         description="不開示決定への反論ロジックを構築する",
         instruction="""
 あなたは情報公開・審査請求の実務に精通したAIです。
@@ -553,7 +557,7 @@ class CivicLensAgent:
         （例: ブラウザGeolocationで特定済みの自治体）。Gemini・ルールベースいずれも
         本文からの判定を優先し、判定できない場合にのみこの値を採用する。
         """
-        from ordinance_data import AUTHORITIES, match_authority_by_text
+        from ordinance_data import AUTHORITIES, match_authority_by_text, addressee_name
 
         hint_line = ""
         if hint_authority_key and hint_authority_key in AUTHORITIES:
@@ -564,9 +568,9 @@ class CivicLensAgent:
                 f"target_authority は「{hint_name}」、target_authority_key は「{hint_authority_key}」としてください。\n"
             )
 
+        mock_reason = None
         if self.genai_client:
-            try:
-                prompt = f"""
+            prompt = f"""
 あなたは行政文書の情報公開請求・審査請求を支援するAIです。
 以下の市民入力を分析し、指定のJSON形式で返してください。
 
@@ -586,58 +590,73 @@ class CivicLensAgent:
 
 JSONのみを返してください。
 """
-                response = call_with_timeout(
-                    self.genai_client.models.generate_content,
-                    model="gemini-3.1-pro-preview",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                    ),
-                    timeout_s=25.0,
-                )
-                text = response.text.strip()
-                if text.startswith("```"):
-                    lines = text.split("\n")
-                    text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
-                text = text.strip()
-                data = json.loads(text)
+            # Gemini呼び出しは一過性のタイムアウト/レート制限で失敗することがあるため、
+            # まず本命モデルを長めのタイムアウトで試し、失敗した場合は軽量モデルで
+            # 1回だけリトライしてから、初めてルールベースにフォールバックする。
+            for model_name, timeout_s in (("gemini-pro-latest", 40.0), ("gemini-flash-latest", 20.0)):
+                try:
+                    response = call_with_timeout(
+                        self.genai_client.models.generate_content,
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                        ),
+                        timeout_s=timeout_s,
+                    )
+                    text = response.text.strip()
+                    if text.startswith("```"):
+                        lines = text.split("\n")
+                        text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
+                    text = text.strip()
+                    data = json.loads(text)
 
-                # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
-                # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
-                from ordinance_data import addressee_name
-                if data.get("target_authority_key") not in AUTHORITIES:
-                    fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
+                    # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
+                    # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
+                    if data.get("target_authority_key") not in AUTHORITIES:
+                        fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
+                        print(
+                            f"[analyze_anger] 不正なtarget_authority_key '{data.get('target_authority_key')}' を "
+                            f"'{fallback_key}' に補正しました"
+                        )
+                        data["target_authority_key"] = fallback_key
+                    # target_authority はLLMの自由記述ではなく、実施機関名（例: 愛知県知事）で正規化する
+                    data["target_authority"] = addressee_name(AUTHORITIES[data["target_authority_key"]])
+
+                    if "task_dag" not in data or not data["task_dag"]:
+                        data["task_dag"] = build_task_dag(
+                            user_input,
+                            data.get("target_authority", "安城市"),
+                            data.get("specific_documents_requested", [])
+                        )
+                    if "critique" not in data or not data["critique"]:
+                        data["critique"] = perform_meta_cognitive_critique(
+                            user_input,
+                            data.get("target_authority_key", hint_authority_key or "anjo-city"),
+                            data.get("target_authority", "安城市"),
+                            data.get("specific_documents_requested", [])
+                        )
+                    if "safeguard_options" not in data or not data["safeguard_options"]:
+                        critique_val = data["critique"]
+                        data["safeguard_options"] = critique_val.get("safeguard_options", []) if isinstance(critique_val, dict) else getattr(critique_val, "safeguard_options", [])
+                    return AngerAnalysis(**data)
+                except Exception as e:
+                    if isinstance(e, GeminiCallTimeout):
+                        mock_reason = "timeout"
+                    elif isinstance(e, json.JSONDecodeError):
+                        mock_reason = "parse_error"
+                    else:
+                        mock_reason = "api_error"
                     print(
-                        f"[analyze_anger] 不正なtarget_authority_key '{data.get('target_authority_key')}' を "
-                        f"'{fallback_key}' に補正しました"
+                        f"Gemini API analysis error ({model_name}): {e}, "
+                        f"{'retrying with a lighter model' if model_name != 'gemini-flash-latest' else 'falling back to rule-based analysis'}"
                     )
-                    data["target_authority_key"] = fallback_key
-                # target_authority はLLMの自由記述ではなく、実施機関名（例: 愛知県知事）で正規化する
-                data["target_authority"] = addressee_name(AUTHORITIES[data["target_authority_key"]])
-
-                if "task_dag" not in data or not data["task_dag"]:
-                    data["task_dag"] = build_task_dag(
-                        user_input,
-                        data.get("target_authority", "安城市"),
-                        data.get("specific_documents_requested", [])
-                    )
-                if "critique" not in data or not data["critique"]:
-                    data["critique"] = perform_meta_cognitive_critique(
-                        user_input,
-                        data.get("target_authority_key", hint_authority_key or "anjo-city"),
-                        data.get("target_authority", "安城市"),
-                        data.get("specific_documents_requested", [])
-                    )
-                if "safeguard_options" not in data or not data["safeguard_options"]:
-                    critique_val = data["critique"]
-                    data["safeguard_options"] = critique_val.get("safeguard_options", []) if isinstance(critique_val, dict) else getattr(critique_val, "safeguard_options", [])
-                return AngerAnalysis(**data)
-            except Exception as e:
-                print(f"Gemini API analysis error: {e}, falling back to rule-based analysis")
+        else:
+            mock_reason = "no_api_key"
 
         # フォールバック: ルールベースの Function Tool 結果を使用
         tool_result = analyze_user_anger(user_input, hint_authority_key)
-        return AngerAnalysis(**tool_result)
+        return AngerAnalysis(**tool_result, mock_reason=mock_reason)
 
     def build_counter_argument(
         self,
@@ -694,7 +713,7 @@ JSONのみを返してください。
 JSONのみを出力してください。
 """
                 response = self.genai_client.models.generate_content(
-                    model="gemini-3.1-pro-preview",
+                    model="gemini-pro-latest",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -807,7 +826,7 @@ JSONのみを出力してください。
 ### 7. 特記事項
 """
                 response = self.genai_client.models.generate_content(
-                    model="gemini-3.1-pro-preview",
+                    model="gemini-pro-latest",
                     contents=prompt,
                 )
                 text = response.text.strip()
