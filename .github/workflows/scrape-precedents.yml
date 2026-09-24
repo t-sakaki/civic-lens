@@ -67,7 +67,7 @@ jobs:
             総務省「行政不服審査裁決・答申検索データベース」を定期巡回するAIエージェント
             （`.github/workflows/scrape-precedents.yml`）による自動収集結果です。
 
-            - `data/gyofuku_cases.json`: 新規・更新された認容事例（概要スニペットのみ、PDL1.0準拠）
+            - `data/gyofuku_cases.json`: 新規・更新された認容事例（裁決・答申内容の全文を含む、PDL1.0準拠・出典明記）
             - `data/gyofuku_cases_embeddings.json`: Gemini Embeddingsによる検索用ベクトル
 
             マージ前に内容をご確認ください。

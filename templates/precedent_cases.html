@@ -38,14 +38,32 @@
             color: var(--cl-teal);
             border-color: rgba(95, 212, 196, 0.4);
         }
-        input, select {
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.16);
-            color: #EDEDF2;
+        .cl-chip {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.14);
+            color: #c7c9d6;
         }
-        input::placeholder { color: rgba(237,237,242,0.45); }
+        .cl-chip:hover { border-color: rgba(242, 169, 59, 0.5); color: #EDEDF2; }
+        .cl-chip.active {
+            background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%);
+            color: #10131f;
+            border-color: transparent;
+        }
+        .cl-chip-sub.active { background: #2a3350; color: #EDEDF2; border-color: transparent; }
         a.cl-link { color: var(--cl-teal); }
         a.cl-link:hover { text-decoration: underline; }
+        .cl-hover-preview { display: none; }
+        @media (min-width: 768px) {
+            .cl-hover-preview {
+                display: block;
+                position: absolute; inset: 0 0 auto 0; z-index: 20;
+                opacity: 0; transform: scale(0.98); pointer-events: none;
+                transition: opacity .15s ease-out, transform .15s ease-out;
+            }
+            .cl-hover-group:hover .cl-hover-preview {
+                opacity: 1; transform: scale(1); pointer-events: auto;
+            }
+        }
     </style>
 </head>
 <body>
@@ -57,105 +75,270 @@
     </nav>
 
     <main class="max-w-5xl mx-auto px-4 py-8">
-        <header class="mb-6">
+        <header class="mb-8">
             <h1 class="text-2xl font-bold mb-2">認容事例データベース</h1>
-            <p class="text-sm text-gray-300 leading-relaxed">
+            <p class="text-sm text-gray-300 leading-relaxed max-w-2xl">
                 総務省「行政不服審査裁決・答申検索データベース」から収集した、情報公開・個人情報保護関連法令に基づく
                 <span style="color: var(--cl-teal)">「認容」「一部認容」</span>事例の一覧です。
-                各事例の概要はデータベースの検索結果に表示される抜粋のみを保持しており、裁決・答申の全文は保存していません。
-                詳細・原文は各カードの「原文を見る」リンクから、総務省のデータベースでご確認ください。
+                各事例には詳細ページに掲載された裁決・答申内容の全文を取得・転載しており、要約や解釈は加えていません
+                （出典は各カードの「原文を見る」リンクから総務省のデータベースでご確認いただけます）。
             </p>
-            <p class="text-xs text-gray-500 mt-2" id="update-note"></p>
+            <p class="text-xs text-gray-500 mt-2">
+                自動処理による収集のため、まれに取得漏れ・表記の乱れが生じる場合があります。法的な助言を目的としたものではなく、
+                実際の審査請求をご検討の際は専門家（弁護士等）へのご相談を推奨します。
+            </p>
         </header>
 
-        <section class="cl-card rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-end">
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-400" for="q">キーワード（自治体名・根拠法令・概要）</label>
-                <input id="q" type="text" placeholder="例：情報公開 個人情報" class="rounded px-3 py-2 text-sm w-64">
+        <section id="featured-section" class="mb-10 p-6 md:p-8 rounded-2xl cl-card hidden">
+            <div class="flex items-center gap-2 mb-4" style="color: var(--cl-teal)">
+                <span class="text-sm font-bold tracking-wide">認容速報 ｜ 最新の認容事例</span>
             </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-400" for="category">種類</label>
-                <select id="category" class="rounded px-3 py-2 text-sm">
-                    <option value="">すべて</option>
-                    <option value="裁決">裁決</option>
-                    <option value="答申">答申</option>
-                </select>
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-400" for="result">結果</label>
-                <select id="result" class="rounded px-3 py-2 text-sm">
-                    <option value="">認容・一部認容すべて</option>
-                    <option value="一部認容">一部認容</option>
-                    <option value="認容">認容（全部）</option>
-                </select>
-            </div>
-            <button id="search-btn" class="rounded px-4 py-2 text-sm font-semibold" style="background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%); color: #10131f;">検索</button>
-            <span id="result-count" class="text-xs text-gray-400 ml-auto"></span>
+            <div id="featured-body"></div>
         </section>
 
-        <section id="case-list" class="grid gap-4"></section>
-        <p id="empty-note" class="text-sm text-gray-500 hidden">条件に合う事例が見つかりませんでした。</p>
+        <h2 class="text-lg font-bold mb-3">認容事例 一覧</h2>
+
+        <div class="mb-4">
+            <div class="text-xs text-gray-400 mb-1.5">決定結果</div>
+            <nav id="filter-result" class="flex flex-wrap gap-2"></nav>
+        </div>
+        <div class="mb-4">
+            <div class="text-xs text-gray-400 mb-1.5">審査庁の種類</div>
+            <nav id="filter-agency-type" class="flex flex-wrap gap-2"></nav>
+        </div>
+        <div class="mb-4">
+            <div class="text-xs text-gray-400 mb-1.5">分野タグ</div>
+            <nav id="filter-tag" class="flex flex-wrap gap-2"></nav>
+        </div>
+
+        <div class="mb-6 flex items-center gap-3">
+            <input id="q" type="text" placeholder="キーワードで絞り込み（自治体名・根拠法令・概要）" class="rounded px-3 py-2 text-sm flex-1 cl-chip">
+            <span id="result-count" class="text-xs text-gray-400 whitespace-nowrap"></span>
+        </div>
+
+        <section id="case-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></section>
+        <p id="empty-note" class="text-sm text-gray-500 hidden py-16 text-center">条件に合う事例が見つかりませんでした。</p>
+        <p id="loading-note" class="text-sm text-gray-500 py-16 text-center">読み込み中…</p>
     </main>
 
+    <div id="modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+        <div id="modal-body" class="cl-card max-w-2xl w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6" style="background: var(--cl-bg2);"></div>
+    </div>
+
     <script>
-        const listEl = document.getElementById('case-list');
-        const countEl = document.getElementById('result-count');
-        const emptyEl = document.getElementById('empty-note');
+        const RESULT_FILTERS = ['all', '認容', '一部認容'];
+
+        let allCases = [];
+        let filters = { result: 'all', agencyType: 'all', tag: 'all' };
 
         function resultBadgeClass(result) {
             return (result || '').includes('認容') ? 'cl-badge-result-granted' : 'cl-badge';
         }
 
-        function renderCase(c) {
+        function esc(s) {
             const div = document.createElement('div');
-            div.className = 'cl-card rounded-2xl p-5';
-            div.innerHTML = `
-                <div class="flex flex-wrap items-center gap-2 mb-2">
-                    <span class="text-xs px-2 py-1 rounded-full border cl-badge">${c.category || ''}</span>
-                    <span class="text-xs px-2 py-1 rounded-full border ${resultBadgeClass(c.result)}">${c.result || ''}</span>
-                    <span class="text-sm font-semibold">${c.authority || ''}</span>
-                    <span class="text-xs text-gray-400 ml-auto">${c.decision_date || ''}</span>
-                </div>
-                <div class="text-xs text-gray-400 mb-2">${c.basis_laws || ''}</div>
-                <p class="text-sm text-gray-200 leading-relaxed mb-3">${c.summary || ''}</p>
-                <div class="flex items-center justify-between text-xs text-gray-500">
-                    <span>${c.document_number || ''}</span>
-                    <a class="cl-link" href="${c.source_url}" target="_blank" rel="noopener">原文を見る（総務省DB）→</a>
-                </div>
-            `;
-            return div;
+            div.textContent = s || '';
+            return div.innerHTML;
         }
 
-        async function runSearch() {
-            const q = document.getElementById('q').value.trim();
-            const category = document.getElementById('category').value;
-            const result = document.getElementById('result').value;
-            const params = new URLSearchParams();
-            if (q) params.set('q', q);
-            if (category) params.set('category', category);
-            if (result) params.set('result', result);
-            params.set('limit', '100');
+        function chipsHtml(tags, extraClass) {
+            return (tags || []).map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full border cl-badge ${extraClass || ''}">#${esc(t)}</span>`).join('');
+        }
 
-            listEl.innerHTML = '<p class="text-sm text-gray-500">検索中...</p>';
+        function impactCommentHtml(c) {
+            if (!c.impact_comment) return '';
+            return `
+                <div class="mt-3 p-3 rounded-lg text-xs italic leading-relaxed" style="background: rgba(242,169,59,0.08); border-left: 3px solid var(--cl-amber); color: #e8d8bd;">
+                    ${esc(c.impact_comment)}
+                </div>
+            `;
+        }
+
+        function caseCardHtml(c, { hover } = {}) {
+            return `
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <span class="text-xs px-2 py-1 rounded-full border ${resultBadgeClass(c.result)}">${esc(c.result)}</span>
+                    <span class="text-xs text-gray-400">${esc(c.decision_date)}</span>
+                </div>
+                <h3 class="text-sm font-bold leading-snug mb-2">${esc(c.title)}</h3>
+                <p class="text-sm text-gray-200 leading-relaxed ${hover ? '' : 'line-clamp-3'} mb-3 whitespace-pre-line">${esc(c.summary)}</p>
+                <div class="flex flex-wrap gap-1.5">
+                    <span class="text-[11px] px-2 py-0.5 rounded-full border cl-badge">${esc(c.agency_type)}</span>
+                    ${chipsHtml(c.tags)}
+                </div>
+                ${hover ? impactCommentHtml(c) : ''}
+                <div class="mt-3 text-xs text-gray-500">${esc(c.authority)}</div>
+            `;
+        }
+
+        function renderModal(c) {
+            document.getElementById('modal-body').innerHTML = `
+                <div class="flex justify-between items-start mb-4 gap-4">
+                    <h3 class="text-lg font-bold leading-snug">${esc(c.title)}</h3>
+                    <button id="modal-close" class="shrink-0 text-gray-400 hover:text-white text-xl leading-none">×</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-4 text-sm">
+                    <div><span class="text-gray-400">決定結果:</span> <span class="font-semibold">${esc(c.result)}</span></div>
+                    <div><span class="text-gray-400">決定日:</span> ${esc(c.decision_date)}</div>
+                    <div><span class="text-gray-400">審査庁:</span> ${esc(c.authority)}</div>
+                    <div><span class="text-gray-400">根拠法令:</span> ${esc(c.basis_laws) || '未記載'}</div>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-5">
+                    <span class="text-xs px-2 py-1 rounded-full border cl-badge">${esc(c.agency_type)}</span>
+                    ${chipsHtml(c.tags)}
+                </div>
+                <div class="mb-2">
+                    <h4 class="font-bold mb-2 pl-2 border-l-4" style="border-color: var(--cl-amber)">裁決・答申内容</h4>
+                    <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">${esc(c.summary)}</p>
+                </div>
+                ${impactCommentHtml(c)}
+                <div class="text-xs text-gray-500 mt-4 mb-4">${esc(c.document_number)}</div>
+                <a href="${c.source_url}" target="_blank" rel="noopener" class="cl-link flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold border cl-chip">
+                    原文を見る（総務省DB）→
+                </a>
+            `;
+            document.getElementById('modal-close').addEventListener('click', closeModal);
+            const modal = document.getElementById('modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') closeModal();
+        });
+
+        function renderFeatured(c) {
+            const section = document.getElementById('featured-section');
+            if (!c) { section.classList.add('hidden'); return; }
+            section.classList.remove('hidden');
+            document.getElementById('featured-body').innerHTML = `
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="text-xs px-2 py-1 rounded-full border ${resultBadgeClass(c.result)}">${esc(c.result)}</span>
+                    <span class="text-xs text-gray-400">${esc(c.decision_date)}</span>
+                    <span class="text-xs text-gray-400">${esc(c.authority)}</span>
+                </div>
+                <h3 class="text-xl font-bold leading-snug mb-3">${esc(c.title)}</h3>
+                <p class="text-sm text-gray-200 leading-relaxed mb-3 line-clamp-6 whitespace-pre-line">${esc(c.summary)}</p>
+                <div class="flex flex-wrap gap-1.5 mb-4">
+                    <span class="text-xs px-2 py-1 rounded-full border cl-badge">${esc(c.agency_type)}</span>
+                    ${chipsHtml(c.tags)}
+                </div>
+                ${impactCommentHtml(c)}
+                <div class="flex flex-wrap gap-3 mt-4">
+                    <button id="featured-detail-btn" class="rounded px-4 py-2 text-sm font-semibold" style="background: linear-gradient(90deg, #f2a93b 0%, #e8823f 100%); color: #10131f;">詳細を見る</button>
+                    <a href="${c.source_url}" target="_blank" rel="noopener" class="cl-link rounded px-4 py-2 text-sm font-semibold border cl-chip">原文を見る（総務省DB）→</a>
+                </div>
+            `;
+            document.getElementById('featured-detail-btn').addEventListener('click', () => renderModal(c));
+        }
+
+        function chipButton(container, { label, active, onClick, sub }) {
+            const btn = document.createElement('button');
+            btn.className = `px-3 py-1.5 rounded-full text-xs font-semibold border cl-chip ${sub ? 'cl-chip-sub' : ''} ${active ? 'active' : ''}`;
+            btn.textContent = label;
+            btn.addEventListener('click', onClick);
+            container.appendChild(btn);
+        }
+
+        function renderFilters(restCases) {
+            const resultEl = document.getElementById('filter-result');
+            resultEl.innerHTML = '';
+            RESULT_FILTERS.forEach(r => {
+                const count = r === 'all' ? allCases.length : allCases.filter(c => c.result === r).length;
+                chipButton(resultEl, {
+                    label: r === 'all' ? `すべて (${count})` : `${r} (${count})`,
+                    active: filters.result === r,
+                    onClick: () => { filters.result = r; renderAll(); },
+                });
+            });
+
+            const agencyEl = document.getElementById('filter-agency-type');
+            agencyEl.innerHTML = '';
+            chipButton(agencyEl, { label: 'すべて', active: filters.agencyType === 'all', sub: true, onClick: () => { filters.agencyType = 'all'; renderAll(); } });
+            const agencyTypes = [...new Set(restCases.map(c => c.agency_type))].sort(
+                (a, b) => restCases.filter(c => c.agency_type === b).length - restCases.filter(c => c.agency_type === a).length
+            );
+            agencyTypes.forEach(t => {
+                const count = restCases.filter(c => c.agency_type === t).length;
+                chipButton(agencyEl, { label: `${t} (${count})`, active: filters.agencyType === t, sub: true, onClick: () => { filters.agencyType = t; renderAll(); } });
+            });
+
+            const tagEl = document.getElementById('filter-tag');
+            tagEl.innerHTML = '';
+            chipButton(tagEl, { label: 'すべて', active: filters.tag === 'all', onClick: () => { filters.tag = 'all'; renderAll(); } });
+            const tagCounts = {};
+            restCases.forEach(c => (c.tags || []).forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; }));
+            Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]).forEach(t => {
+                chipButton(tagEl, { label: `#${t} (${tagCounts[t]})`, active: filters.tag === t, onClick: () => { filters.tag = t; renderAll(); } });
+            });
+        }
+
+        function renderAll() {
+            const q = document.getElementById('q').value.trim();
+            const sorted = [...allCases].sort((a, b) => (b.decision_date || '').localeCompare(a.decision_date || ''));
+            const featured = sorted[0];
+            const restCases = sorted.slice(1);
+
+            renderFeatured(featured);
+            renderFilters(restCases);
+
+            const filtered = restCases
+                .filter(c => filters.result === 'all' || c.result === filters.result)
+                .filter(c => filters.agencyType === 'all' || c.agency_type === filters.agencyType)
+                .filter(c => filters.tag === 'all' || (c.tags || []).includes(filters.tag))
+                .filter(c => {
+                    if (!q) return true;
+                    const haystack = `${c.title} ${c.authority} ${c.basis_laws} ${c.summary} ${c.council_name || ''}`;
+                    return haystack.includes(q);
+                });
+
+            const listEl = document.getElementById('case-list');
+            const emptyEl = document.getElementById('empty-note');
+            document.getElementById('result-count').textContent = `${filtered.length}件`;
+            listEl.innerHTML = '';
+            if (filtered.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
             emptyEl.classList.add('hidden');
+            filtered.forEach(c => {
+                const wrap = document.createElement('div');
+                wrap.className = 'relative cl-hover-group';
+                wrap.innerHTML = `
+                    <button class="cl-card-btn relative z-0 w-full text-left p-5 rounded-2xl cl-card">
+                        ${caseCardHtml(c, { hover: false })}
+                    </button>
+                    <div class="cl-hover-preview rounded-2xl p-5" style="background: var(--cl-bg2); border: 1px solid rgba(242,169,59,0.35); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+                        ${caseCardHtml(c, { hover: true })}
+                    </div>
+                `;
+                wrap.querySelectorAll('.cl-card-btn, .cl-hover-preview').forEach(el => {
+                    el.addEventListener('click', () => renderModal(c));
+                });
+                listEl.appendChild(wrap);
+            });
+        }
+
+        async function loadCases() {
+            const loadingEl = document.getElementById('loading-note');
             try {
-                const res = await fetch(`/api/precedent-cases?${params.toString()}`);
+                const res = await fetch('/api/precedent-cases?limit=500');
                 const data = await res.json();
-                listEl.innerHTML = '';
-                countEl.textContent = `${data.count}件`;
-                if (!data.cases || data.cases.length === 0) {
-                    emptyEl.classList.remove('hidden');
-                    return;
-                }
-                data.cases.forEach(c => listEl.appendChild(renderCase(c)));
+                allCases = data.cases || [];
+                loadingEl.classList.add('hidden');
+                renderAll();
             } catch (e) {
-                listEl.innerHTML = '<p class="text-sm text-red-400">読み込みに失敗しました。</p>';
+                loadingEl.textContent = '読み込みに失敗しました。';
             }
         }
 
-        document.getElementById('search-btn').addEventListener('click', runSearch);
-        document.getElementById('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
-        runSearch();
+        document.getElementById('q').addEventListener('input', renderAll);
+        loadCases();
     </script>
 </body>
 </html>

@@ -3,15 +3,21 @@
 関連の法令に基づく「認容」（一部認容を含む）事例を収集し、data/gyofuku_cases.json
 に蓄積するスクレイパー。
 
-## 利用規約(PDL1.0)への配慮
+姉妹サイト fufuku-news（不服審査ニュース、同一制作者による別プロダクト）のスクレイパー
+（fufuku-news/src/scraper.js）とデータパイプラインを統合しており、収集ロジック・
+スキーマ（title/agency_type/tags/impact_comment等）を共通化している。
+
+## 利用規約(PDL1.0)・全文転載について
 - https://fufukudb.search.soumu.go.jp/koukai/PDL に掲載されている「公共データ利用規約
   （PDL1.0）」により、コンテンツ利用時は出典明記が必須であり、答申・裁決本文の著作権は
   各行政庁に留保されうる旨が明記されている。
-- そのため本スクレイパーは、検索結果一覧に表示される「概要」欄（データベース自身が
-  生成する短い抜粋・複数箇所が "…" で省略されたスニペット）のみを保存し、裁決・答申の
-  全文は保存しない。各レコードには出典(出典URL・データベース名)を必ず添付する。
-- サーバー負荷に配慮し、リクエスト（検索・ページ送り）の間に待機時間を入れる。
-- 実行は手動・低頻度（本スクリプトを人間が明示的に実行した場合のみ）を想定している。
+- 本スクレイパーは各事例の詳細ページから「裁決内容」の全文を取得して保存する
+  （fufuku-newsと同じ方針。ユーザーの明示判断により、従来の「概要スニペットのみ保持」
+  方針から変更した）。全文を転載する分、出典表記（attribution）・原文リンク
+  （source_url）を必ず全レコードに付与し、要約・改変は行わない。
+- サーバー負荷に配慮し、リクエスト（検索・ページ送り・詳細ページ取得）の間に待機時間を入れる。
+- 実行は手動・低頻度、または .github/workflows/scrape-precedents.yml の週次バッチ
+  （人間のレビュー・マージを介するPR形式）を想定している。
 
 ## 使い方
     .venv/bin/python scripts/scrape_gyofuku_cases.py [--max-pages-per-query 3]
@@ -24,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -31,8 +38,14 @@ from pathlib import Path
 from typing import Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
+from precedent_cases import build_case_title  # noqa: E402
+
 DATA_PATH = BASE_DIR / "data" / "gyofuku_cases.json"
 SITE_ROOT = "https://fufukudb.search.soumu.go.jp/koukai"
+FULL_TEXT_SELECTOR = "#saiketsuTextPre"
+WAIT_BETWEEN_DETAIL_REQUESTS_SEC = 1.5
 
 # 情報公開・個人情報保護・公文書管理に関連する法令のキーワード
 TARGET_LAW_KEYWORDS = [
@@ -73,6 +86,7 @@ SEARCH_TYPES = [
 class PrecedentCase:
     case_id: str  # 例: "J002-14711"
     category: str  # "裁決" or "答申"
+    title: str  # 一覧表示用の見出し（fufuku-newsのbuildHeadline()と同じ書式）
     authority: str  # 審査庁名 / 諮問庁名
     council_name: str  # 行政不服審査会等の名称
     kind: str  # 不服申立ての種類
@@ -80,11 +94,26 @@ class PrecedentCase:
     decision_date: str  # 裁決日 / 答申日
     document_number: str  # 裁決・文書番号
     result: str  # 裁決結果 / 答申結果（認容・一部認容・棄却・却下・その他）
-    summary: str  # データベースの検索結果一覧に表示される概要スニペット（全文ではない）
+    summary: str  # 詳細ページから取得した裁決・答申内容の全文（取得失敗時は一覧の概要スニペット）
     source_url: str  # 個別ページURL
     attribution: str  # 出典表記（PDL1.0で必須）
     matched_keyword: str  # どのキーワードにヒットしたか
+    impact_comment: str  # 論点・影響の補足コメント（任意。既定は空文字、後から人手で追記する想定）
     collected_at: str
+
+
+def _fetch_full_text(page, detail_url: str) -> str:
+    """詳細ページから「裁決内容」全文を取得する（fufuku-newsのfetchFullText()と同等）。
+
+    取得に失敗した場合は空文字を返し、呼び出し側で一覧の概要スニペットにフォールバックする。
+    """
+    try:
+        page.goto(detail_url, wait_until="networkidle", timeout=30000)
+        text = page.eval_on_selector(FULL_TEXT_SELECTOR, "el => el.textContent")
+        return _clean(text)
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] 全文取得に失敗しました（一覧の概要スニペットを使用）: {detail_url}: {e}")
+        return ""
 
 
 def _is_relevant_law(basis_laws: str) -> bool:
@@ -124,7 +153,10 @@ def scrape(max_pages_per_query: int = 3, max_records: int = 300, headless: bool 
 
 def _scrape_one_query(browser, cfg: dict, keyword: str, max_pages: int,
                        collected: dict, now_iso: str) -> None:
+    # フェーズ1: 一覧ページを巡回して候補行を集める（この間はpageを一覧に留めておく必要があるため、
+    # 詳細ページの全文取得はフェーズ2でまとめて行う。fufuku-newsのscraper.jsと同じ二段構成）。
     page = browser.new_page()
+    candidate_rows: list[dict] = []
     try:
         page.goto(f"{SITE_ROOT}/Main", timeout=30000)
         page.wait_for_load_state("networkidle")
@@ -154,37 +186,50 @@ def _scrape_one_query(browser, cfg: dict, keyword: str, max_pages: int,
                 if not _is_granted(row["result"]) or not _is_relevant_law(row["basis_laws"]):
                     continue
                 case_id = f'{cfg["vc"]}-{row["case_ref_id"]}'
-                if case_id in collected:
+                if case_id in collected or any(r["case_id"] == case_id for r in candidate_rows):
                     continue
-                source_url = (
-                    f'{SITE_ROOT}/Main?vc=&sc=select&{"J004" if cfg["vc"] == "J002" else "J007"}='
-                    f'&{cfg["id_field"]}={row["case_ref_id"]}'
-                )
-                collected[case_id] = PrecedentCase(
-                    case_id=case_id,
-                    category=cfg["category"],
-                    authority=row["authority"],
-                    council_name=row["council_name"],
-                    kind=row["kind"],
-                    basis_laws=row["basis_laws"],
-                    decision_date=row["decision_date"],
-                    document_number=row["document_number"],
-                    result=row["result"],
-                    summary=row["summary"],
-                    source_url=source_url,
-                    attribution=f"出典：行政不服審査裁決・答申検索データベース（{source_url}）",
-                    matched_keyword=keyword,
-                    collected_at=now_iso,
-                )
+                candidate_rows.append({**row, "case_id": case_id})
 
             # 総件数から最終ページに達したら打ち切り
             m = re.search(r"現在<span>(\d+)</span>/<span>(\d+)</span>ページ目", html)
             if m and int(m.group(1)) >= int(m.group(2)):
                 break
     except Exception as e:  # noqa: BLE001
-        print(f"[warn] query={keyword!r} type={cfg['category']} 収集中にエラー: {e}")
+        print(f"[warn] query={keyword!r} type={cfg['category']} 一覧取得中にエラー: {e}")
     finally:
         page.close()
+
+    # フェーズ2: 候補ごとに詳細ページへ遷移し、全文を取得してPrecedentCaseを組み立てる。
+    for row in candidate_rows:
+        source_url = (
+            f'{SITE_ROOT}/Main?vc=&sc=select&{"J004" if cfg["vc"] == "J002" else "J007"}='
+            f'&{cfg["id_field"]}={row["case_ref_id"]}'
+        )
+        detail_page = browser.new_page()
+        try:
+            full_text = _fetch_full_text(detail_page, source_url)
+        finally:
+            detail_page.close()
+        time.sleep(WAIT_BETWEEN_DETAIL_REQUESTS_SEC)
+
+        collected[row["case_id"]] = PrecedentCase(
+            case_id=row["case_id"],
+            category=cfg["category"],
+            title=build_case_title(row["authority"], row["result"], row["basis_laws"]),
+            authority=row["authority"],
+            council_name=row["council_name"],
+            kind=row["kind"],
+            basis_laws=row["basis_laws"],
+            decision_date=row["decision_date"],
+            document_number=row["document_number"],
+            result=row["result"],
+            summary=full_text or row["summary"],
+            source_url=source_url,
+            attribution=f"出典：行政不服審査裁決・答申検索データベース（{source_url}）",
+            impact_comment="",
+            matched_keyword=keyword,
+            collected_at=now_iso,
+        )
 
 
 def _parse_result_rows(html: str, cfg: dict) -> list[dict]:
@@ -249,9 +294,10 @@ def save(cases: list[PrecedentCase]) -> None:
         "source": "総務省 行政不服審査裁決・答申検索データベース (https://fufukudb.search.soumu.go.jp/koukai/Main)",
         "license_note": (
             "本データは公共データ利用規約(PDL1.0)に基づき、出典明記のうえ利用しています。"
-            "各裁決・答申の全文の著作権は当該行政庁に帰属する場合があるため、全文は保存せず"
-            "検索結果一覧の概要スニペットのみを保持しています。原文は各レコードのsource_urlを"
-            "参照してください。"
+            "各事例のsummaryには詳細ページに掲載された裁決・答申内容の全文を取得・転載しており"
+            "（要約・改変は行っていません）、著作権は当該行政庁に留保されます。"
+            "各レコードのattribution・source_urlを必ず併記し、原文は総務省データベースの"
+            "source_urlからご確認ください。"
         ),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "count": len(existing),

@@ -1078,10 +1078,18 @@ async def api_precedent_cases(
     q: str = "",
     category: str = "",
     result: str = "",
-    limit: int = 50,
+    agency_type: str = "",
+    tag: str = "",
+    limit: int = 500,
 ):
-    """認容事例の一覧・検索API（総務省 行政不服審査裁決・答申検索データベース由来）"""
-    cases = search_cases(query=q, category=category, result=result, limit=limit)
+    """認容事例の一覧・検索API（総務省 行政不服審査裁決・答申検索データベース由来）
+
+    既定ではデータ全件を返す。fufuku-news同様、フィルタ・並べ替えはクライアント側で行う想定。
+    """
+    cases = search_cases(
+        query=q, category=category, result=result,
+        agency_type=agency_type, tag=tag, limit=limit,
+    )
     return {"count": len(cases), "cases": cases}
 
 

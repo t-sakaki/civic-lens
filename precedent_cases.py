@@ -38,6 +38,94 @@ EMBEDDING_MODEL = "gemini-embedding-001"
 
 _STOPWORDS = {"の", "に", "は", "を", "が", "で", "と", "第", "条", "項", "号", "等", "及び", "又は"}
 
+# 審査庁名 → 機関種別、処分根拠法令 → 分野タグの分類ルール。
+# fufuku-news (https://fufuku-news.pages.dev/, 同一制作者による姉妹サイト) の
+# src/lib/classify.js と分類ロジック・タグ体系を揃えている。
+_CENTRAL_MINISTRIES = [
+    "内閣府", "総務省", "法務省", "外務省", "財務省", "文部科学省", "厚生労働省",
+    "農林水産省", "経済産業省", "国土交通省", "環境省", "防衛省", "デジタル庁",
+    "復興庁", "こども家庭庁", "国税庁", "特許庁", "消防庁", "公正取引委員会",
+    "個人情報保護委員会", "公害等調整委員会",
+]
+
+_AGENCY_TYPE_MUNICIPALITY_RE = re.compile(r"(市|区|町|村)(長)?$")
+_AGENCY_TYPE_PREFECTURE_RE = re.compile(r"(都|道|府|県)$")
+
+_TOPIC_RULES: list[tuple[str, re.Pattern]] = [
+    ("生活保護", re.compile(r"生活保護")),
+    ("情報公開", re.compile(r"情報公開|情報の公開に関する法律")),
+    ("個人情報保護", re.compile(r"個人情報")),
+    ("税務", re.compile(r"地方税法|税条例")),
+    ("子ども・子育て", re.compile(
+        r"児童福祉法|児童扶養手当|子ども・子育て支援法|ひとり親家庭手当|"
+        r"保育所|保育施設|地域型保育事業|母子及び父子並びに寡婦福祉法"
+    )),
+    ("障害者福祉", re.compile(
+        r"障害者の日常生活及び社会生活を総合的に支援|精神保健及び.*障害.*福祉に関する法律|"
+        r"身体障害者福祉法|療育手帳"
+    )),
+    ("介護・高齢者福祉", re.compile(r"介護保険法|要介護高齢者手当")),
+    ("災害弔慰金", re.compile(r"災害弔慰金")),
+    ("農地", re.compile(r"農地法")),
+    ("国民健康保険", re.compile(r"国民健康保険法")),
+    ("医療", re.compile(r"医療法")),
+    ("特許", re.compile(r"特許法")),
+    ("宗教法人", re.compile(r"宗教法人法")),
+    ("生活安全・風俗", re.compile(r"客引き行為")),
+]
+
+
+def classify_agency_type(authority: str) -> str:
+    """審査庁名（authority）から機関種別を分類する。"""
+    if not authority:
+        return "その他"
+    if "公安委員会" in authority:
+        return "公安委員会"
+    if any(m in authority for m in _CENTRAL_MINISTRIES):
+        return "中央省庁"
+    if "審査会" in authority:
+        return "審査会等"
+    if _AGENCY_TYPE_MUNICIPALITY_RE.search(authority):
+        return "市区町村"
+    if _AGENCY_TYPE_PREFECTURE_RE.search(authority):
+        return "都道府県"
+    return "その他"
+
+
+def classify_topics(basis_laws: str) -> list[str]:
+    """処分根拠法令（basis_laws）から分野タグを分類する（複数該当可）。"""
+    if not basis_laws:
+        return ["その他"]
+    matched = [tag for tag, pattern in _TOPIC_RULES if pattern.search(basis_laws)]
+    return matched or ["その他"]
+
+
+def build_case_title(authority: str, result: str, basis_laws: str) -> str:
+    """一覧表示用の見出しを組み立てる（fufuku-newsのbuildHeadline()と同じ書式）。
+
+    scripts/scrape_gyofuku_cases.py（収集時）とこの関数（表示時の後方互換フォールバック）
+    の双方から使う。
+    """
+    law_label = (basis_laws or "").strip() or "行政処分"
+    return f"【{result or '認容'}】{authority or '不明'}：{law_label}をめぐる審査請求"
+
+
+def _enrich_case(case: dict) -> dict:
+    """一覧・検索APIで返す事例にtitle/agency_type/tags/impact_commentを付与する。
+
+    title・impact_commentは新スキーマ（scrape_gyofuku_cases.py側で収集時に設定）を優先し、
+    旧スキーマのレコード（収集時点でtitleが未設定）にはここでフォールバックを生成する。
+    """
+    return {
+        **case,
+        "title": case.get("title") or build_case_title(
+            case.get("authority", ""), case.get("result", ""), case.get("basis_laws", "")
+        ),
+        "agency_type": classify_agency_type(case.get("authority", "")),
+        "tags": classify_topics(case.get("basis_laws", "")),
+        "impact_comment": case.get("impact_comment", ""),
+    }
+
 
 def _tokenize(text: str) -> set[str]:
     """ごく簡易な日本語トークナイズ（2〜4文字のNgram + 既知キーワード抽出）。"""
@@ -181,13 +269,13 @@ def find_relevant_precedents_by_embedding(
 
 
 def list_cases() -> list[dict]:
-    return _load_cases()
+    return [_enrich_case(c) for c in _load_cases()]
 
 
 def get_case(case_id: str) -> Optional[dict]:
     for c in _load_cases():
         if c.get("case_id") == case_id:
-            return c
+            return _enrich_case(c)
     return None
 
 
@@ -195,15 +283,21 @@ def search_cases(
     query: str = "",
     category: str = "",
     result: str = "",
+    agency_type: str = "",
+    tag: str = "",
     limit: int = 50,
 ) -> list[dict]:
     """一覧・検索ページ用の簡易フィルタ検索。"""
-    cases = _load_cases()
+    cases = [_enrich_case(c) for c in _load_cases()]
     out = []
     for c in cases:
         if category and c.get("category") != category:
             continue
         if result and result not in c.get("result", ""):
+            continue
+        if agency_type and c.get("agency_type") != agency_type:
+            continue
+        if tag and tag not in c.get("tags", []):
             continue
         if query:
             haystack = " ".join([
