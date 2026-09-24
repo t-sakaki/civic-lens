@@ -40,6 +40,7 @@ from geolocation import (
     prefecture_code,
     list_prefectures,
     build_manual_location,
+    find_nearby_municipalities,
     MunicipalityLocation,
 )
 from municipality_pool import get_pooled
@@ -372,6 +373,65 @@ async def detect_municipality_from_location(
 
     user_id = current_user.user_id if current_user else None
     return _resolve_municipality_candidates(location, session_id, user_id)
+
+
+@app.get("/api/municipality/nearby")
+async def list_nearby_municipalities(lat: float, lon: float, muni_code: str = ""):
+    """現在地の周辺（東西南北など複数方位）にある未調査の市区町村候補を返す
+
+    Nominatimへの複数回の逆ジオコーディングが必要で数秒かかるため、
+    /api/municipality/detect とは別に、フロントエンドが背後で追加取得する
+    低優先度のエンドポイントとして設計している。周辺自治体をまとめて
+    自動調査すると応答が大幅に遅延するため、ここでは発見と状態確認のみ行い、
+    実際の情報公開制度の調査はユーザーが選んだ候補についてのみ
+    /api/municipality/lookup で行う。
+    """
+    found = find_nearby_municipalities(lat, lon, exclude_muni_code=muni_code or None)
+
+    candidates = []
+    for f in found:
+        matched_key = match_authority_by_text(f["municipality"], default="")
+        if matched_key:
+            authority = AUTHORITIES[matched_key]
+            candidates.append({
+                "key": matched_key,
+                "name": authority.authority,
+                "type": authority.authority_type,
+                "category": authority.category,
+                "distance_km": f["distance_km"],
+                "researched": True,
+            })
+            continue
+
+        try:
+            pooled = get_pooled(f["muni_code"])
+        except Exception as e:
+            print(f"municipality_pool 参照エラー（周辺自治体・Firestore未設定の可能性）: {e}")
+            pooled = None
+
+        if pooled and pooled.get("status") == "ready":
+            candidates.append({
+                "key": f"pool:{f['muni_code']}",
+                "name": pooled.get("municipality") or f["municipality"],
+                "type": pooled.get("authority_type") or "市長",
+                "category": "自治体",
+                "distance_km": f["distance_km"],
+                "researched": True,
+            })
+        else:
+            # 未調査: フロントエンドで選択されたら /api/municipality/lookup で調査する
+            candidates.append({
+                "key": f"unresearched:{f['prefecture']}:{f['municipality']}",
+                "name": f["municipality"],
+                "type": "未調査",
+                "category": "自治体",
+                "distance_km": f["distance_km"],
+                "researched": False,
+                "prefecture": f["prefecture"],
+                "municipality": f["municipality"],
+            })
+
+    return {"candidates": candidates}
 
 
 @app.get("/api/municipality/prefectures")
