@@ -1256,6 +1256,146 @@
     "created_at": "2026-09-22T06:54:41.233612+00:00",
     "updated_at": "2026-09-22T06:54:41.233625+00:00"
   },
+  "c3048b1dd544a212": {
+    "news_id": "c3048b1dd544a212",
+    "source_news": {
+      "title": "愛知・名古屋大会のメダリストを祝福するイベント 名古屋で始まる 愛知・西尾市出身の林愛望選手の姿も - Yahoo!ニュース",
+      "link": "https://news.google.com/rss/articles/CBMif0FVX3lxTE9SUlR2cEN0Y3RHZGVHWm1EWENBckp2am9OTUcxSlMtYTI3RFc1YmNXVVRyUVhWYm1HTm5VMHlsck1nVHBGeFNlaTJyLUZWYkJTTl9vX3BGNkJROU52d29qODZVenVrZFNHelpBVGh5LVFsUklYTFdQel9IbC1aYmM?oc=5",
+      "published": "Mon, 21 Sep 2026 14:25:01 GMT"
+    },
+    "key_points": [
+      "イベント開催に伴う公金（税金）の投入額と、スポンサー等民間資金との割合・費用対効果の不透明さ",
+      "大規模イベントに伴う過剰な警備費用や、行政職員の業務時間中の動員など、見えない行政コストの発生",
+      "メダリストへの便乗PRに終始し、地域のスポーツ施設老朽化対策や県民の生活支援といった喫緊の課題への予算配分が後回しにされている懸念"
+    ],
+    "pseudo_citizen_voice": "メダリストの活躍は素直に嬉しいし誇りだけど、名古屋での大掛かりな祝福イベントって一体いくら愛知県や市の税金が使われてるの？大量の警備員や豪華なステージセット、行政職員の動員まで考えたら相当な額だよね。大会PRに便乗して公金を無駄遣いしてるようにしか見えない。そんな予算があるなら、ボロボロになってる地域の体育館を直すとか、物価高で苦しむ県民の生活支援に回してほしい。行政の自己満足につきあわされるのはごめんだよ。",
+    "pseudo_citizen_voice_disclaimer": "この「市民の声」は実在の個人の発言ではなく、ニュース記事の論点をもとにAIが生成したフィクションです。実在の人物の発言として引用・転載しないでください。",
+    "anger_analysis": {
+      "anger_level": 8,
+      "emotion_keywords": [
+        "不満",
+        "公金の無駄遣い",
+        "不信",
+        "呆れ"
+      ],
+      "target_authority": "愛知県",
+      "target_authority_key": "aichi-pref",
+      "pain_summary": "メダリスト祝福イベントへの多額の税金投入や行政職員の動員を公金の無駄遣いとみなし、地域の施設改修や物価高対策などの生活支援に予算を充てるべきだと強い不満を感じている。",
+      "specific_documents_requested": [
+        "メダリスト祝福イベントの事業計画書および予算決算書",
+        "イベント設営・警備等に関する委託契約書および仕様書",
+        "イベントの費用精算書および領収書一式",
+        "行政職員のイベント動員に関する決裁文書"
+      ],
+      "legal_basis": "愛知県情報公開条例第5条",
+      "next_action": "disclosure_request",
+      "urgency": "normal",
+      "recommended_response_time": "15日以内",
+      "task_dag": {
+        "tasks": [
+          {
+            "id": "task-pain",
+            "name": "争点原子化 & ペイン抽出",
+            "description": "市民の自然言語入力から行政問題の争点を特定し不可分タスク(Atomic Task)へ分解",
+            "dependencies": [],
+            "status": "completed",
+            "acceptance_criteria": "市民の不満要約および対象文書群が客観的テキストとして抽出されていること"
+          },
+          {
+            "id": "task-ordinance",
+            "name": "条例 & 法的根拠マッチング",
+            "description": "愛知県の保有文書公開条例および所管部署の照合",
+            "dependencies": [
+              "task-pain"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "管轄自治体条例の条文番号（例: 第7条）および開示義務規定がマッピングされていること"
+          },
+          {
+            "id": "task-critique",
+            "name": "メタ認知批評 & 行政逃げ道検知",
+            "description": "行政側の『不存在』『事務支障』逃げ道を事前自己批評し、請求文書を実務簿冊レベルに補正",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "弱点検知（SPOF）、期限延長リスク、代案Bの策定が完了していること"
+          },
+          {
+            "id": "task-draft",
+            "name": "開示請求書 自動策定",
+            "description": "補正後の簿冊名と理由を盛り込んだ正式な情報公開請求書の策定",
+            "dependencies": [
+              "task-critique"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "開示請求書マークダウンが生成され、対象文書および請求理由が網羅されていること"
+          },
+          {
+            "id": "task-routing",
+            "name": "窓口特定 & 経路案内 (駅すぱあと)",
+            "description": "愛知県情報公開窓口への公共交通アクセスを案内",
+            "dependencies": [
+              "task-ordinance"
+            ],
+            "status": "completed",
+            "acceptance_criteria": "最寄り駅および市役所・警察窓口の所在地・電話番号が特定されていること"
+          },
+          {
+            "id": "task-hitl",
+            "name": "Human-in-the-Loop 市民承認 & 戦略選択",
+            "description": "市民が『早期開示重視』または『徹底追求重視』の戦略を選択し、最終意思決定を行う",
+            "dependencies": [
+              "task-draft"
+            ],
+            "status": "in_progress",
+            "acceptance_criteria": "市民（ユーザー）によるプラン選択および提出意思確認"
+          }
+        ],
+        "execution_order": [
+          "task-pain",
+          "task-ordinance",
+          "task-critique",
+          "task-draft",
+          "task-routing",
+          "task-hitl"
+        ]
+      },
+      "critique": {
+        "vulnerability": "【弱点検知】『入札額』や『積算内訳』は、行政が情報公開条例第7条（法人等の競争上の地位を害するおそれ）を紋切り型に適用して不開示決定を下す典型的な類型です。",
+        "risk_prediction": "【リスク予測】業者名や内訳単価が黒塗り（部分開示）となる確率: 約70%。事前に対象文書を『落札決定伺書および設計書総括表』にフォーカスし、競争情報に当たらない確定済み公文書を狙うのが安全です。",
+        "verifiability": "愛知県情報公開条例に基づく開示請求権者の要件（市民・利害関係者・何人も請求可能規定）を満たしており、法的・実務的書式要件を充足しています。",
+        "critique_summary": "AIによるメタ認知自己批評を実施：行政側の常套的な不開示・不存在逃げ道を先回り検知し、公文書管理上の簿冊名へと自動補強を行いました。",
+        "confidence_score": 0.91,
+        "improvements_applied": [
+          "最高裁判決（平14.2.8）の『実質的・具体的な損害の蓋然性が必要』という反論判例を事前添付",
+          "予定価格・設計書総括表など確定事実文書を優先請求指定"
+        ]
+      },
+      "safeguard_options": [
+        {
+          "id": "option-fast",
+          "name": "プランA：迅速開示重視（推奨）",
+          "description": "決裁文書・報告書など核心的文書に限定し、14日以内の早期開示決定を狙う（延長リスク低）",
+          "badge": "スピード重視"
+        },
+        {
+          "id": "option-thorough",
+          "name": "プランB：網羅的徹底追及",
+          "description": "領収書・精算書・関連メール含む全関係文書を一括請求（期間延長の可能性あり）",
+          "badge": "徹底調査"
+        }
+      ],
+      "is_mock": false
+    },
+    "reactions": {
+      "heart": 0,
+      "angry": 0,
+      "shock": 0
+    },
+    "created_at": "2026-09-22T12:10:54.431762+00:00",
+    "updated_at": "2026-09-22T12:10:54.431817+00:00"
+  },
   "7e14e67d282acce2": {
     "news_id": "7e14e67d282acce2",
     "source_news": {

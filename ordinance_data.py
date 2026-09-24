@@ -233,6 +233,18 @@ def list_nearby_authorities(
     return ranked[:1]
 
 
+def find_authority_by_prefecture(prefecture: str) -> Optional[AuthorityInfo]:
+    """都道府県名から県庁等の対象機関を探す（距離に関係なく常に対象になるため半径判定はしない）
+
+    情報公開条例は都道府県単位でも別に存在し、市区町村内のどこにいても請求先になり
+    得るため、list_nearby_authorities() の距離フィルタとは独立して判定する。
+    """
+    for info in AUTHORITIES.values():
+        if info.category == "自治体" and info.authority_type == "知事" and info.authority == prefecture:
+            return info
+    return None
+
+
 def match_authority_by_text(text: str, default: str = "anjo-city") -> str:
     """市民の自然言語入力に含まれるエイリアスから対象機関キーを推定する
 

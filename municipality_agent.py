@@ -11,7 +11,10 @@ gmi_client側はGMI_API_KEY未設定時は即座にモックを返すため、�
 """
 from typing import Dict, Optional
 
-from gmi_client import research_municipality_disclosure_system
+from gmi_client import (
+    research_municipality_disclosure_system,
+    research_prefecture_disclosure_system,
+)
 from municipality_pool import mark_researching, save_research_result, mark_failed
 
 
@@ -46,6 +49,38 @@ def research_municipality_now(
             "ordinance_name": research.get("ordinance_name"),
             "authority_type": research.get("authority_type"),
             "request_deadline_days": research.get("request_deadline_days", 30),
+            "extension_days": research.get("extension_days", 30),
+            "review_period_days": research.get("review_period_days", 90),
+            "non_disclosure_grounds": research.get("non_disclosure_grounds", []),
+            "review_authority": research.get("review_authority"),
+            "contact": research.get("contact"),
+            "is_mock": research.get("is_mock", False),
+        }
+
+
+def research_prefecture_now(pref_code: str, prefecture: str) -> Dict:
+    """都道府県の情報公開制度を同期的に調査し、可能な範囲でプールにも保存して結果を返す
+
+    data/authorities/*.json に県庁が未収録の都道府県向け。市区町村と同じプール
+    （municipality_pool）を level="prefecture" で共用する。
+    """
+    research = research_prefecture_disclosure_system(prefecture)
+
+    try:
+        mark_researching(pref_code, prefecture, prefecture, prefecture, level="prefecture")
+        return save_research_result(pref_code, research)
+    except Exception as e:
+        print(f"municipality_pool 保存エラー（Firestore未設定の可能性、調査結果はその場で返す）: {e}")
+        return {
+            "muni_code": pref_code,
+            "prefecture": prefecture,
+            "municipality": prefecture,
+            "full_name": prefecture,
+            "level": "prefecture",
+            "status": "ready",
+            "ordinance_name": research.get("ordinance_name"),
+            "authority_type": research.get("authority_type"),
+            "request_deadline_days": research.get("request_deadline_days", 15),
             "extension_days": research.get("extension_days", 30),
             "review_period_days": research.get("review_period_days", 90),
             "non_disclosure_grounds": research.get("non_disclosure_grounds", []),

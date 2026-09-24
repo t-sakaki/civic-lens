@@ -67,7 +67,7 @@ class AngerReproductionAgent:
             try:
                 response = call_with_timeout(
                     self._civic_agent.genai_client.models.generate_content,
-                    model="gemini-3.1-pro-preview",
+                    model="gemini-pro-latest",
                     contents=NEWS_ANALYSIS_PROMPT.format(news_text=news_text, region_line=region_line),
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
                     timeout_s=25.0,
