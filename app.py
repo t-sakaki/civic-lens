@@ -35,7 +35,13 @@ from ordinance_data import (
     find_authority_by_prefecture,
 )
 from station_guide import find_nearest_government_office, get_office_info
-from geolocation import detect_municipality, prefecture_code
+from geolocation import (
+    detect_municipality,
+    prefecture_code,
+    list_prefectures,
+    build_manual_location,
+    MunicipalityLocation,
+)
 from municipality_pool import get_pooled
 from municipality_agent import research_municipality_now, research_prefecture_now
 from municipality_history import create_record as create_municipality_history_record, get_history as get_municipality_history
@@ -210,31 +216,20 @@ async def get_authorities():
     }
 
 
-@app.post("/api/municipality/detect")
-async def detect_municipality_from_location(
-    lat: float = Form(...),
-    lon: float = Form(...),
-    session_id: Optional[str] = Form(None),
-    current_user: Optional[User] = Depends(get_current_user_optional),
-):
-    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
+def _resolve_municipality_candidates(
+    location: MunicipalityLocation,
+    session_id: Optional[str],
+    user_id: Optional[str],
+) -> Dict:
+    """MunicipalityLocation から対象機関候補を組み立て、履歴に保存して結果を返す
 
-    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
-    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
-    機関をすべて候補として返す（`candidates`）。
-    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
-    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
-    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
-    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
-    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
-    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    /api/municipality/detect（GPS由来）と /api/municipality/lookup（手動選択）の
+    両方から共有するロジック。lat/lon が無い（手動選択）場合は距離ベースの
+    周辺候補列挙（list_nearby_authorities）をスキップする。
     """
-    location = detect_municipality(lat, lon)
-    if location is None:
-        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
-
-    user_id = current_user.user_id if current_user else None
-    candidates = list_nearby_authorities(location.lat, location.lon)
+    candidates: List[Dict] = []
+    if location.lat is not None and location.lon is not None:
+        candidates = list_nearby_authorities(location.lat, location.lon)
 
     # 都道府県（県庁）は、条例が別立てで距離に関係なく請求先になり得るため、
     # list_nearby_authorities() の半径判定とは独立して必ず候補に含める。
@@ -276,6 +271,17 @@ async def detect_municipality_from_location(
 
     matched_key = match_authority_by_text(location.municipality, default="")
     exact_match = AUTHORITIES[matched_key] if matched_key else None
+
+    # 静的データに一致する市区町村があれば、距離ベースの列挙（GPS無しの手動選択では
+    # スキップされる）に含まれていなくても必ず候補に加える。
+    if exact_match and not any(c["key"] == matched_key for c in candidates):
+        candidates = [{
+            "key": matched_key,
+            "name": exact_match.authority,
+            "type": exact_match.authority_type,
+            "category": exact_match.category,
+            "distance_km": None,
+        }] + candidates
 
     # プール参照・調査・履歴保存はFirestoreに依存する部分があるが、候補一覧（静的データの
     # みで完結）は Firebase未設定/接続失敗時でも必ず返す
@@ -339,6 +345,65 @@ async def detect_municipality_from_location(
         "candidates": candidates,
         "pooled": pooled,
     }
+
+
+@app.post("/api/municipality/detect")
+async def detect_municipality_from_location(
+    lat: float = Form(...),
+    lon: float = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """ブラウザの現在地（緯度経度）から対象機関の候補を複数特定する
+
+    自治体は1つに絞り込まない。都道府県（県庁）・現在地の市区町村・周辺の市区町村・
+    警察・裁判所など、現在地から一定距離内にある data/authorities/*.json 収録済みの
+    機関をすべて候補として返す（`candidates`）。
+    現在地の市区町村自体が未収録の場合は municipality_pool（Firestore）を確認し、
+    無ければこのリクエスト内で同期的に情報公開制度を調査してプールに保存する
+    （FastAPIのBackgroundTasksはVercel等のサーバーレス環境ではレスポンス送信後の
+    実行が保証されず、いつまでも対象機関プルダウンに反映されない不具合があったため、
+    ユーザーを待たせてでも結果を確定させてから返す方式に変更した）。
+    特定結果は毎回、履歴（municipality_detection_history）にも保存する。
+    """
+    location = detect_municipality(lat, lon)
+    if location is None:
+        raise HTTPException(status_code=404, detail="現在地から自治体を特定できませんでした")
+
+    user_id = current_user.user_id if current_user else None
+    return _resolve_municipality_candidates(location, session_id, user_id)
+
+
+@app.get("/api/municipality/prefectures")
+async def list_prefecture_master():
+    """任意選択UI用の都道府県マスタ（47件）を返す"""
+    return {"prefectures": list_prefectures()}
+
+
+@app.post("/api/municipality/lookup")
+async def lookup_municipality_manually(
+    prefecture: str = Form(...),
+    municipality: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """GPSを使わず、ユーザーが指定した都道府県・市区町村から対象機関の候補を特定する
+
+    出張先やニュースで見た自治体など、現在地に依存せず任意の地域を対象機関に
+    設定したい場合の入口。ロジックは /api/municipality/detect と共通
+    （_resolve_municipality_candidates）だが、緯度経度が無いため周辺市区町村の
+    距離ベース列挙は行わない。
+    """
+    prefecture = prefecture.strip()
+    municipality = municipality.strip()
+    if prefecture not in list_prefectures():
+        raise HTTPException(status_code=400, detail=f"未知の都道府県です: {prefecture}")
+    if not municipality:
+        raise HTTPException(status_code=400, detail="市区町村名を入力してください")
+
+    location = build_manual_location(prefecture, municipality)
+    user_id = current_user.user_id if current_user else None
+    return _resolve_municipality_candidates(location, session_id, user_id)
 
 
 @app.get("/api/municipality/status/{muni_code}")
