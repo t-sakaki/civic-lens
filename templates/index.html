@@ -2902,6 +2902,19 @@
             renderAuthorityOptions(currentAuthorityFilter);
         }
 
+        function autoTagFor(a) {
+            if (a.category === '履歴') return '・履歴';
+            if (a.key.startsWith('pool:') || a.key.startsWith('pref:')) return '・自動調査';
+            return '';
+        }
+
+        function categoryIconFor(category) {
+            if (category === '警察') return '🚔';
+            if (category === '裁判所') return '⚖️';
+            if (category === '履歴') return '🕘';
+            return '🏛️';
+        }
+
         function renderAuthorityOptions(filterCategory) {
             currentAuthorityFilter = filterCategory;
             const select = document.getElementById('targetAuthority');
@@ -2918,7 +2931,7 @@
                 groups[a.category].push(a);
             });
 
-            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const categoryOrder = ['自治体', '警察', '裁判所', '履歴'];
             const allCategories = [
                 ...categoryOrder.filter(c => groups[c]),
                 ...Object.keys(groups).filter(c => !categoryOrder.includes(c)),
@@ -2930,8 +2943,8 @@
                 groups[category].forEach(a => {
                     const option = document.createElement('option');
                     option.value = a.key;
-                    const icon = category === '警察' ? '🚔 ' : (category === '裁判所' ? '⚖️ ' : '🏛️ ');
-                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    const icon = categoryIconFor(category) + ' ';
+                    const autoTag = autoTagFor(a);
                     option.textContent = `${icon}${a.name}（${a.type}${autoTag}）`;
                     optgroup.appendChild(option);
                 });
@@ -2979,8 +2992,8 @@
                 label.textContent = '未選択';
                 return;
             }
-            icon.textContent = current.category === '警察' ? '🚔' : (current.category === '裁判所' ? '⚖️' : '🏛️');
-            const autoTag = current.key.startsWith('pool:') ? '・自動調査' : '';
+            icon.textContent = categoryIconFor(current.category);
+            const autoTag = autoTagFor(current);
             label.textContent = `${current.name}（${current.type}${autoTag}）`;
             updateNewsRegionLabel();
         }
@@ -3012,8 +3025,8 @@
                     const a = pool[authorityChipCursor % pool.length];
                     authorityChipCursor++;
 
-                    const icon = a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
-                    const autoTag = a.key.startsWith('pool:') ? '・自動調査' : '';
+                    const icon = categoryIconFor(a.category) + ' ';
+                    const autoTag = autoTagFor(a);
 
                     const chip = document.createElement('button');
                     chip.type = 'button';
@@ -3076,7 +3089,7 @@
         const startMenuSearch = document.getElementById('startMenuSearch');
 
         function authorityIcon(a) {
-            return a.category === '警察' ? '🚔' : (a.category === '裁判所' ? '⚖️' : '🏛️');
+            return categoryIconFor(a.category);
         }
 
         // 対象機関から、ニュース収集に使う「対象地域」を導く（例: 愛知県警察本部→愛知県、警視庁→東京都）
@@ -3265,7 +3278,7 @@
             const nearbyKeys = new Set(nearbyState.candidates.map(c => c.key));
             const authorityGrid = document.getElementById('startMenuAuthorityGrid');
             authorityGrid.innerHTML = '';
-            const categoryOrder = ['自治体', '警察', '裁判所'];
+            const categoryOrder = ['自治体', '警察', '裁判所', '履歴'];
             [...allAuthorities]
                 .filter(a => !nearbyKeys.has(a.key))
                 .sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category))
@@ -3273,7 +3286,7 @@
                     authorityGrid.appendChild(makeStartTile({
                         icon: authorityIcon(a),
                         label: a.name,
-                        sub: a.type + (a.key.startsWith('pool:') ? '・自動調査' : ''),
+                        sub: a.type + autoTagFor(a),
                         search: `${a.name} ${a.type} ${a.category} ${authorityRegion(a)}`,
                         selected: a.key === selectedKey,
                         onClick: () => chooseAuthorityFromMenu(a),
@@ -3743,9 +3756,34 @@
                         </div>
                     `;
                 }).join('');
+                addHistoryAuthorityCandidates(records);
             } catch (e) {
                 // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
             }
+        }
+
+        const HISTORY_AUTHORITY_CHIP_LIMIT = 5;
+
+        // 過去に特定・選択したことのある対象機関（pool:/pref: キー）を「履歴」カテゴリの
+        // 候補として対象機関チップに加える。data/authorities/*.json 収録済みの機関は
+        // 既に通常の候補として選べるため、ここでは追加しない（重複防止）。
+        function addHistoryAuthorityCandidates(records) {
+            const seen = new Set();
+            let added = 0;
+            for (const r of records) {
+                if (added >= HISTORY_AUTHORITY_CHIP_LIMIT) break;
+                const key = r.authority_key;
+                if (!key || !r.authority_name) continue;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                if (allAuthorities.some(a => a.key === key)) continue;
+                if (!key.startsWith('pool:') && !key.startsWith('pref:')) continue;
+
+                const type = key.startsWith('pref:') ? '知事' : '市長';
+                allAuthorities.push({ key, name: r.authority_name, type, category: '履歴' });
+                added++;
+            }
+            if (added > 0) renderAuthorityOptions(currentAuthorityFilter);
         }
 
         // --- 左サイドメニュー（履歴一覧）の開閉。Claude Codeのようにハンバーガーで開閉できる ---
@@ -6104,14 +6142,16 @@
         checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
         loadPublicFeed();
-        loadMunicipalityHistory();
         startPromptSuggestionAnimation();
         // 見出しは最初のチャット発言として静的に表示するため、タイプライター切り替えは行わない
 
         (async () => {
             // <select> の選択肢が揃ってから自動判定しないと候補を反映できないため、
-            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定を行う
+            // 対象機関一覧の読み込みを待ってから位置情報によるバックグラウンド自動判定・
+            // 履歴由来の候補追加を行う（loadMunicipalityHistory は allAuthorities への
+            // 追記を行うため、loadAuthorities が allAuthorities を差し替えた後に呼ぶ必要がある）
             await loadAuthorities();
+            loadMunicipalityHistory();
             detectMunicipalityFromLocation({ silent: true });
         })();
     </script>
