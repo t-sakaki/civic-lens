@@ -114,12 +114,28 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-)
+# Cloud Run実行時は K_SERVICE が自動設定される。HTTPSで配信される本番/Cloud Run環境では
+# Cookieの Secure 属性を必ず付与し、ローカルのHTTP開発サーバーでのみ省略する。
+_IS_SECURE_CONTEXT = bool(os.getenv("K_SERVICE")) or os.getenv("FORCE_SECURE_COOKIES") == "1"
+
+_cors_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if _cors_allowed_origins:
+    # 認証はCookieで行っているため、allow_credentials=Trueと
+    # allow_origins=["*"]の組み合わせは、ブラウザによる制限を回避して
+    # 任意オリジンから被害者のセッションでAPIを叩けてしまう脆弱な構成になる。
+    # CORS_ALLOWED_ORIGINS未設定時（＝フロントエンドを同一オリジンで配信している
+    # 通常構成）はクロスオリジンでのCookie送信自体を許可しない。
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.exception_handler(Exception)
@@ -1687,6 +1703,7 @@ async def api_register(
             max_age=7 * 24 * 3600,
             httponly=True,
             samesite="lax",
+            secure=_IS_SECURE_CONTEXT,
         )
         return {
             "success": True,
@@ -1722,6 +1739,7 @@ async def api_login(
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return {
         "success": True,
@@ -1766,6 +1784,7 @@ async def api_login_wallet(
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return {
         "success": True,
@@ -1806,6 +1825,7 @@ async def api_verify_magic_link(token: str):
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=_IS_SECURE_CONTEXT,
     )
     return response
 
