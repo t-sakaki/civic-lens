@@ -32,14 +32,21 @@
         .cl-react { border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); }
         .cl-react:hover { border-color: rgba(242, 169, 59, 0.6); }
         .cl-react[aria-pressed="true"] { border-color: var(--cl-amber); background: rgba(242, 169, 59, 0.16); }
-        textarea { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); color: #EDEDF2; }
+        textarea, input, select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); color: #EDEDF2; }
+        .cl-btn { background: linear-gradient(135deg, var(--cl-amber), #e0852a); color: #1a1204; font-weight: 700; }
+        .cl-btn:hover { opacity: 0.92; }
+        .cl-btn:disabled { opacity: 0.4; cursor: wait; }
+        .cl-btn-ghost { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); color: #EDEDF2; }
     </style>
 </head>
 <body>
     <nav class="cl-navbar border-b sticky top-0 z-10">
-        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <a href="/" class="font-bold text-lg" style="color: var(--cl-amber)">Civic Lens</a>
-            <a href="/" class="text-sm text-gray-300 hover:text-white">← トップに戻る</a>
+            <div class="flex items-center gap-3">
+                <button id="connectWalletBtn" class="cl-btn-ghost text-xs rounded-full px-3 py-1.5">🦊 ウォレットを接続</button>
+                <a href="/" class="text-sm text-gray-300 hover:text-white">← トップに戻る</a>
+            </div>
         </div>
     </nav>
 
@@ -49,14 +56,73 @@
             <p class="text-sm text-gray-300 leading-relaxed">
                 ブロックチェーンに記録された公文書開示請求の一覧です。表示している記録は Civic Lens のデータベースではなく、
                 <strong>チェーンから直接読み出しています</strong>。記録は誰にも（Civic Lens 自身にも）書き換え・削除できず、各記録のリンクから誰でも検証できます。
+                記録は「Civic Lens 公証（代理署名）」と「請求者本人のウォレット署名」の両方を区別なく並べています。
             </p>
             <p id="ledgerMeta" class="text-xs text-gray-400 mt-2"></p>
+            <p id="walletStatus" class="text-xs text-gray-400 mt-1"></p>
         </header>
 
         <div id="ledgerStatus" class="text-sm text-gray-400">読み込み中...</div>
         <div id="ledgerList" class="space-y-5"></div>
+
+        <section class="cl-card rounded-lg p-5 mt-8">
+            <h2 class="font-bold mb-1 flex items-center gap-2">💸 投げ銭で応援する</h2>
+            <p class="text-xs text-gray-400 mb-3 leading-relaxed">
+                上の記録の「💸 投げ銭で応援する」を押すと、この欄に対象があらかじめ入力されます。
+                送金と応援記録は<strong>あなた自身のウォレットで署名</strong>し、Civic Lens は代理署名・仲介を一切行いません。
+            </p>
+            <form id="tipForm" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">請求者のウォレットアドレス</label>
+                    <input type="text" id="tipRecipient" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs" required>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">応援対象の attestation UID</label>
+                    <input type="text" id="tipRefUid" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">通貨</label>
+                    <select id="tipCurrency" class="w-full rounded px-2.5 py-1.5"><option value="ETH">ETH</option><option value="USDC">USDC</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">投げ銭額</label>
+                    <input type="number" id="tipAmount" step="0.000001" placeholder="0.0001" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">応援メッセージ（任意）</label>
+                    <input type="text" id="tipComment" placeholder="応援しています！" class="w-full rounded px-2.5 py-1.5">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">紹介者アドレス（任意・投げ銭リレー）</label>
+                    <input type="text" id="tipReferrer" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs">
+                </div>
+                <div class="sm:col-span-2">
+                    <button type="submit" class="cl-btn rounded px-4 py-2">💸 投げ銭する</button>
+                </div>
+            </form>
+            <div id="tipResult" class="text-xs mt-2 leading-relaxed"></div>
+        </section>
+
+        <section class="cl-card rounded-lg p-5 mt-6">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold flex items-center gap-2">🏆 応援リーダーボード</h2>
+                <button id="refreshLeaderboardBtn" class="cl-btn-ghost text-xs rounded-full px-3 py-1">↻ 更新</button>
+            </div>
+            <p class="text-xs text-gray-400 mb-3">オンチェーンデータから都度集計しています（別データベースは持ちません）。</p>
+            <div id="leaderboardBox" class="text-sm text-gray-400">読み込み中...</div>
+        </section>
+
+        <section class="cl-card rounded-lg p-5 mt-6 mb-10">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold flex items-center gap-2">🔥 急上昇中の開示請求</h2>
+                <button id="refreshTrendingBtn" class="cl-btn-ghost text-xs rounded-full px-3 py-1">↻ 更新</button>
+            </div>
+            <p class="text-xs text-gray-400 mb-3">直近24時間で投げ銭が集まっている請求です。</p>
+            <div id="trendingBox" class="text-sm text-gray-400">読み込み中...</div>
+        </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
     <script>
         function escapeHtml(str) {
             return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -142,6 +208,13 @@
                     <div class="flex flex-wrap gap-2">${reactionsHtml(e)}</div>
                     <p class="text-xs text-red-300 mt-2 hidden" data-react-msg="${escapeHtml(e.uid)}"></p>
                 </div>
+
+                <div class="mt-3 flex items-center justify-between">
+                    <span class="text-xs px-2 py-0.5 rounded-full ${e.signer_type === 'wallet' ? 'cl-badge-teal' : 'cl-badge'}">${escapeHtml(e.signer_label)}</span>
+                    ${e.tip_recipient
+                        ? `<button type="button" class="cl-btn-ghost text-xs rounded-full px-3 py-1.5" data-tip-target="${escapeHtml(e.uid)}" data-tip-recipient="${escapeHtml(e.tip_recipient)}">💸 投げ銭で応援する</button>`
+                        : `<span class="text-xs text-gray-500">送金先ウォレット未登録のため投げ銭できません</span>`}
+                </div>
             </article>`;
         }
 
@@ -195,6 +268,14 @@
                 return;
             }
 
+            const tipTargetBtn = ev.target.closest('[data-tip-target]');
+            if (tipTargetBtn) {
+                document.getElementById('tipRecipient').value = tipTargetBtn.dataset.tipRecipient;
+                document.getElementById('tipRefUid').value = tipTargetBtn.dataset.tipTarget;
+                document.getElementById('tipForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
+
             const verifyBtn = ev.target.closest('[data-verify]');
             if (verifyBtn) {
                 const uid = verifyBtn.dataset.verify;
@@ -230,6 +311,180 @@
         });
 
         loadLedger();
+
+        // -----------------------------------------------------------------
+        // 投げ銭（オンチェーン応援）— 送金・記録は常に応援者本人のウォレットが署名する。
+        // Civic Lens サーバーは代理署名・送金の仲介を一切行わない。
+        // -----------------------------------------------------------------
+        const BASE_SEPOLIA_CHAIN_ID_HEX = '0x14a34'; // 84532
+        const BASE_SEPOLIA_PARAMS = {
+            chainId: BASE_SEPOLIA_CHAIN_ID_HEX,
+            chainName: 'Base Sepolia',
+            nativeCurrency: { name: 'Base Sepolia ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://sepolia.base.org'],
+            blockExplorerUrls: ['https://sepolia.basescan.org'],
+        };
+        const ZERO_ADDRESS = '0x' + '0'.repeat(40);
+        const ZERO_BYTES32 = '0x' + '0'.repeat(64);
+        const EAS_CONTRACT_ADDRESS = '0x4200000000000000000000000000000000000021';
+        const EAS_ABI = [
+            'function attest((bytes32 schema,(address recipient,uint64 expirationTime,bool revocable,bytes32 refUID,bytes data,uint256 value) data) request) payable returns (bytes32)',
+            'event Attested(address indexed recipient, address indexed attester, bytes32 uid, bytes32 indexed schemaUID)',
+        ];
+        const ERC20_ABI = ['function transfer(address to, uint256 amount) returns (bool)'];
+
+        let tipConfig = null;
+        let provider, signer, eas;
+
+        function short(addr) { return addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : ''; }
+
+        async function loadTipConfig() {
+            const res = await fetch('/api/ledger/tips/config');
+            if (!res.ok) throw new Error((await res.json()).detail || '投げ銭の設定取得に失敗しました');
+            tipConfig = await res.json();
+        }
+
+        async function connectWallet() {
+            const statusEl = document.getElementById('walletStatus');
+            if (!window.ethereum) {
+                statusEl.innerHTML = '<span class="text-red-300">MetaMask等のウォレット拡張機能が見つかりません。</span>';
+                return;
+            }
+            try {
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send('eth_requestAccounts', []);
+                const network = await provider.getNetwork();
+                if ('0x' + network.chainId.toString(16) !== BASE_SEPOLIA_CHAIN_ID_HEX) {
+                    try {
+                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_SEPOLIA_CHAIN_ID_HEX }] });
+                    } catch (switchErr) {
+                        if (switchErr.code === 4902) {
+                            await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [BASE_SEPOLIA_PARAMS] });
+                        } else { throw switchErr; }
+                    }
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                }
+                signer = await provider.getSigner();
+                eas = new ethers.Contract(EAS_CONTRACT_ADDRESS, EAS_ABI, signer);
+                const address = await signer.getAddress();
+                statusEl.innerHTML = `✅ ウォレット接続済み: <span class="font-mono">${address}</span>（あなた自身の署名で送金・記録します）`;
+                document.getElementById('connectWalletBtn').textContent = '🦊 ' + short(address);
+                document.getElementById('connectWalletBtn').disabled = true;
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('recipient')) document.getElementById('tipRecipient').value = params.get('recipient');
+                if (params.has('ref_uid')) document.getElementById('tipRefUid').value = params.get('ref_uid');
+                if (params.has('referrer')) document.getElementById('tipReferrer').value = params.get('referrer');
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-red-300">接続失敗: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+        document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+
+        function shareIntentHtml(recipient, refUid, referrerAddress, currency, amount) {
+            const url = new URL(window.location.origin + '/ledger');
+            url.searchParams.set('recipient', recipient);
+            url.searchParams.set('ref_uid', refUid);
+            url.searchParams.set('referrer', referrerAddress);
+            const text = `開示請求を ${amount} ${currency} で応援しました。あなたも投げ銭で応援しませんか？ #CivicLens`;
+            const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url.toString())}`;
+            return `<a class="cl-link" href="${intent}" target="_blank" rel="noopener noreferrer">🔥 この応援をSNSでシェアして紹介リンクを広める ↗</a>`;
+        }
+
+        document.getElementById('tipForm').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const out = document.getElementById('tipResult');
+            const btn = ev.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            try {
+                if (!signer) throw new Error('先にウォレットを接続してください');
+                if (!tipConfig) await loadTipConfig();
+
+                const recipient = document.getElementById('tipRecipient').value.trim();
+                const refUid = document.getElementById('tipRefUid').value.trim();
+                const currencyKey = document.getElementById('tipCurrency').value;
+                const tokenAddress = currencyKey === 'USDC' ? tipConfig.usdc_address : ZERO_ADDRESS;
+                if (currencyKey === 'USDC' && !tokenAddress) throw new Error('USDCコントラクトアドレスがサーバーに未設定です');
+                const decimals = currencyKey === 'USDC' ? 6 : 18;
+                const amount = ethers.parseUnits(document.getElementById('tipAmount').value || '0', decimals);
+                const comment = document.getElementById('tipComment').value;
+                const referrer = document.getElementById('tipReferrer').value.trim() || ZERO_ADDRESS;
+
+                out.textContent = `⏳ ${currencyKey}の送金を署名してください...(1/2)`;
+                let transferReceipt;
+                if (tokenAddress === ZERO_ADDRESS) {
+                    const tx = await signer.sendTransaction({ to: recipient, value: amount });
+                    transferReceipt = await tx.wait();
+                } else {
+                    const token = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+                    const tx = await token.transfer(recipient, amount);
+                    transferReceipt = await tx.wait();
+                }
+
+                out.textContent = '⏳ 応援記録を署名してください...(2/2)';
+                const coder = ethers.AbiCoder.defaultAbiCoder();
+                const encodedData = coder.encode(['address', 'address', 'uint256', 'string'], [tokenAddress, referrer, amount, comment]);
+                const attestTx = await eas.attest({
+                    schema: tipConfig.tip_schema_uid,
+                    data: { recipient, expirationTime: 0, revocable: true, refUID: refUid, data: encodedData, value: 0 },
+                });
+                const attestReceipt = await attestTx.wait();
+
+                out.innerHTML = `✅ 投げ銭が完了しました（あなたのウォレットで署名済み）<br>` +
+                    `送金tx: <a class="cl-link" href="https://sepolia.basescan.org/tx/${transferReceipt.hash}" target="_blank">${short(transferReceipt.hash)} ↗</a><br>` +
+                    `記録tx: <a class="cl-link" href="https://sepolia.basescan.org/tx/${attestReceipt.hash}" target="_blank">${short(attestReceipt.hash)} ↗</a><br>` +
+                    shareIntentHtml(recipient, refUid, await signer.getAddress(), currencyKey, document.getElementById('tipAmount').value);
+                loadLeaderboard();
+                loadTrending();
+            } catch (err) {
+                out.innerHTML = `<span class="text-red-300">エラー: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        async function loadLeaderboard() {
+            const box = document.getElementById('leaderboardBox');
+            box.textContent = '読み込み中...';
+            try {
+                const res = await fetch('/api/ledger/tips/leaderboard');
+                if (!res.ok) throw new Error((await res.json()).detail || '取得に失敗しました');
+                const data = await res.json();
+                const fmtBreakdown = (b) => b.map(x => `${x.amount} ${x.currency}`).join(' + ') || '—';
+                const rows = (list, key, label) => !list.length
+                    ? '<p class="text-xs text-gray-500">まだありません。最初の応援者になりましょう。</p>'
+                    : `<table class="w-full text-xs mt-1">
+                        <tr class="text-gray-400"><th class="text-left py-1">#</th><th class="text-left py-1">アドレス</th><th class="text-left py-1">内訳</th><th class="text-left py-1">${label}</th></tr>
+                        ${list.map((r, i) => `<tr class="border-t border-white/10"><td class="py-1.5">${i + 1}</td><td class="py-1.5">${escapeHtml(r.ens_name || short(r.address))}</td><td class="py-1.5">${escapeHtml(fmtBreakdown(r.breakdown))}</td><td class="py-1.5">${r[key]}</td></tr>`).join('')}
+                    </table>`;
+                box.innerHTML = `<div class="text-xs text-gray-400 mb-1">応援者ランキング</div>${rows(data.top_tippers, 'tip_count', '回数')}
+                    <div class="text-xs text-gray-400 mb-1 mt-3">紹介者ランキング</div>${rows(data.top_referrers, 'referral_count', '紹介数')}`;
+            } catch (err) {
+                box.innerHTML = `<span class="text-red-300 text-xs">${escapeHtml(err.message)}</span>`;
+            }
+        }
+        document.getElementById('refreshLeaderboardBtn').addEventListener('click', loadLeaderboard);
+
+        async function loadTrending() {
+            const box = document.getElementById('trendingBox');
+            box.textContent = '読み込み中...';
+            try {
+                const res = await fetch('/api/ledger/tips/trending');
+                if (!res.ok) throw new Error((await res.json()).detail || '取得に失敗しました');
+                const { requests } = await res.json();
+                if (!requests.length) { box.innerHTML = '<p class="text-xs text-gray-500">まだ急上昇中の請求はありません。</p>'; return; }
+                const fmtBreakdown = (b) => b.map(x => `${x.amount.toFixed ? x.amount.toFixed(4) : x.amount} ${x.currency}`).join(' + ');
+                box.innerHTML = `<table class="w-full text-xs">
+                    <tr class="text-gray-400"><th class="text-left py-1">#</th><th class="text-left py-1">請求先</th><th class="text-left py-1">内容</th><th class="text-left py-1">応援</th></tr>
+                    ${requests.map((r, i) => `<tr class="border-t border-white/10"><td class="py-1.5">${i + 1}</td><td class="py-1.5">${escapeHtml(r.authority)}</td><td class="py-1.5">${escapeHtml(r.requested_documents || r.record_id)}</td><td class="py-1.5">${r.tip_count}件 (${escapeHtml(fmtBreakdown(r.breakdown))})</td></tr>`).join('')}
+                </table>`;
+            } catch (err) {
+                box.innerHTML = `<span class="text-red-300 text-xs">${escapeHtml(err.message)}</span>`;
+            }
+        }
+        document.getElementById('refreshTrendingBtn').addEventListener('click', loadTrending);
+
+        loadLeaderboard();
+        loadTrending();
     </script>
 </body>
 </html>

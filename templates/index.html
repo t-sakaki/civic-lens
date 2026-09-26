@@ -40,6 +40,7 @@
     <meta name="twitter:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
     <style>
         :root,
         html[data-theme="dark"] {
@@ -2107,10 +2108,16 @@
 
                 <div class="flex flex-col sm:flex-row gap-3 items-center">
                     <button id="issueAttestationBtn" class="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 text-white px-5 py-2.5 rounded-md hover:from-teal-700 hover:to-emerald-700 font-semibold shadow flex items-center justify-center gap-2 transition">
-                        <span>🔏</span> オンチェーンに存在証明を刻印 (EAS)
+                        <span>🔏</span> Civic Lensの代理署名で刻印
+                    </button>
+                    <button id="walletAttestBtn" class="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 text-white px-5 py-2.5 rounded-md hover:from-amber-600 hover:to-orange-600 font-semibold shadow flex items-center justify-center gap-2 transition">
+                        <span>🦊</span> 自分のウォレットで直接署名して刻印
                     </button>
                     <span id="attestationStatus" class="text-xs text-gray-500"></span>
                 </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    「自分のウォレットで直接署名」を選ぶと、Civic Lens は代理署名せず、MetaMask等であなた自身がEASコントラクトへ直接送信します（ガス代はご自身の負担になります）。
+                </p>
 
                 <!-- EAS証明書表示カード -->
                 <div id="attestationResultCard" class="hidden mt-4 bg-white p-5 rounded-md border-2 border-teal-300 text-sm shadow space-y-3">
@@ -5143,6 +5150,172 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🔏</span> オンチェーンに存在証明を刻印 (EAS)';
+            }
+        });
+
+        // -----------------------------------------------------------------
+        // 🦊 自分のウォレットで直接署名して刻印（サーバー代理署名なし）
+        //
+        // Civic Lens サーバーは秘密鍵で署名しない。ユーザーのMetaMask等が
+        // EASコントラクトへ直接 attest() を送信し、成功後にそのUIDだけを
+        // サーバーの索引（台帳表示用の付帯情報）へ登録する。
+        // -----------------------------------------------------------------
+        const WALLET_ATTEST_CHAIN_ID_HEX = '0x14a34'; // 84532 = Base Sepolia
+        const WALLET_ATTEST_CHAIN_PARAMS = {
+            chainId: WALLET_ATTEST_CHAIN_ID_HEX,
+            chainName: 'Base Sepolia',
+            nativeCurrency: { name: 'Base Sepolia ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://sepolia.base.org'],
+            blockExplorerUrls: ['https://sepolia.basescan.org'],
+        };
+        const WALLET_ATTEST_EAS_ADDRESS = '0x4200000000000000000000000000000000000021';
+        const WALLET_ATTEST_EAS_ABI = [
+            'function attest((bytes32 schema,(address recipient,uint64 expirationTime,bool revocable,bytes32 refUID,bytes data,uint256 value) data) request) payable returns (bytes32)',
+            'event Attested(address indexed recipient, address indexed attester, bytes32 uid, bytes32 indexed schemaUID)',
+        ];
+
+        const ZERO_BYTES32_FALLBACK = '0x' + '0'.repeat(64);
+
+        async function sha256HexTrimmed(text) {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text.trim()));
+            return '0x' + Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        document.getElementById('walletAttestBtn').addEventListener('click', async () => {
+            if (!currentDisclosureText) {
+                alert('先に開示請求書を生成してください。');
+                return;
+            }
+            if (!window.ethereum) {
+                alert('MetaMask等のウォレット拡張機能が見つかりません。インストールするか、「Civic Lensの代理署名で刻印」をお使いください。');
+                return;
+            }
+
+            const btn = document.getElementById('walletAttestBtn');
+            const statusEl = document.getElementById('attestationStatus');
+            const resultCard = document.getElementById('attestationResultCard');
+            const publish = document.getElementById('attestationPublicCheckbox').checked;
+            const requestedDocs = document.getElementById('attestationRequestedDocs').value.trim();
+            const warningsEl = document.getElementById('attestationPiiWarnings');
+            if (publish && !requestedDocs) {
+                statusEl.innerHTML = '<span class="text-red-500">公開する請求文書の特定内容を入力してください。</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            statusEl.textContent = 'ウォレットに接続しています...';
+            try {
+                if (publish) {
+                    const scanForm = new FormData();
+                    scanForm.append('text', requestedDocs);
+                    const scanRes = await fetch('/api/web3/attestation/scan-pii', { method: 'POST', body: scanForm });
+                    const { warnings } = await scanRes.json();
+                    if (warnings && warnings.length) {
+                        warningsEl.innerHTML = '⚠ 個人情報の可能性がある記述が見つかりました：<br>' +
+                            warnings.map(w => `・${escapeHtml(w.type)}：「${escapeHtml(w.match)}」`).join('<br>');
+                        warningsEl.classList.remove('hidden');
+                        if (!confirm('個人情報の可能性がある記述が見つかりました（画面の警告を確認してください）。\n問題がないことを確認したうえで、このまま自分のウォレットで公開して記録しますか？')) {
+                            statusEl.textContent = '記録を中止しました。内容を修正してから再度お試しください。';
+                            return;
+                        }
+                    } else {
+                        warningsEl.classList.add('hidden');
+                    }
+                    if (!confirm(`次の内容を平文でオンチェーンに記録します。記録は削除できません。\n\n${requestedDocs}`)) {
+                        return;
+                    }
+                }
+
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send('eth_requestAccounts', []);
+                let network = await provider.getNetwork();
+                if ('0x' + network.chainId.toString(16) !== WALLET_ATTEST_CHAIN_ID_HEX) {
+                    try {
+                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: WALLET_ATTEST_CHAIN_ID_HEX }] });
+                    } catch (switchErr) {
+                        if (switchErr.code === 4902) {
+                            await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [WALLET_ATTEST_CHAIN_PARAMS] });
+                        } else { throw switchErr; }
+                    }
+                }
+                const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+                const walletAddress = await signer.getAddress();
+                const eas = new ethers.Contract(WALLET_ATTEST_EAS_ADDRESS, WALLET_ATTEST_EAS_ABI, signer);
+
+                const cfgRes = await fetch('/api/ledger/tips/config');
+                if (!cfgRes.ok) throw new Error((await cfgRes.json()).detail || 'スキーマ設定の取得に失敗しました');
+                const { eas_schema_uid: schemaUid } = await cfgRes.json();
+                if (!schemaUid) throw new Error('EAS_SCHEMA_UID がサーバーに未設定です。');
+
+                const recordId = 'req-' + (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(16));
+                const authority = currentTargetAuthority || '自治体';
+                const legalBasis = '情報公開法・各自治体情報公開条例';
+                const publicDocuments = publish ? requestedDocs : '';
+                const docHash = await sha256HexTrimmed(currentDisclosureText);
+                const nowTs = Math.floor(Date.now() / 1000);
+
+                const coder = ethers.AbiCoder.defaultAbiCoder();
+                const encodedData = coder.encode(
+                    ['string', 'string', 'string', 'bytes32', 'uint256', 'string'],
+                    [recordId, authority, publicDocuments, docHash, nowTs, legalBasis]
+                );
+
+                statusEl.textContent = 'ウォレットで署名してください（EASコントラクトへの直接送信）...';
+                const tx = await eas.attest({
+                    schema: schemaUid,
+                    data: { recipient: walletAddress, expirationTime: 0, revocable: false, refUID: ZERO_BYTES32_FALLBACK, data: encodedData, value: 0 },
+                });
+                statusEl.textContent = 'ブロック確定を待っています...';
+                const receipt = await tx.wait();
+                const parsed = receipt.logs
+                    .map((log) => { try { return eas.interface.parseLog(log); } catch { return null; } })
+                    .find((l) => l && l.name === 'Attested');
+                if (!parsed) throw new Error('Attestedイベントが見つかりませんでした。');
+                const uid = parsed.args.uid;
+
+                statusEl.textContent = 'Civic Lens 台帳への索引登録中...';
+                const regForm = new FormData();
+                regForm.append('uid', uid);
+                regForm.append('record_id', recordId);
+                regForm.append('title', currentRecordTitle);
+                const regRes = await fetch('/api/web3/attestation/register-wallet-signed', { method: 'POST', body: regForm });
+                if (!regRes.ok) throw new Error((await regRes.json()).detail || '台帳への索引登録に失敗しました（オンチェーン記録自体は成功しています）');
+                const record = await regRes.json();
+
+                latestAttestationUid = record.uid;
+                latestVerificationKit = {
+                    format: 'civic-lens-verification-kit/v1',
+                    note: 'この原本（original_text）の前後の空白を除いたUTF-8のSHA-256が、オンチェーンの documentHash と一致すれば、記録日時にこの内容の文書が存在したことを検証できます。原本には個人情報が含まれるため、取り扱いに注意してください。',
+                    uid: record.uid,
+                    record_id: record.record_id,
+                    explorer_url: record.explorer_url,
+                    chain_id: record.chain_id,
+                    schema_uid: record.schema_uid,
+                    attester: record.attester,
+                    authority: record.authority,
+                    legal_basis: record.legal_basis,
+                    requested_documents: record.requested_documents,
+                    document_hash: record.document_hash,
+                    hash_algorithm: 'sha256(utf-8, trimmed)',
+                    recorded_at: record.formatted_date,
+                    original_text: currentDisclosureText,
+                };
+
+                document.getElementById('attestUidText').textContent = record.uid;
+                document.getElementById('attestDocHashText').textContent = record.document_hash;
+                document.getElementById('attestNetworkText').textContent = record.network + '（🦊 本人ウォレット署名）';
+                document.getElementById('attestBlockText').textContent = `#${receipt.blockNumber}`;
+                document.getElementById('attestDateText').textContent = record.formatted_date;
+                document.getElementById('attestPublicDocsRow').classList.toggle('hidden', !record.requested_documents);
+                document.getElementById('attestPublicDocsText').textContent = record.requested_documents || '';
+                document.getElementById('attestExplorerLink').href = record.explorer_url;
+
+                resultCard.classList.remove('hidden');
+                statusEl.textContent = '✨ あなた自身のウォレット署名でオンチェーン刻印が完了しました！';
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                btn.disabled = false;
             }
         });
 

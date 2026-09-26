@@ -97,6 +97,7 @@ class AttestationRecord(BaseModel):
     authority: str                # 対象機関・自治体
     document_hash: str            # 0x... 文書本文のKeccak/SHA256ハッシュ
     attester: str                 # 公証アテスターのウォレットアドレス
+    signer_type: str = "server"   # "server"=Civic Lens代理署名 / "wallet"=請求者本人のウォレット署名
     recipient: str                # 請求者のウォレットアドレス (または匿名市民代理アドレス)
     timestamp: int                # Unix timestamp（オンチェーン記録時刻）
     formatted_date: str           # JST/UTC フォーマット日時
@@ -133,6 +134,7 @@ class AttestationIndexEntry(BaseModel):
     block_number: int
     owner_user_id: Optional[str] = None
     created_at: str
+    signer_type: str = "server"   # "server"=Civic Lens代理署名 / "wallet"=請求者本人のウォレット署名
 
 
 def _load_json_index() -> Dict[str, Dict[str, dict]]:
@@ -198,11 +200,11 @@ def _is_uid(value: str) -> bool:
     return bool(re.fullmatch(r"0x[0-9a-fA-F]{64}", value))
 
 
-def _expected_attester() -> str:
-    """Civic Lens の公証アドレス（台帳の表示と同じ判定を使う）"""
+def _official_attester() -> Optional[str]:
+    """Civic Lens 公証アドレス（サーバー代理署名時の attester）。表示上の区別にのみ使う。"""
     from onchain_ledger import ledger_config
 
-    return ledger_config()["attester"]
+    return ledger_config().get("attester")
 
 
 def compute_document_hash(content: str) -> str:
@@ -279,6 +281,7 @@ def issue_attestation(
         authority=authority,
         document_hash=doc_hash,
         attester=chain_result["attester"],
+        signer_type="server",
         recipient=recipient,
         timestamp=now_ts,
         formatted_date=now_iso,
@@ -303,6 +306,78 @@ def issue_attestation(
         block_number=record.block_number,
         owner_user_id=owner_user_id,
         created_at=now_iso,
+        signer_type="server",
+    ))
+
+    return record
+
+
+def register_wallet_attestation(
+    uid: str,
+    record_id: Optional[str] = None,
+    title: str = "開示請求書",
+    owner_user_id: Optional[str] = None,
+) -> AttestationRecord:
+    """請求者本人のウォレット（MetaMask等）が直接EASコントラクトに送信・署名した
+    attestationを、Civic Lens の索引に登録する。
+
+    サーバーは署名せず、送信も行わない。すでにチェーン上に確定した attestation の
+    UIDを受け取り、スキーマ一致・未撤回であることをチェーンから直接検証したうえで
+    索引に加えるだけである（issue_attestation の代理署名パスとは排他）。
+    """
+    schema_uid = os.getenv("EAS_SCHEMA_UID")
+    if not schema_uid:
+        raise ChainClientNotConfigured("環境変数 EAS_SCHEMA_UID が未設定です。")
+
+    onchain = fetch_attestation_onchain(uid)
+    if onchain is None:
+        raise ValueError(f"チェーン上に attestation が見つかりません: {uid}")
+    if onchain["schema"].lower() != schema_uid.lower():
+        raise ValueError("Civic Lens の開示請求スキーマと一致しない attestation です。")
+    if onchain["revocation_time"]:
+        raise ValueError("撤回済みの attestation です。")
+
+    rec_id, authority, requested, doc_hash_bytes, _ts, legal_basis = abi_decode(
+        ["string", "string", "string", "bytes32", "uint256", "string"], onchain["data"]
+    )
+    chain_id = onchain["chain_id"]
+    explorer_host = EAS_EXPLORER_HOSTS.get(chain_id, "https://easscan.org")
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    record = AttestationRecord(
+        uid=onchain["uid"],
+        schema_uid=onchain["schema"],
+        record_id=record_id or rec_id or f"req-{uid[2:10]}",
+        title=title,
+        authority=authority,
+        document_hash="0x" + doc_hash_bytes.hex(),
+        attester=onchain["attester"],
+        signer_type="wallet",
+        recipient=onchain["recipient"],
+        timestamp=onchain["time"],
+        formatted_date=datetime.fromtimestamp(onchain["time"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        legal_basis=legal_basis,
+        requested_documents=requested,
+        publish_plaintext=bool(requested),
+        revocable=onchain["revocable"],
+        network=f"Chain ID {chain_id}",
+        chain_id=chain_id,
+        tx_hash="",
+        block_number=0,
+        explorer_url=f"{explorer_host}/attestation/view/{onchain['uid']}",
+        is_valid=True,
+    )
+
+    _save_index(AttestationIndexEntry(
+        uid=record.uid,
+        record_id=record.record_id,
+        title=title,
+        chain_id=chain_id,
+        tx_hash="",
+        block_number=0,
+        owner_user_id=owner_user_id,
+        created_at=now_iso,
+        signer_type="wallet",
     ))
 
     return record
@@ -333,20 +408,23 @@ def build_verification_kit(record: AttestationRecord, content: str) -> Dict:
 
 
 def get_attestation(uid_or_record_id: str) -> Optional[AttestationRecord]:
-    """UID または record_id から記録を取得する。内容は必ずチェーンから読み出し、
+    """UID または record_id から記録を取得する。内容は必ずチェーンから読み出す。
 
-    スキーマと記録者（Civic Lens 公証アドレス）が一致しない・撤回済み・チェーン上に存在しない場合は None。
+    索引（サーバー代理署名の issue_attestation、または本人のウォレット署名を登録する
+    register_wallet_attestation のいずれかでのみ追加される）に存在し、かつスキーマ一致・
+    未撤回・チェーン上に存在することを条件とする。attester（署名者）はサーバー公証アドレスに
+    限定しない — 索引への登録自体がこの2つの正規の経路を通ったことの証跡であり、
+    署名者が請求者本人のウォレットである記録も正当な記録として扱う。
     """
     entry = _get_index(uid_or_record_id)
     uid = entry.uid if entry else (uid_or_record_id if _is_uid(uid_or_record_id) else None)
-    if not uid:
+    if not uid or not entry:
         return None
     onchain = fetch_attestation_onchain(uid)
     schema_uid = os.getenv("EAS_SCHEMA_UID") or ""
     if (
         onchain is None
         or onchain["schema"].lower() != schema_uid.lower()
-        or onchain["attester"].lower() != _expected_attester().lower()
         or onchain["revocation_time"]
     ):
         return None
@@ -356,6 +434,8 @@ def get_attestation(uid_or_record_id: str) -> Optional[AttestationRecord]:
     )
     chain_id = onchain["chain_id"]
     explorer_host = EAS_EXPLORER_HOSTS.get(chain_id, "https://easscan.org")
+    official = _official_attester()
+    signer_type = entry.signer_type or ("server" if official and onchain["attester"].lower() == official.lower() else "wallet")
     return AttestationRecord(
         uid=onchain["uid"],
         schema_uid=onchain["schema"],
@@ -364,6 +444,7 @@ def get_attestation(uid_or_record_id: str) -> Optional[AttestationRecord]:
         authority=authority,
         document_hash="0x" + doc_hash.hex(),
         attester=onchain["attester"],
+        signer_type=signer_type,
         recipient=onchain["recipient"],
         timestamp=onchain["time"],
         formatted_date=datetime.fromtimestamp(onchain["time"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),

@@ -82,10 +82,11 @@ from web3_bounty import (
 from web3_chain_client import ChainClientNotConfigured
 from web3_attestation import (
     issue_attestation, get_attestation, verify_attestation, list_all_attestations,
-    PersonalInfoWarning, build_verification_kit,
+    register_wallet_attestation, scan_personal_info, PersonalInfoWarning, build_verification_kit,
 )
 from onchain_ledger import fetch_ledger_entries, get_ledger_entry, ledger_meta, LedgerNotConfigured
 from ledger_reactions import get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES
+from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
 from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
@@ -1071,6 +1072,97 @@ async def api_ledger_react(
     if entry is None:
         raise HTTPException(404, "オンチェーン台帳に該当する記録がありません。")
     return {"uid": entry["uid"], "reactions": toggle_reaction(entry["uid"], current_user.user_id, reaction)}
+
+
+# ---------------------------------------------------------------------------
+# 投げ銭（オンチェーン応援）— 読み取り専用。送金・記録は必ず応援者本人のウォレットが
+# 直接EASコントラクトへ署名・送信し、サーバーは代理署名・仲介を一切行わない。
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ledger/tips/config")
+async def api_ledger_tips_config():
+    """フロントエンドがウォレットから直接EASにattestationを送信するために必要な設定値。"""
+    try:
+        meta = ledger_meta()
+        tip_schema = tip_schema_uid()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return {
+        "eas_schema_uid": meta["schema_uid"],
+        "tip_schema_uid": tip_schema,
+        "network": meta["network"],
+        "usdc_address": os.getenv("USDC_CONTRACT_ADDRESS", ""),
+    }
+
+
+@app.get("/api/ledger/tips/leaderboard")
+async def api_ledger_tips_leaderboard():
+    """投げ銭・紹介の応援者ランキング（チェーンから都度集計、通貨別内訳つき）。"""
+    try:
+        return build_tip_leaderboard()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"投げ銭ランキングの読み込みに失敗しました: {e}")
+
+
+@app.get("/api/ledger/tips/trending")
+async def api_ledger_tips_trending(window_hours: int = 24, limit: int = 10):
+    """急上昇中の開示請求（直近window_hours時間で投げ銭が集まっている順）。"""
+    try:
+        return {"requests": trending_requests(window_hours, limit)}
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"急上昇ランキングの読み込みに失敗しました: {e}")
+
+
+@app.get("/api/ledger/{uid}/tips")
+async def api_ledger_entry_tips(uid: str):
+    """特定の開示請求に寄せられた投げ銭の一覧（応援メッセージ付き）。"""
+    try:
+        return {"tips": tips_for_request(uid)}
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"投げ銭一覧の読み込みに失敗しました: {e}")
+
+
+@app.post("/api/web3/attestation/scan-pii")
+async def api_scan_pii(text: str = Form(...)):
+    """自分のウォレットで直接署名するフロー用に、オンチェーンに公開する前のPIIチェックだけを行う。
+
+    サーバー代理署名フロー（/api/web3/attestation/issue）は内部で同じチェックを行うが、
+    ウォレット直接署名フローはサーバーを経由せずに送信するため、送信前に同じ警告を
+    フロントエンドから呼び出せるようにする（記録そのものは行わない）。
+    """
+    return {"warnings": scan_personal_info(text)}
+
+
+@app.post("/api/web3/attestation/register-wallet-signed")
+async def api_register_wallet_attestation(
+    uid: str = Form(...),
+    record_id: Optional[str] = Form(None),
+    title: str = Form("開示請求書"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """請求者本人のウォレットが直接EASコントラクトに送信・署名した開示請求attestationを、
+    Civic Lens の索引（台帳表示用の付帯情報）に登録する。
+
+    サーバーは署名も送金も行わない。チェーン上のattestationを直接検証したうえで登録するのみ。
+    """
+    try:
+        record = register_wallet_attestation(
+            uid=uid,
+            record_id=record_id,
+            title=title,
+            owner_user_id=current_user.user_id if current_user else None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return record.model_dump()
 
 
 @app.get("/api/precedent-cases")

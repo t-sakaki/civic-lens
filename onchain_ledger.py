@@ -37,17 +37,18 @@ TX_EXPLORER_HOSTS = {
     8453: "https://basescan.org",
 }
 NETWORK_NAMES = {84532: "Base Sepolia（テストネット）", 8453: "Base"}
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 _CACHE_TTL_SECONDS = 60
 _cache: Dict[str, Any] = {"at": 0.0, "entries": None}
 
 _QUERY = """
-query Ledger($schema: String!, $attester: String!) {
+query Ledger($schema: String!) {
   attestations(
-    where: { schemaId: { equals: $schema }, attester: { equals: $attester } }
+    where: { schemaId: { equals: $schema } }
     orderBy: [{ time: desc }]
     take: 200
-  ) { id time txid revoked refUID decodedDataJson }
+  ) { id attester recipient time txid revoked refUID decodedDataJson }
 }
 """
 
@@ -57,7 +58,15 @@ class LedgerNotConfigured(RuntimeError):
 
 
 def ledger_config() -> Dict[str, Any]:
-    """読み取りに必要な設定。公証アドレスは LEDGER_ATTESTER_ADDRESS、未設定なら秘密鍵から導出する。"""
+    """読み取りに必要な設定。
+
+    台帳はスキーマUID（EAS_SCHEMA_UID）だけで絞り込む。以前はさらに「単一の公証アドレス」で
+    絞り込んでいたが、市民が自分自身のウォレットで署名した記録（サーバー代理署名なし）も
+    台帳に並べて表示するため、attester による絞り込みはやめた。
+    LEDGER_ATTESTER_ADDRESS（未設定なら CHAIN_PRIVATE_KEY から導出）は、各記録が
+    「Civic Lens 公証（サーバー代理署名）」か「本人のウォレット署名」かを画面上で区別する
+    表示用の参考値としてのみ使う。
+    """
     schema_uid = os.getenv("EAS_SCHEMA_UID")
     if not schema_uid:
         raise LedgerNotConfigured("環境変数 EAS_SCHEMA_UID が未設定です。")
@@ -66,8 +75,6 @@ def ledger_config() -> Dict[str, Any]:
         from eth_account import Account
 
         attester = Account.from_key(os.environ["CHAIN_PRIVATE_KEY"]).address
-    if not attester:
-        raise LedgerNotConfigured("環境変数 LEDGER_ATTESTER_ADDRESS（公証アドレス）が未設定です。")
     chain_id = int(os.getenv("EAS_CHAIN_ID", "84532"))
     if chain_id not in EAS_GRAPHQL_URLS:
         raise LedgerNotConfigured(f"未対応のチェーンIDです: {chain_id}")
@@ -108,11 +115,18 @@ def compute_deadline(authority: str, recorded_at: datetime, today: Optional[date
     }
 
 
-def _parse(att: Dict[str, Any], chain_id: int, today: Optional[datetime] = None) -> Dict[str, Any]:
+def _parse(att: Dict[str, Any], chain_id: int, official_attester: Optional[str], today: Optional[datetime] = None) -> Dict[str, Any]:
     fields = {f["name"]: f["value"]["value"] for f in json.loads(att["decodedDataJson"])}
     recorded_at = datetime.fromtimestamp(int(att["time"]), JST)
     authority = fields.get("authority", "")
     requested = fields.get("requestedDocuments", "") or ""
+    attester = att.get("attester", "")
+    recipient = att.get("recipient", "") or ""
+    is_official = bool(official_attester) and attester.lower() == official_attester.lower()
+    is_zero_recipient = recipient.lower() == ZERO_ADDRESS
+    # 投げ銭の送金先: recipientが指定されていればそれ、なければ「本人ウォレット署名」の場合の
+    # attester自身（=請求者本人）。Civic Lens公証・recipient未指定の場合は送金先が特定できない。
+    tip_recipient = recipient if not is_zero_recipient else (attester if not is_official else None)
     return {
         "uid": att["id"],
         "record_id": fields.get("recordId", ""),
@@ -126,6 +140,10 @@ def _parse(att: Dict[str, Any], chain_id: int, today: Optional[datetime] = None)
         "revoked": bool(att.get("revoked")),
         "ref_uid": att.get("refUID"),
         "tx_hash": att.get("txid"),
+        "attester": attester,
+        "tip_recipient": tip_recipient,
+        "signer_type": "official" if is_official else "wallet",
+        "signer_label": "Civic Lens 公証（代理署名）" if is_official else "請求者本人のウォレット署名",
         "explorer_url": f"{EAS_EXPLORER_HOSTS[chain_id]}/attestation/view/{att['id']}",
         "tx_url": f"{TX_EXPLORER_HOSTS[chain_id]}/tx/{att.get('txid')}",
         "deadline": compute_deadline(authority, recorded_at, today),
@@ -133,13 +151,17 @@ def _parse(att: Dict[str, Any], chain_id: int, today: Optional[datetime] = None)
 
 
 def fetch_ledger_entries(force: bool = False) -> List[Dict[str, Any]]:
-    """オンチェーンの開示請求記録を新しい順に返す（60秒キャッシュ）。"""
+    """オンチェーンの開示請求記録を新しい順に返す（60秒キャッシュ）。
+
+    Civic Lens 公証（サーバー代理署名）と、市民本人のウォレット署名の両方を含む
+    （schema UID のみで絞り込み、署名者は問わない）。
+    """
     if not force and _cache["entries"] is not None and time.time() - _cache["at"] < _CACHE_TTL_SECONDS:
         return _cache["entries"]
     cfg = ledger_config()
     resp = httpx.post(
         EAS_GRAPHQL_URLS[cfg["chain_id"]],
-        json={"query": _QUERY, "variables": {"schema": cfg["schema_uid"], "attester": cfg["attester"]}},
+        json={"query": _QUERY, "variables": {"schema": cfg["schema_uid"]}},
         timeout=20,
     )
     resp.raise_for_status()
@@ -147,7 +169,7 @@ def fetch_ledger_entries(force: bool = False) -> List[Dict[str, Any]]:
     if body.get("errors"):
         raise RuntimeError(f"EAS GraphQL error: {body['errors']}")
     entries = [
-        _parse(a, cfg["chain_id"])
+        _parse(a, cfg["chain_id"], cfg["attester"])
         for a in body["data"]["attestations"]
         if not a.get("revoked")
     ]
