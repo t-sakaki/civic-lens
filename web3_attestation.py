@@ -36,14 +36,19 @@ if os.getenv("VERCEL"):
 else:
     ATTESTATION_STORAGE_PATH = os.path.join(DEFAULT_STORAGE_DIR, "attestations.json")
 
-# EAS スキーマ定義: 請求書ID, 実施機関, 請求する公文書の特定内容（公開時のみ平文）, 文書ハッシュ, 請求日時, 根拠条例
+# EAS スキーマ定義: 請求書ID, 実施機関, 請求種別, 請求する公文書の特定内容（公開時のみ平文）,
+# 文書ハッシュ, 請求日時, 根拠条例
+# information-disclosure-proof リポジトリと共通仕様（フィールド名・順序）にしてあるため、
+# 両リポジトリ間でスキーマ定義を変更する際は必ず両方に反映すること。
 # 実際のスキーマUIDは scripts/register_eas_schema.py で SchemaRegistry に一度だけ登録し、
 # 環境変数 EAS_SCHEMA_UID に設定する。ここでのローカルsha256はスキーマ内容の記録用参考値であり
 # 実チェーン上のUIDとしては使用しない。
 EAS_SCHEMA_RAW = (
-    "string recordId, string authority, string requestedDocuments, "
+    "string recordId, string authority, string requestType, string requestedDocuments, "
     "bytes32 documentHash, uint256 timestamp, string legalBasis"
 )
+
+DEFAULT_REQUEST_TYPE = "行政文書開示請求"
 
 # 平文で記録する「請求する公文書の特定内容」の上限（UTF-8バイト数。日本語約330文字）
 MAX_REQUESTED_DOCUMENTS_BYTES = 1000
@@ -95,6 +100,7 @@ class AttestationRecord(BaseModel):
     record_id: str                # 開示請求レコードID
     title: str                    # 請求件名
     authority: str                # 対象機関・自治体
+    request_type: str = DEFAULT_REQUEST_TYPE  # 請求種別（例: 行政文書開示請求）
     document_hash: str            # 0x... 文書本文のKeccak/SHA256ハッシュ
     attester: str                 # 公証アテスターのウォレットアドレス
     signer_type: str = "server"   # "server"=Civic Lens代理署名 / "wallet"=請求者本人のウォレット署名
@@ -219,6 +225,7 @@ def issue_attestation(
     content: str,
     authority: str,
     legal_basis: str = "情報公開法・各自治体情報公開条例",
+    request_type: str = DEFAULT_REQUEST_TYPE,
     user_wallet_address: Optional[str] = None,
     requested_documents: str = "",
     publish_plaintext: bool = False,
@@ -257,8 +264,8 @@ def issue_attestation(
     recipient = user_wallet_address or ZERO_ADDRESS
 
     encoded_data = abi_encode(
-        ["string", "string", "string", "bytes32", "uint256", "string"],
-        [record_id, authority, public_documents, bytes.fromhex(doc_hash[2:]), now_ts, legal_basis],
+        ["string", "string", "string", "string", "bytes32", "uint256", "string"],
+        [record_id, authority, request_type, public_documents, bytes.fromhex(doc_hash[2:]), now_ts, legal_basis],
     )
 
     schema_uid = os.getenv("EAS_SCHEMA_UID")
@@ -279,6 +286,7 @@ def issue_attestation(
         record_id=record_id,
         title=title,
         authority=authority,
+        request_type=request_type,
         document_hash=doc_hash,
         attester=chain_result["attester"],
         signer_type="server",
@@ -337,8 +345,8 @@ def register_wallet_attestation(
     if onchain["revocation_time"]:
         raise ValueError("撤回済みの attestation です。")
 
-    rec_id, authority, requested, doc_hash_bytes, _ts, legal_basis = abi_decode(
-        ["string", "string", "string", "bytes32", "uint256", "string"], onchain["data"]
+    rec_id, authority, req_type, requested, doc_hash_bytes, _ts, legal_basis = abi_decode(
+        ["string", "string", "string", "string", "bytes32", "uint256", "string"], onchain["data"]
     )
     chain_id = onchain["chain_id"]
     explorer_host = EAS_EXPLORER_HOSTS.get(chain_id, "https://easscan.org")
@@ -350,6 +358,7 @@ def register_wallet_attestation(
         record_id=record_id or rec_id or f"req-{uid[2:10]}",
         title=title,
         authority=authority,
+        request_type=req_type or DEFAULT_REQUEST_TYPE,
         document_hash="0x" + doc_hash_bytes.hex(),
         attester=onchain["attester"],
         signer_type="wallet",
@@ -398,6 +407,7 @@ def build_verification_kit(record: AttestationRecord, content: str) -> Dict:
         "schema_uid": record.schema_uid,
         "attester": record.attester,
         "authority": record.authority,
+        "request_type": record.request_type,
         "legal_basis": record.legal_basis,
         "requested_documents": record.requested_documents,
         "document_hash": record.document_hash,
@@ -429,8 +439,8 @@ def get_attestation(uid_or_record_id: str) -> Optional[AttestationRecord]:
     ):
         return None
 
-    record_id, authority, requested, doc_hash, _, legal_basis = abi_decode(
-        ["string", "string", "string", "bytes32", "uint256", "string"], onchain["data"]
+    record_id, authority, req_type, requested, doc_hash, _, legal_basis = abi_decode(
+        ["string", "string", "string", "string", "bytes32", "uint256", "string"], onchain["data"]
     )
     chain_id = onchain["chain_id"]
     explorer_host = EAS_EXPLORER_HOSTS.get(chain_id, "https://easscan.org")
@@ -442,6 +452,7 @@ def get_attestation(uid_or_record_id: str) -> Optional[AttestationRecord]:
         record_id=record_id,
         title=entry.title if entry else record_id,
         authority=authority,
+        request_type=req_type or DEFAULT_REQUEST_TYPE,
         document_hash="0x" + doc_hash.hex(),
         attester=onchain["attester"],
         signer_type=signer_type,

@@ -41,6 +41,7 @@ def main():
     parser = argparse.ArgumentParser(description="外部で提出した開示請求をオンチェーンに記録する")
     parser.add_argument("--authority", required=True, help="実施機関（例: 愛知県知事）")
     parser.add_argument("--legal-basis", required=True, help="根拠条例（例: 愛知県情報公開条例）")
+    parser.add_argument("--request-type", default="行政文書開示請求", help="請求種別（例: 行政文書開示請求）")
     parser.add_argument("--content-file", required=True, help="請求書（申請内容）全文のテキストファイル")
     parser.add_argument("--requested-documents", default="", help="請求する公文書の特定内容")
     parser.add_argument("--public", action="store_true", help="請求文書の特定内容を平文でオンチェーンに記録する")
@@ -62,6 +63,7 @@ def main():
 
     print("=== オンチェーンに記録する内容（記録後は削除できません） ===")
     print(f"実施機関          : {args.authority}")
+    print(f"請求種別          : {args.request_type}")
     print(f"根拠条例          : {args.legal_basis}")
     print(f"請求文書の特定内容: {public_docs or '（非公開：ハッシュのみ）'}")
     print(f"請求書全文のハッシュ: {compute_document_hash(content)}")
@@ -85,6 +87,7 @@ def main():
         content=content,
         authority=args.authority,
         legal_basis=args.legal_basis,
+        request_type=args.request_type,
         requested_documents=args.requested_documents,
         publish_plaintext=args.public,
         acknowledge_warnings=True,  # 上で内容と警告を提示し、本人が確認済み

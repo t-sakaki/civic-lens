@@ -77,8 +77,8 @@ def _decode_tip_data(data_hex: str):
 
 def _decode_request_data(data_hex: str):
     raw = bytes.fromhex(data_hex[2:] if data_hex.startswith("0x") else data_hex)
-    record_id, authority, requested_documents, _doc_hash, _ts, _legal_basis = abi_decode(
-        ["string", "string", "string", "bytes32", "uint256", "string"], raw
+    record_id, authority, _request_type, requested_documents, _doc_hash, _ts, _legal_basis = abi_decode(
+        ["string", "string", "string", "string", "bytes32", "uint256", "string"], raw
     )
     return record_id, authority, requested_documents
 
@@ -225,6 +225,26 @@ def trending_requests(window_hours: int = 24, limit: int = 10) -> List[Dict[str,
             ],
         })
     return results
+
+
+def all_time_tip_totals() -> Dict[str, Dict[str, Any]]:
+    """開示請求UID(refUID) -> 全期間の投げ銭件数・通貨別合計。
+
+    統合フィード（みんなの請求）のランキング表示に使う。急上昇ランキング
+    （trending_requests）は直近window_hoursだけを見るが、こちらは
+    「いままでにどれだけ応援されたか」を見る全期間版。
+    """
+    data = _graphql(_TIPS_QUERY, {"schemaId": tip_schema_uid()})
+    totals: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"tip_count": 0, "breakdown": defaultdict(float)})
+    for a in data["attestations"]:
+        ref_uid = (a.get("refUID") or "").lower()
+        if not ref_uid or ref_uid == ZERO_BYTES32:
+            continue
+        token, _referrer, amount, _comment = _decode_tip_data(a["data"])
+        symbol, decimals = _token_info(token)
+        totals[ref_uid]["tip_count"] += 1
+        totals[ref_uid]["breakdown"][symbol] += amount / (10 ** decimals)
+    return totals
 
 
 def tips_for_request(ref_uid: str) -> List[Dict[str, Any]]:

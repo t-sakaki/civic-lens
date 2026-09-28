@@ -906,6 +906,32 @@
             flex-direction: column;
             gap: 0.3rem;
         }
+        .start-news-theme-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-bottom: 0.4rem;
+        }
+        .start-news-theme-chip {
+            font-size: 0.68rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            border: 1px solid var(--chat-border);
+            background: transparent;
+            color: var(--chat-muted);
+            transition: background 0.12s, border-color 0.12s, color 0.12s;
+        }
+        .start-news-theme-chip:hover,
+        .start-news-theme-chip:focus-visible {
+            border-color: rgba(244, 63, 94, 0.5);
+            outline: none;
+        }
+        .start-news-theme-chip.active {
+            background: rgba(244, 63, 94, 0.12);
+            border-color: rgba(244, 63, 94, 0.6);
+            color: var(--chat-text);
+            font-weight: 600;
+        }
         .start-news-item {
             display: flex;
             align-items: center;
@@ -1749,6 +1775,7 @@
                                             <h4 id="startMenuNewsTitle">📰 ニュースから怒りを再現</h4>
                                             <button type="button" id="startMenuNewsReloadBtn" class="start-menu-link">再読み込み</button>
                                         </div>
+                                        <div id="startMenuNewsThemeChips" class="start-news-theme-chips"></div>
                                         <p id="startMenuNewsStatus" class="start-menu-status hidden"></p>
                                         <div id="startMenuNewsList" class="start-news-list"></div>
                                     </div>
@@ -2292,7 +2319,7 @@
         </div><!-- /chatRightPane -->
         </div><!-- /chatSplitGrid -->
 
-        <!-- STEP 7: みんなの請求 (Public ダッシュボード) -->
+        <!-- STEP 7: みんなの請求 (DB Public共有 + オンチェーン台帳 統合フィード) -->
         <section class="cl-card bg-white rounded-lg shadow-md p-6 mb-6 fade-in">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-xl font-bold text-gray-800">🌐 みんなの請求</h2>
@@ -2300,7 +2327,10 @@
                     🔄 更新
                 </button>
             </div>
-            <p class="text-sm text-gray-600 mb-4">他の市民がPublic共有した開示請求です。参考になったり、共感できる事例が見つかります。</p>
+            <p class="text-sm text-gray-600 mb-4">
+                他の市民がPublic共有した開示請求と、<a href="/ledger" class="text-indigo-600 hover:underline">⛓️ オンチェーン台帳</a>に刻印された開示請求をまとめて表示しています。
+                参考になったり、共感できる事例が見つかります。
+            </p>
 
             <!-- 統計サマリ -->
             <div id="publicStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -2312,33 +2342,43 @@
                     <div class="text-2xl font-bold text-green-700" id="statPublic">-</div>
                     <div class="text-xs text-green-600">Public</div>
                 </div>
+                <div class="bg-indigo-50 p-3 rounded-md text-center">
+                    <div class="text-2xl font-bold text-indigo-700" id="statOnchain">-</div>
+                    <div class="text-xs text-indigo-600">⛓️ オンチェーン</div>
+                </div>
                 <div class="bg-purple-50 p-3 rounded-md text-center">
                     <div class="text-2xl font-bold text-purple-700" id="statAuthority">-</div>
                     <div class="text-xs text-purple-600">対象自治体</div>
                 </div>
-                <div class="bg-orange-50 p-3 rounded-md text-center">
-                    <div class="text-2xl font-bold text-orange-700" id="statSituation">-</div>
-                    <div class="text-xs text-orange-600">シチュエーション</div>
+            </div>
+
+            <!-- フィルタ & 並び替え -->
+            <div class="flex gap-2 mb-4 flex-wrap items-center justify-between">
+                <div class="flex gap-2 flex-wrap">
+                    <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200 active" data-filter="all">
+                        すべて
+                    </button>
+                    <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="自治体">
+                        🏛️ 自治体
+                    </button>
+                    <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="警察">
+                        🚔 警察
+                    </button>
+                    <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="裁判所">
+                        ⚖️ 裁判所
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button class="sort-btn px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-700 active" data-sort="new">
+                        🕐 新着順
+                    </button>
+                    <button class="sort-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-indigo-100" data-sort="ranking">
+                        🏆 人気順
+                    </button>
                 </div>
             </div>
 
-            <!-- フィルタ -->
-            <div class="flex gap-2 mb-4 flex-wrap">
-                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200 active" data-filter="all">
-                    すべて
-                </button>
-                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="自治体">
-                    🏛️ 自治体
-                </button>
-                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="警察">
-                    🚔 警察
-                </button>
-                <button class="filter-btn px-3 py-1 rounded-full text-sm bg-gray-200 hover:bg-blue-200" data-filter="裁判所">
-                    ⚖️ 裁判所
-                </button>
-            </div>
-
-            <!-- Public フィード -->
+            <!-- 統合フィード -->
             <div id="publicFeed" class="space-y-3">
                 <div class="text-center text-gray-400 py-8">読み込み中...</div>
             </div>
@@ -3187,25 +3227,71 @@
             });
         }
 
-        // ニュースは地域ごとにキャッシュし、メニューを開くたびに取り直さない
+        // ニュースは地域×テーマごとにキャッシュし、メニューを開くたびに取り直さない
         const newsCache = {};
+        // テーマ別怒り再現エージェント（news_anger_agent.NEWS_THEMES）の選択状態。
+        // ジェンダー・貧困・公正・気候変動・生物多様性・人権など、同じニュースでも
+        // どの立場から怒るかをユーザーが切り替えられるようにする。
+        let newsAgentThemes = [{ id: 'general', label: '一般（行政監視）' }];
+        let selectedNewsTheme = 'general';
+
+        async function loadNewsAgentThemes() {
+            try {
+                const res = await fetch('/api/news-agent/themes');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (Array.isArray(data.themes) && data.themes.length > 0) {
+                    newsAgentThemes = data.themes;
+                    selectedNewsTheme = data.default_theme || newsAgentThemes[0].id;
+                }
+                renderNewsThemeChips();
+            } catch (err) {
+                console.warn('テーマ一覧の取得に失敗:', err.message);
+            }
+        }
+
+        function renderNewsThemeChips() {
+            const wrap = document.getElementById('startMenuNewsThemeChips');
+            if (!wrap) return;
+            wrap.innerHTML = '';
+            newsAgentThemes.forEach(t => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'start-news-theme-chip' + (t.id === selectedNewsTheme ? ' active' : '');
+                chip.textContent = t.label;
+                chip.addEventListener('click', () => {
+                    if (selectedNewsTheme === t.id) return;
+                    selectedNewsTheme = t.id;
+                    renderNewsThemeChips();
+                    const region = getNewsRegion();
+                    if (region) loadNewsForRegion(region, { force: true });
+                });
+                wrap.appendChild(chip);
+            });
+        }
+
+        function newsCacheKey(region, theme) {
+            return `${region}::${theme}`;
+        }
 
         async function loadNewsForRegion(region, { force = false } = {}) {
             if (!region) return;
-            if (!force && newsCache[region] && newsCache[region].status !== 'error') return;
-            newsCache[region] = { status: 'loading', items: [] };
+            const theme = selectedNewsTheme;
+            const key = newsCacheKey(region, theme);
+            if (!force && newsCache[key] && newsCache[key].status !== 'error') return;
+            newsCache[key] = { status: 'loading', items: [] };
             if (isStartMenuOpen()) renderNewsSection();
             try {
-                const params = new URLSearchParams({ region, max_items: '6' });
+                const params = new URLSearchParams({ region, theme, max_items: '6' });
                 const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(typeof errData.detail === 'string' ? errData.detail : `HTTP ${res.status}`);
                 }
                 const data = await res.json();
-                newsCache[region] = { status: 'ready', items: data.items || [] };
+                newsCache[key] = { status: 'ready', items: data.items || [] };
             } catch (err) {
-                newsCache[region] = { status: 'error', items: [], message: err.message };
+                newsCache[key] = { status: 'error', items: [], message: err.message };
             }
             if (isStartMenuOpen()) {
                 renderNewsSection();
@@ -3228,7 +3314,7 @@
                 : '📰 ニュースから怒りを再現';
             list.innerHTML = '';
 
-            const entry = region ? newsCache[region] : null;
+            const entry = region ? newsCache[newsCacheKey(region, selectedNewsTheme)] : null;
             let statusText = '';
             if (!region) statusText = '対象地域が決まると、その地域のニュースを表示します';
             else if (!entry || entry.status === 'loading') statusText = '🔄 ニュースを収集中…';
@@ -3263,7 +3349,7 @@
             renderNearbySection(selectedKey);
 
             const region = getNewsRegion();
-            if (region && !newsCache[region]) loadNewsForRegion(region);
+            if (region && !newsCache[newsCacheKey(region, selectedNewsTheme)]) loadNewsForRegion(region);
             renderNewsSection();
 
             const situationGrid = document.getElementById('startMenuSituationGrid');
@@ -3516,8 +3602,9 @@
                 if (item.published) formData.append('published', item.published);
                 const region = getNewsRegion();
                 if (region) formData.append('region', region);
+                formData.append('theme', selectedNewsTheme);
 
-                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData });
+                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData }, 2);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);
@@ -3549,7 +3636,19 @@
                     setSelectedAuthority(record.anger_analysis.target_authority_key);
                 }
             } catch (err) {
-                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
+                // 分析はGemini呼び出しを2回連続で行うため数十秒かかり、不安定なネットワークでは
+                // "Failed to fetch"（TypeError）になりやすい。サーバー側は処理を継続・完了している
+                // ことが多いため、ワンタップで再試行できるボタンを出す。
+                assistantBubble.innerHTML = `
+                    <span class="chat-bubble-label">🔍 Civic Lens</span>
+                    ⚠️ エラーが発生しました: ${escapeHtml(err.message)}
+                    <div class="text-xs text-gray-500 mt-1">通信が不安定な場合に起きやすいエラーです。もう一度お試しください。</div>
+                    <button type="button" class="news-analyze-retry-btn mt-2 text-xs bg-gray-800 text-white px-2.5 py-1.5 rounded-md hover:bg-gray-700">🔄 再試行</button>
+                `;
+                assistantBubble.querySelector('.news-analyze-retry-btn').addEventListener('click', () => {
+                    assistantBubble.remove();
+                    analyzeNewsItemInChat(item);
+                });
             }
         }
 
@@ -5463,23 +5562,24 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         });
 
         // =====================================================
-        // Public ダッシュボード（みんなの請求）
+        // みんなの請求（DB Public共有 + オンチェーン台帳 統合フィード）
         // =====================================================
         let currentFilter = 'all';
+        let currentSort = 'new';
         let publicRecords = [];
 
         async function loadPublicFeed() {
             try {
                 // 統計
-                const statsRes = await fetch('/api/visibility/stats');
+                const statsRes = await fetch('/api/community-feed/stats');
                 const stats = await statsRes.json();
                 document.getElementById('statTotal').textContent = stats.total_records;
                 document.getElementById('statPublic').textContent = stats.public_count;
+                document.getElementById('statOnchain').textContent = stats.onchain_count;
                 document.getElementById('statAuthority').textContent = Object.keys(stats.by_authority || {}).length;
-                document.getElementById('statSituation').textContent = Object.keys(stats.by_situation || {}).length;
 
-                // Public フィード
-                const feedRes = await fetch('/api/visibility/public?limit=50');
+                // 統合フィード
+                const feedRes = await fetch(`/api/community-feed?limit=50&sort=${currentSort}`);
                 const feedData = await feedRes.json();
                 publicRecords = feedData.records;
                 renderPublicFeed();
@@ -5499,7 +5599,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             if (filtered.length === 0) {
                 document.getElementById('publicFeed').innerHTML =
                     `<div class="text-center text-gray-400 py-8">まだ共有された請求がありません。<br>
-                     <span class="text-xs">上のSTEP4で「🌐 Public」を選んで保存すると、ここに表示されます。</span></div>`;
+                     <span class="text-xs">上のSTEP4で「🌐 Public」を選んで保存するか、ウォレット署名でオンチェーンに記録すると、ここに表示されます。</span></div>`;
                 return;
             }
 
@@ -5510,33 +5610,27 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     : (r.category === '裁判所'
                         ? '<span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs">⚖️ 裁判所</span>'
                         : '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">🏛️ 自治体</span>');
-                const statusBadge = r.status === 'responded'
-                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">✅ 開示あり</span>'
-                    : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">⏳ 申請中</span>';
+                const isOnchain = r.source === 'onchain';
+                const sourceBadge = isOnchain
+                    ? `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs" title="${r.signer_label || ''}">⛓️ オンチェーン</span>`
+                    : '<span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">💾 Civic Lens</span>';
+                const statusBadge = isOnchain
+                    ? `<span class="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">${r.status}</span>`
+                    : (r.status === 'responded'
+                        ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">✅ 開示あり</span>'
+                        : '<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">⏳ 申請中</span>');
 
-                return `
-                    <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
-                        <div class="flex items-start justify-between mb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="font-bold text-gray-800">${r.anonymous_user_id || '匿名市民'}</span>
-                                ${categoryBadge}
-                                ${statusBadge}
-                            </div>
-                            <span class="text-xs text-gray-500">${date}</span>
+                const engagementFooter = isOnchain
+                    ? `
+                        <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+                            <span class="text-sm text-gray-600 flex items-center gap-1">
+                                <span>💸</span><span>${r.engagement_count || 0}</span><span class="text-xs">投げ銭</span>
+                            </span>
+                            ${r.explorer_url ? `<a href="${r.explorer_url}" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-600 hover:underline ml-auto">🔗 チェーン上で確認</a>` : ''}
                         </div>
-                        <div class="text-sm text-gray-700 mb-2">
-                            <strong>対象機関:</strong> ${r.target_authority}
-                        </div>
-                        <div class="text-sm bg-gray-50 p-2 rounded mb-2">
-                            ${r.summary_public || r.user_input.substring(0, 100)}
-                        </div>
-                        ${r.result_excerpt ? `
-                            <details class="text-xs text-gray-600 mb-2">
-                                <summary class="cursor-pointer text-blue-600 hover:underline">📄 開示結果をみる</summary>
-                                <div class="mt-2 p-2 bg-green-50 rounded">${r.result_excerpt}</div>
-                            </details>
-                        ` : ''}
-                        <!-- GitHub風: スター & フォーク & Web3 IPFS (NEW!) -->
+                    `
+                    : `
+                        <!-- GitHub風: スター & フォーク & Web3 IPFS -->
                         <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
                             <button class="star-btn text-sm text-gray-600 hover:text-yellow-500 flex items-center gap-1" data-record-id="${r.id}">
                                 <span class="star-icon">☆</span>
@@ -5554,16 +5648,42 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                 <span class="text-gray-400 text-xs">🪐 IPFS未確認</span>
                             </div>
                         </div>
+                    `;
+
+                return `
+                    <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-gray-800">${r.author_label || '匿名市民'}</span>
+                                ${sourceBadge}
+                                ${categoryBadge}
+                                ${statusBadge}
+                            </div>
+                            <span class="text-xs text-gray-500">${date}</span>
+                        </div>
+                        <div class="text-sm text-gray-700 mb-2">
+                            <strong>対象機関:</strong> ${r.target_authority}
+                        </div>
+                        <div class="text-sm bg-gray-50 p-2 rounded mb-2">
+                            ${r.summary}
+                        </div>
+                        ${r.result_excerpt ? `
+                            <details class="text-xs text-gray-600 mb-2">
+                                <summary class="cursor-pointer text-blue-600 hover:underline">📄 開示結果をみる</summary>
+                                <div class="mt-2 p-2 bg-green-50 rounded">${r.result_excerpt}</div>
+                            </details>
+                        ` : ''}
+                        ${engagementFooter}
                     </div>
                 `;
             }).join('');
 
             document.getElementById('publicFeed').innerHTML = html;
 
-            // 各レコードのスター・フォーク統計とIPFS記録を取得
-            filtered.forEach(r => {
+            // DB版レコードのみ、スター・フォーク統計とIPFS記録を取得
+            filtered.filter(r => r.source !== 'onchain').forEach(r => {
                 loadRecordGitHubStats(r.id);
-                loadRecordIpfsStats(r.id, r.user_input, r.target_authority);
+                loadRecordIpfsStats(r.id, r.summary, r.target_authority);
             });
         }
 
@@ -5696,6 +5816,18 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 btn.classList.add('bg-blue-500', 'text-white');
                 currentFilter = btn.dataset.filter;
                 renderPublicFeed();
+            });
+        });
+
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.sort === currentSort) return;
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('bg-indigo-100', 'text-indigo-700', 'active'));
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.add('bg-gray-200'));
+                btn.classList.remove('bg-gray-200');
+                btn.classList.add('bg-indigo-100', 'text-indigo-700', 'active');
+                currentSort = btn.dataset.sort;
+                loadPublicFeed();
             });
         });
 
@@ -6349,6 +6481,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
         loadPublicFeed();
+        loadNewsAgentThemes();
         startPromptSuggestionAnimation();
         // 見出しは最初のチャット発言として静的に表示するため、タイプライター切り替えは行わない
 
@@ -6392,10 +6525,12 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             const makeCard = (r) => {
                 const el = document.createElement('span');
                 el.className = 'minna-card bg-white/10 text-gray-100 rounded-md px-3 py-1.5 text-xs flex items-center gap-2';
-                const text = r.summary_public || (r.user_input ? r.user_input.substring(0, 60) : '');
+                const text = r.summary || r.summary_public || (r.user_input ? r.user_input.substring(0, 60) : '');
+                const onchainBadge = r.source === 'onchain' ? '<span class="text-indigo-300">⛓️</span>' : '';
                 el.innerHTML = `
                     <span class="font-bold ${categoryColor(r.category)}">${r.category || '自治体'}</span>
-                    <span class="text-gray-400">${r.anonymous_user_id || '匿名市民'}</span>
+                    ${onchainBadge}
+                    <span class="text-gray-400">${r.author_label || r.anonymous_user_id || '匿名市民'}</span>
                     <span class="text-gray-500">→</span>
                     <span class="text-gray-300">${r.target_authority || ''}</span>
                     <span class="text-white">${text}</span>
