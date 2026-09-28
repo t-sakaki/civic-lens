@@ -82,10 +82,12 @@ from web3_bounty import (
 from web3_chain_client import ChainClientNotConfigured
 from web3_attestation import (
     issue_attestation, get_attestation, verify_attestation, list_all_attestations,
-    PersonalInfoWarning, build_verification_kit,
+    register_wallet_attestation, scan_personal_info, PersonalInfoWarning, build_verification_kit,
 )
 from onchain_ledger import fetch_ledger_entries, get_ledger_entry, ledger_meta, LedgerNotConfigured
 from ledger_reactions import get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES
+from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
+from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
@@ -97,9 +99,12 @@ from auth import (
     create_session_token, verify_session_token, get_user_by_id,
     generate_siwe_nonce, request_magic_link, verify_magic_link
 )
-from news_collector_agent import get_news_collector_agent
-from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER
-from news_reactions import make_news_id, record_analysis, add_reaction, list_records, get_record
+from news_collector_agent import get_news_collector_agent, theme_search_keywords
+from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME
+from news_reactions import (
+    make_news_id, record_analysis, add_reaction, list_records, get_record,
+    mark_read, count_unread,
+)
 from social_posting import (
     build_share_texts,
     post_to_bluesky,
@@ -621,19 +626,35 @@ async def analyze_anger(
 # 詳細はAGENTS.mdの「ニュース怒り再現パイプライン」を参照。
 # ---------------------------------------------------------------------------
 
+@app.get("/api/news-agent/themes")
+async def list_news_agent_themes():
+    """テーマ別怒り再現エージェント（news_anger_agent.NEWS_THEMES）の一覧。
+
+    ジェンダー・貧困・公正・気候変動・生物多様性・国際人権など、テーマごとに異なる
+    立場から同じニュースに怒ることができる（news_anger_agent.py参照）。
+    """
+    return {
+        "default_theme": DEFAULT_THEME,
+        "themes": [{"id": key, "label": value["label"]} for key, value in NEWS_THEMES.items()],
+    }
+
+
 @app.get("/api/news-agent/list")
 async def list_news_for_region(
     region: str,
     keyword: Optional[str] = None,
+    theme: Optional[str] = None,
     max_items: int = 8,
 ):
     """指定地域のニュースを複数件取得する（NewsCollectorAgent）。
     1件だけ自動選択するのではなく、ユーザーが記事を選んで分析できるようにする一覧表示用。
+    theme を指定すると、そのテーマに関連しやすいキーワードを絞り込みに加える。
     """
     collector = get_news_collector_agent()
+    extra_keywords = ([keyword] if keyword else []) + theme_search_keywords(theme)
     items = collector.fetch_news(
         region,
-        extra_keywords=[keyword] if keyword else None,
+        extra_keywords=extra_keywords or None,
         max_items=max(1, min(max_items, 20)),
     )
     if not items:
@@ -656,14 +677,17 @@ async def list_news_for_region(
     }
 
 
-def _analyze_news_text(news_text: str, region: Optional[str] = None) -> Dict[str, Any]:
+def _analyze_news_text(
+    news_text: str, region: Optional[str] = None, theme: Optional[str] = None
+) -> Dict[str, Any]:
     """怒り再現→開示請求分析の共通処理（1記事分）
 
     region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
     無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
+    theme: どのテーマ別怒り再現エージェントで分析するか（未指定ならDEFAULT_THEME）。
     """
     anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text, region=region)
+    step1 = anger_agent.generate(news_text, region=region, theme=theme)
     pseudo_voice = step1["pseudo_citizen_voice"]
 
     hint_authority_key = None
@@ -705,17 +729,19 @@ async def analyze_news_item(
     summary: str = Form(""),
     published: Optional[str] = Form(None),
     region: Optional[str] = Form(None),
+    theme: Optional[str] = Form(None),
 ):
     """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
 
     region: ユーザーが一覧取得時に指定した対象地域。記事本文が具体的な自治体名に
     触れていない場合でも、無関係な自治体に誤って紐づかないよう対象機関特定に使う。
+    theme: どのテーマ別怒り再現エージェントで分析するか（news_anger_agent.NEWS_THEMES）。
 
     エージェント構成（AGENTS.md参照）:
       AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
     """
     news_text = "\n".join([p for p in [title, summary] if p])
-    analyzed = _analyze_news_text(news_text, region=region)
+    analyzed = _analyze_news_text(news_text, region=region, theme=theme)
 
     news_id = make_news_id(link)
     source_news = {"title": title, "link": link, "published": published}
@@ -726,7 +752,94 @@ async def analyze_news_item(
         pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
         disclaimer=PSEUDO_VOICE_DISCLAIMER,
         anger_analysis=analyzed["anger_analysis"].model_dump(),
+        theme=theme or DEFAULT_THEME,
+        region=region,
+        autonomous=False,
     )
+    return record
+
+
+# Cloud Scheduler等から定期実行され、ユーザー操作を待たずに自律的にニュースをスキャンし
+# 「未読の怒りカード」を貯めておくためのエンドポイント。審査基準「自律性・エージェントらしさ」
+# （AGENTS.md参照）に対応するループ構造の起点。
+ANGER_LEVEL_AUTOSCAN_THRESHOLD = 6
+
+
+@app.post("/api/news-agent/autonomous-scan")
+async def autonomous_scan_news(
+    regions: str,
+    themes: Optional[str] = None,
+    max_items_per_region: int = 3,
+    scheduler_secret: Optional[str] = Header(None, alias="X-Scheduler-Secret"),
+):
+    """複数地域 x 複数テーマを自律的にスキャンし、怒りレベルが高い記事だけを未読記録として保存する。
+
+    regions: カンマ区切りの地域名（例: "名古屋市,安城市"）。ユーザー登録地域の代わりに
+      呼び出し側（Cloud Scheduler設定）がリスト管理する想定（AGENTS.md: 専用の地理エージェントは
+      別途作らない方針のため、既存の地域推定結果をCloud Scheduler側の引数として渡す運用）。
+    themes: カンマ区切りのテーマID（省略時は全テーマ）。
+    """
+    expected_secret = os.getenv("NEWS_AGENT_SCHEDULER_SECRET")
+    if expected_secret and scheduler_secret != expected_secret:
+        raise HTTPException(401, "スケジューラ認証に失敗しました。")
+
+    region_list = [r.strip() for r in regions.split(",") if r.strip()]
+    theme_list = [t.strip() for t in themes.split(",") if t.strip()] if themes else list(NEWS_THEMES.keys())
+    theme_list = [t for t in theme_list if t in NEWS_THEMES] or [DEFAULT_THEME]
+
+    collector = get_news_collector_agent()
+    created: List[Dict[str, Any]] = []
+    errors: List[Dict[str, str]] = []
+
+    for region in region_list:
+        for theme in theme_list:
+            try:
+                extra_keywords = theme_search_keywords(theme)
+                items = collector.fetch_news(
+                    region, extra_keywords=extra_keywords or None, max_items=max_items_per_region
+                )
+                for item in items:
+                    news_id = make_news_id(item.link)
+                    existing = get_record(news_id)
+                    if existing is not None:
+                        continue  # 既に分析済みの記事は再スキャンしない
+
+                    analyzed = _analyze_news_text(item.as_text(), region=region, theme=theme)
+                    anger_level = analyzed["anger_analysis"].anger_level
+                    if anger_level < ANGER_LEVEL_AUTOSCAN_THRESHOLD:
+                        continue  # 怒りレベルが低い記事はユーザーに通知するほどではないと判断しスキップ
+
+                    source_news = {"title": item.title, "link": item.link, "published": item.published}
+                    record = record_analysis(
+                        news_id=news_id,
+                        source_news=source_news,
+                        key_points=analyzed["key_points"],
+                        pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
+                        disclaimer=PSEUDO_VOICE_DISCLAIMER,
+                        anger_analysis=analyzed["anger_analysis"].model_dump(),
+                        theme=theme,
+                        region=region,
+                        autonomous=True,
+                    )
+                    created.append(record)
+            except Exception as e:
+                errors.append({"region": region, "theme": theme, "error": str(e)})
+
+    return {"created_count": len(created), "created": created, "errors": errors}
+
+
+@app.get("/api/news-agent/unread-count")
+async def get_news_agent_unread_count():
+    """自律スキャンで貯まった未読の怒りカード件数（バッジ表示用）"""
+    return {"unread_count": count_unread()}
+
+
+@app.post("/api/news-agent/mark-read")
+async def mark_news_agent_read(news_id: str = Form(...)):
+    """未読の怒りカードをユーザーが見たら既読にする"""
+    record = mark_read(news_id)
+    if record is None:
+        raise HTTPException(404, "対象の記録が見つかりませんでした。")
     return record
 
 
@@ -1073,6 +1186,97 @@ async def api_ledger_react(
     return {"uid": entry["uid"], "reactions": toggle_reaction(entry["uid"], current_user.user_id, reaction)}
 
 
+# ---------------------------------------------------------------------------
+# 投げ銭（オンチェーン応援）— 読み取り専用。送金・記録は必ず応援者本人のウォレットが
+# 直接EASコントラクトへ署名・送信し、サーバーは代理署名・仲介を一切行わない。
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ledger/tips/config")
+async def api_ledger_tips_config():
+    """フロントエンドがウォレットから直接EASにattestationを送信するために必要な設定値。"""
+    try:
+        meta = ledger_meta()
+        tip_schema = tip_schema_uid()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return {
+        "eas_schema_uid": meta["schema_uid"],
+        "tip_schema_uid": tip_schema,
+        "network": meta["network"],
+        "usdc_address": os.getenv("USDC_CONTRACT_ADDRESS", ""),
+    }
+
+
+@app.get("/api/ledger/tips/leaderboard")
+async def api_ledger_tips_leaderboard():
+    """投げ銭・紹介の応援者ランキング（チェーンから都度集計、通貨別内訳つき）。"""
+    try:
+        return build_tip_leaderboard()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"投げ銭ランキングの読み込みに失敗しました: {e}")
+
+
+@app.get("/api/ledger/tips/trending")
+async def api_ledger_tips_trending(window_hours: int = 24, limit: int = 10):
+    """急上昇中の開示請求（直近window_hours時間で投げ銭が集まっている順）。"""
+    try:
+        return {"requests": trending_requests(window_hours, limit)}
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"急上昇ランキングの読み込みに失敗しました: {e}")
+
+
+@app.get("/api/ledger/{uid}/tips")
+async def api_ledger_entry_tips(uid: str):
+    """特定の開示請求に寄せられた投げ銭の一覧（応援メッセージ付き）。"""
+    try:
+        return {"tips": tips_for_request(uid)}
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"投げ銭一覧の読み込みに失敗しました: {e}")
+
+
+@app.post("/api/web3/attestation/scan-pii")
+async def api_scan_pii(text: str = Form(...)):
+    """自分のウォレットで直接署名するフロー用に、オンチェーンに公開する前のPIIチェックだけを行う。
+
+    サーバー代理署名フロー（/api/web3/attestation/issue）は内部で同じチェックを行うが、
+    ウォレット直接署名フローはサーバーを経由せずに送信するため、送信前に同じ警告を
+    フロントエンドから呼び出せるようにする（記録そのものは行わない）。
+    """
+    return {"warnings": scan_personal_info(text)}
+
+
+@app.post("/api/web3/attestation/register-wallet-signed")
+async def api_register_wallet_attestation(
+    uid: str = Form(...),
+    record_id: Optional[str] = Form(None),
+    title: str = Form("開示請求書"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """請求者本人のウォレットが直接EASコントラクトに送信・署名した開示請求attestationを、
+    Civic Lens の索引（台帳表示用の付帯情報）に登録する。
+
+    サーバーは署名も送金も行わない。チェーン上のattestationを直接検証したうえで登録するのみ。
+    """
+    try:
+        record = register_wallet_attestation(
+            uid=uid,
+            record_id=record_id,
+            title=title,
+            owner_user_id=current_user.user_id if current_user else None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return record.model_dump()
+
+
 @app.get("/api/precedent-cases")
 async def api_precedent_cases(
     q: str = "",
@@ -1279,6 +1483,29 @@ async def visibility_get_my(session_id: Optional[str] = None):
 async def visibility_stats():
     """公開設定の統計（ダッシュボード用）"""
     return get_public_stats()
+
+
+@app.get("/api/community-feed")
+async def community_feed(
+    category: Optional[str] = None,
+    authority: Optional[str] = None,
+    sort: str = "new",
+    limit: int = 50,
+):
+    """「みんなの請求」統合フィード。
+
+    Civic LensのDBにPublic共有された開示請求と、EASチェーンに刻印された
+    開示請求（オンチェーン台帳）を1本のフィードにまとめて返す。
+    sort=new（新着順・既定）/ sort=ranking（人気順：DBはスター+フォーク数、
+    オンチェーンは全期間の投げ銭件数）。
+    """
+    return {"records": fetch_unified_feed(category=category, authority=authority, sort=sort, limit=limit)}
+
+
+@app.get("/api/community-feed/stats")
+async def community_feed_stats():
+    """統合フィードの統計サマリ（DB分 + オンチェーン分の合算）。"""
+    return fetch_unified_stats()
 
 
 # ===========================================================================
@@ -1532,6 +1759,7 @@ async def api_issue_attestation(
     content: str = Form(...),
     authority: str = Form("自治体"),
     legal_basis: str = Form("情報公開法・各自治体情報公開条例"),
+    request_type: str = Form("行政文書開示請求"),
     user_wallet_address: Optional[str] = Form(None),
     requested_documents: str = Form(""),
     publish_plaintext: bool = Form(False),
@@ -1552,6 +1780,7 @@ async def api_issue_attestation(
             content=content,
             authority=authority,
             legal_basis=legal_basis,
+            request_type=request_type,
             user_wallet_address=user_wallet_address,
             requested_documents=requested_documents,
             publish_plaintext=publish_plaintext,

@@ -65,8 +65,15 @@ def record_analysis(
     pseudo_citizen_voice: str,
     disclaimer: str,
     anger_analysis: Dict[str, Any],
+    theme: str = "general",
+    region: Optional[str] = None,
+    autonomous: bool = False,
 ) -> Dict[str, Any]:
-    """分析結果を記録する（既存レコードがあればリアクション数は維持して内容だけ更新）"""
+    """分析結果を記録する（既存レコードがあればリアクション数・既読状態は維持して内容だけ更新）
+
+    theme: どのテーマ別怒り再現エージェントが生成したか（news_anger_agent.NEWS_THEMES のキー）
+    autonomous: Cloud Scheduler等からの自律スキャンによる記録か（ユーザー操作による記録ならFalse）
+    """
     with _LOCK:
         data = _load()
         existing = data.get(news_id)
@@ -75,17 +82,40 @@ def record_analysis(
         record = {
             "news_id": news_id,
             "source_news": source_news,
+            "region": region if region is not None else (existing or {}).get("region"),
+            "theme": theme,
             "key_points": key_points,
             "pseudo_citizen_voice": pseudo_citizen_voice,
             "pseudo_citizen_voice_disclaimer": disclaimer,
             "anger_analysis": anger_analysis,
             "reactions": reactions,
+            "autonomous": autonomous,
+            # 自律スキャンで生成された記録はユーザーがまだ見ていない「未読」として扱う。
+            # ユーザー自身の操作による記録（一覧から選んで分析）は既読扱い。
+            "read": existing["read"] if existing else (not autonomous),
             "created_at": existing["created_at"] if existing else datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         data[news_id] = record
         _save(data)
         return record
+
+
+def mark_read(news_id: str) -> Optional[Dict[str, Any]]:
+    with _LOCK:
+        data = _load()
+        record = data.get(news_id)
+        if record is None:
+            return None
+        record["read"] = True
+        data[news_id] = record
+        _save(data)
+        return record
+
+
+def count_unread() -> int:
+    data = _load()
+    return sum(1 for r in data.values() if not r.get("read", True))
 
 
 def add_reaction(news_id: str, reaction: str) -> Optional[Dict[str, Any]]:

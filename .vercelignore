@@ -1,0 +1,14 @@
+.venv
+.venv_demo3
+.git
+.claude
+.pytest_cache
+__pycache__
+node_modules
+tests
+docs
+data/attestation_sources
+*.pyc
+.env
+.env.bak
+.env.bak.*

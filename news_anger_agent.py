@@ -33,10 +33,72 @@ PSEUDO_VOICE_DISCLAIMER = (
 )
 
 
+# テーマ別の怒り再現エージェント設定。
+# 同じニュース記事でも、どの立場（テーマ）から読むかで論点・声が変わる想定。
+# 単一クラスの乱立を避けるため、AngerReproductionAgent は theme をパラメータとして受け取り、
+# プロンプトのペルソナ部分だけを差し替える設計にしている（news_collector_agent.py の
+# THEME_SEARCH_HINTS と対で使う）。
+NEWS_THEMES: dict[str, dict[str, str]] = {
+    "general": {
+        "label": "一般（行政監視）",
+        "persona": "税金の使途・意思決定過程の不透明さ・住民負担など、行政監視全般の視点",
+    },
+    "gender": {
+        "label": "ジェンダー",
+        "persona": (
+            "女性・性的マイノリティを含むジェンダーの視点。審議会・意思決定層の男女比の偏り、"
+            "性別による負担や扱いの格差、ハラスメント対応の不透明さなど"
+        ),
+    },
+    "poverty": {
+        "label": "貧困・生活困窮",
+        "persona": (
+            "生活困窮者・低所得世帯の視点。福祉予算の使途、支援制度の周知不足や利用しにくさ、"
+            "困窮世帯への負担のしわ寄せなど"
+        ),
+    },
+    "fairness": {
+        "label": "公正・利益相反",
+        "persona": (
+            "行政運営の公正性の視点。特定業者・団体への利益誘導、入札や随意契約の妥当性、"
+            "意思決定プロセスの公平性など"
+        ),
+    },
+    "climate": {
+        "label": "気候変動",
+        "persona": (
+            "気候変動対策の視点。公共事業やイベントのCO2排出・環境負荷、再エネ関連予算の使途、"
+            "脱炭素目標との整合性など"
+        ),
+    },
+    "biodiversity": {
+        "label": "生物多様性",
+        "persona": (
+            "生物多様性・自然環境保護の視点。開発事業による生態系への影響、緑地・里山の減少、"
+            "環境アセスメントの妥当性など"
+        ),
+    },
+    "human_rights": {
+        "label": "人権（国際人権）",
+        "persona": (
+            "国際人権基準に照らした視点。外国人・障害者・子どもなど弱い立場の人々への配慮の欠如、"
+            "適正手続きの保障、差別的な取り扱いの可能性など"
+        ),
+    },
+}
+
+DEFAULT_THEME = "general"
+
+
+def get_theme(theme: str | None) -> dict[str, str]:
+    return NEWS_THEMES.get(theme or DEFAULT_THEME, NEWS_THEMES[DEFAULT_THEME])
+
+
 NEWS_ANALYSIS_PROMPT = """あなたは行政監視の視点を持つジャーナリストAIです。
 以下のニュース記事を読み、一見すると市民が喜んでいる/好意的に報じられているように見える場合でも、
-税金の使途・意思決定過程の不透明さ・警備や動員の過剰さ・住民負担など、批判的に見た場合に
-疑問視されうる論点を洗い出してください。
+批判的に見た場合に疑問視されうる論点を洗い出してください。
+
+特に、次の観点を重視してください: {theme_persona}
 {region_line}
 【ニュース記事】
 {news_text}
@@ -55,7 +117,7 @@ class AngerReproductionAgent:
     def __init__(self):
         self._civic_agent = get_agent()
 
-    def generate(self, news_text: str, region: str | None = None) -> dict:
+    def generate(self, news_text: str, region: str | None = None, theme: str | None = None) -> dict:
         region_line = ""
         if region:
             region_line = (
@@ -63,12 +125,15 @@ class AngerReproductionAgent:
                 f"記事本文が具体的な自治体名に触れていない場合でも、論点整理と擬似的な市民の声は"
                 f"「{region}」の住民・行政を念頭に置いて生成してください（他の地域や県全体の話にすり替えないこと）。\n"
             )
+        theme_persona = get_theme(theme)["persona"]
         if GENAI_AVAILABLE and self._civic_agent.genai_client:
             try:
                 response = call_with_timeout(
                     self._civic_agent.genai_client.models.generate_content,
                     model="gemini-pro-latest",
-                    contents=NEWS_ANALYSIS_PROMPT.format(news_text=news_text, region_line=region_line),
+                    contents=NEWS_ANALYSIS_PROMPT.format(
+                        news_text=news_text, region_line=region_line, theme_persona=theme_persona
+                    ),
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
                     timeout_s=25.0,
                 )
@@ -98,14 +163,20 @@ class AngerReproductionAgent:
         }
 
 
-def run_pipeline(news_text: str, source: dict | None = None, region: str | None = None) -> dict:
+def run_pipeline(
+    news_text: str,
+    source: dict | None = None,
+    region: str | None = None,
+    theme: str | None = None,
+) -> dict:
     """怒り再現 → 開示請求の該当箇所生成までを実行する
 
     region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
     無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
+    theme: どの立場から怒るか（NEWS_THEMES のキー。未指定なら DEFAULT_THEME）。
     """
     anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text, region=region)
+    step1 = anger_agent.generate(news_text, region=region, theme=theme)
     pseudo_voice = step1["pseudo_citizen_voice"]
 
     from ordinance_data import match_authority_by_text
@@ -123,6 +194,7 @@ def run_pipeline(news_text: str, source: dict | None = None, region: str | None 
     }
 
     result = {
+        "theme": theme or DEFAULT_THEME,
         "key_points": step1["key_points"],
         "pseudo_citizen_voice": pseudo_voice,
         "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
@@ -135,11 +207,13 @@ def run_pipeline(news_text: str, source: dict | None = None, region: str | None 
     return result
 
 
-def run_pipeline_from_region(region: str, keyword: str | None = None) -> dict:
+def run_pipeline_from_region(region: str, keyword: str | None = None, theme: str | None = None) -> dict:
     """地域名からニュースを自動収集し、パイプラインを実行する"""
+    from news_collector_agent import theme_search_keywords
+
     collector = get_news_collector_agent()
-    extra_keywords = [keyword] if keyword else None
-    news_item: NewsItem | None = collector.fetch_top_news(region, extra_keywords=extra_keywords)
+    extra_keywords = ([keyword] if keyword else []) + theme_search_keywords(theme)
+    news_item: NewsItem | None = collector.fetch_top_news(region, extra_keywords=extra_keywords or None)
 
     if news_item is None:
         raise RuntimeError(
@@ -147,7 +221,7 @@ def run_pipeline_from_region(region: str, keyword: str | None = None) -> dict:
         )
 
     source = {"title": news_item.title, "link": news_item.link, "published": news_item.published}
-    return run_pipeline(news_item.as_text(), source=source, region=region)
+    return run_pipeline(news_item.as_text(), source=source, region=region, theme=theme)
 
 
 def main():

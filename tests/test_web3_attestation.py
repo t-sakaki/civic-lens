@@ -44,7 +44,9 @@ def chain(monkeypatch, tmp_path):
 
 
 def decode(sent):
-    return abi_decode(["string", "string", "string", "bytes32", "uint256", "string"], sent["encoded_data"])
+    return abi_decode(
+        ["string", "string", "string", "string", "bytes32", "uint256", "string"], sent["encoded_data"]
+    )
 
 
 def test_index_stores_no_personal_data_and_reads_from_chain(chain):
@@ -86,8 +88,10 @@ def test_verification_kit_contains_original_for_requester_only(chain):
 def test_public_request_records_requested_documents_in_plaintext(chain):
     r = wa.issue_attestation("req-1", "開示請求書", FULL_TEXT, "愛知県知事", "愛知県情報公開条例",
                              requested_documents=AICHI_REQUEST, publish_plaintext=True)
-    record_id, authority, docs, doc_hash, _, legal = decode(chain)
-    assert (record_id, authority, docs, legal) == ("req-1", "愛知県知事", AICHI_REQUEST, "愛知県情報公開条例")
+    record_id, authority, req_type, docs, doc_hash, _, legal = decode(chain)
+    assert (record_id, authority, req_type, docs, legal) == (
+        "req-1", "愛知県知事", wa.DEFAULT_REQUEST_TYPE, AICHI_REQUEST, "愛知県情報公開条例",
+    )
     assert "0x" + doc_hash.hex() == wa.compute_document_hash(FULL_TEXT)
     # 氏名・住所は平文では送られない（全文はハッシュのみ）
     assert "山田".encode() not in chain["encoded_data"]
@@ -98,7 +102,7 @@ def test_public_request_records_requested_documents_in_plaintext(chain):
 def test_private_request_records_hash_only(chain):
     r = wa.issue_attestation("req-2", "開示請求書", FULL_TEXT, "愛知県知事",
                              requested_documents=AICHI_REQUEST, publish_plaintext=False)
-    assert decode(chain)[2] == ""
+    assert decode(chain)[3] == ""
     assert r.requested_documents == ""
 
 
@@ -110,7 +114,7 @@ def test_personal_info_requires_acknowledgement(chain):
     assert "encoded_data" not in chain, "警告時はチェーンに送信しない"
     wa.issue_attestation("req-3", "t", FULL_TEXT, "愛知県知事", requested_documents=docs,
                          publish_plaintext=True, acknowledge_warnings=True)
-    assert decode(chain)[2] == docs
+    assert decode(chain)[3] == docs
 
 
 @pytest.mark.parametrize("text", ["", "   "])
