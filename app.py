@@ -216,6 +216,12 @@ class SocialShareRequest(BaseModel):
     access_token: Optional[str] = None  # Bluesky: app password / X: OAuth 1.0a access token
     access_token_secret: Optional[str] = None  # X のみ
     handle: Optional[str] = None  # Bluesky のユーザーhandle（例: "user.bsky.social"）
+    # 記録がサーバー側に残っていない場合（Cloud Runのインスタンス切替等）のフォールバック用。
+    # クライアントが画面に表示中の内容をそのまま渡す
+    title: Optional[str] = None
+    link: Optional[str] = None
+    pseudo_citizen_voice: Optional[str] = None
+    key_points: Optional[List[str]] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -917,6 +923,15 @@ async def share_pseudo_citizen_voice(payload: SocialShareRequest):
     未認証（トークン未指定）の場合は投稿を行わず、手動投稿用のシェアテキストを返す。
     """
     record = get_record(payload.news_id)
+    if record is None and payload.pseudo_citizen_voice:
+        # 記録はJSONファイル保存のため、別インスタンスに振り分けられると見つからない。
+        # 画面に表示中の内容から組み立てて、シェアを継続できるようにする
+        record = {
+            "news_id": payload.news_id,
+            "source_news": {"title": payload.title or "", "link": payload.link or ""},
+            "key_points": payload.key_points or [],
+            "pseudo_citizen_voice": payload.pseudo_citizen_voice,
+        }
     if record is None:
         raise HTTPException(404, "対象の記録が見つかりませんでした。先にニュースを分析してください。")
 
