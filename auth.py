@@ -258,6 +258,14 @@ def authenticate_password(username_or_email: str, password: str) -> Optional[Use
         timeout=10,
     )
     if resp.status_code != 200:
+        # パスワード誤りと設定不備（APIキー不正・サインインプロバイダ無効等）を区別できるよう、
+        # Identity Toolkitからのエラー内容をサーバーログにだけ出す（ユーザーへは汎用メッセージのまま）
+        error_message = ""
+        try:
+            error_message = resp.json().get("error", {}).get("message", "")
+        except Exception:
+            pass
+        print(f"[authenticate_password] signInWithPassword失敗 status={resp.status_code} error={error_message or resp.text[:200]}")
         return None
 
     now_iso = datetime.utcnow().isoformat() + "Z"
