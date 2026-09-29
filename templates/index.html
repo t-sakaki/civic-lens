@@ -3080,6 +3080,8 @@
         function renderAuthorityChipBatch() {
             const container = document.getElementById('authorityChipFlow');
             if (!container || allAuthorities.length === 0) return;
+            // 都道府県・市区町村の手動入力中は、チップの入れ替えでレイアウトが動かないようにする
+            if (authorityPopoverHasFocus()) return;
 
             const pool = currentAuthorityFilter
                 ? allAuthorities.filter(a => a.category === currentAuthorityFilter)
@@ -3093,6 +3095,10 @@
             existingChips.forEach(chip => chip.classList.add('chip-leaving'));
 
             const buildNextBatch = () => {
+                if (authorityPopoverHasFocus()) {
+                    existingChips.forEach(chip => chip.classList.remove('chip-leaving'));
+                    return;
+                }
                 container.innerHTML = '';
                 const selectedKey = document.getElementById('targetAuthority').value;
                 const count = Math.min(AUTHORITY_CHIPS_VISIBLE, pool.length);
@@ -3129,6 +3135,10 @@
         const authorityPopover = document.getElementById('authorityPopover');
         let authorityPopoverCloseTimer = null;
 
+        function authorityPopoverHasFocus() {
+            return authorityPopover.contains(document.activeElement);
+        }
+
         function openAuthorityPopover() {
             clearTimeout(authorityPopoverCloseTimer);
             authorityPopover.classList.remove('hidden');
@@ -3151,7 +3161,10 @@
         });
         authorityTag.addEventListener('mouseenter', openAuthorityPopover);
         authorityTagWrap.addEventListener('mouseleave', () => {
-            authorityPopoverCloseTimer = setTimeout(closeAuthorityPopover, 300);
+            authorityPopoverCloseTimer = setTimeout(() => {
+                // 入力欄・セレクトにフォーカスがある間は、マウスが外れても閉じない
+                if (!authorityPopoverHasFocus()) closeAuthorityPopover();
+            }, 300);
         });
         authorityPopover.addEventListener('mouseenter', () => clearTimeout(authorityPopoverCloseTimer));
         authorityPopover.addEventListener('click', (e) => e.stopPropagation());
