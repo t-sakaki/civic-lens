@@ -142,3 +142,85 @@ def test_ledger_page_renders(client):
     c, _ = client
     r = c.get("/ledger")
     assert r.status_code == 200 and "開示請求台帳" in r.text
+
+
+def _wallet_body(reaction="watch", uid=UID, timestamp=None, account=None):
+    import time
+
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+
+    account = account or Account.create()
+    ts = int(time.time()) if timestamp is None else timestamp
+    sig = Account.sign_message(encode_defunct(text=lr.build_wallet_message(uid, reaction, ts)), account.key).signature.hex()
+    return {"reaction": reaction, "address": account.address, "timestamp": ts, "signature": sig}, account
+
+
+def test_api_react_wallet_signature_toggles_without_login(client):
+    c, _ = client
+    body, account = _wallet_body("watch")
+    r = c.post(f"/api/ledger/{UID}/react-wallet", json=body)
+    assert r.status_code == 200 and r.json()["reactions"]["watch"]["count"] == 1
+    # 自分の反応済み表示はアドレス指定時だけ。誰が反応したかは返さない
+    mine = c.get("/api/ledger", params={"address": account.address}).json()["entries"][0]["reactions"]
+    assert mine["watch"]["mine"] is True
+    assert c.get("/api/ledger").json()["entries"][0]["reactions"]["watch"]["mine"] is False
+    body2, _ = _wallet_body("watch", account=account)
+    assert c.post(f"/api/ledger/{UID}/react-wallet", json=body2).json()["reactions"]["watch"]["count"] == 0
+
+
+def test_api_react_wallet_rejects_bad_signatures(client):
+    from eth_account import Account
+
+    c, _ = client
+    body, _ = _wallet_body("watch")
+    assert c.post(f"/api/ledger/{UID}/react-wallet", json={**body, "address": Account.create().address}).status_code == 400
+    assert c.post(f"/api/ledger/{UID}/react-wallet", json={**body, "reaction": "want_to_know"}).status_code == 400
+    assert c.post(f"/api/ledger/{UID}/react-wallet", json={**body, "signature": "0x00"}).status_code == 400
+    old, _ = _wallet_body("watch", timestamp=1)
+    assert c.post(f"/api/ledger/{UID}/react-wallet", json=old).status_code == 400
+    other = "0x" + "ab" * 32
+    body3, _ = _wallet_body("watch", uid=other)
+    assert c.post(f"/api/ledger/{other}/react-wallet", json=body3).status_code == 404
+    assert c.get("/api/ledger").json()["entries"][0]["reactions"]["watch"]["count"] == 0
+
+
+def test_reactions_use_upstash_when_configured(monkeypatch):
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "tok")
+    sets: dict = {}
+
+    class Resp:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.data
+
+    def fake_post(url, json, headers, timeout):
+        assert url == "https://example.upstash.io/pipeline" and headers["Authorization"] == "Bearer tok"
+        out = []
+        for cmd, k, *rest in json:
+            members = sets.setdefault(k, set())
+            if cmd == "SCARD":
+                out.append({"result": len(members)})
+            elif cmd == "SISMEMBER":
+                out.append({"result": int(rest[0] in members)})
+            elif cmd == "SADD":
+                members.add(rest[0]); out.append({"result": 1})
+            elif cmd == "SREM":
+                members.discard(rest[0]); out.append({"result": 1})
+        return Resp(out)
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    r = lr.toggle_reaction(UID, "user-a", "watch")
+    assert r["watch"]["count"] == 1 and r["watch"]["mine"] is True
+    assert lr.get_reactions(UID)["watch"]["mine"] is False
+    # 保存されるのは生のユーザーIDではなくハッシュ
+    assert all("user-a" not in m for v in sets.values() for m in v)
+    assert lr.toggle_reaction(UID, "user-a", "watch")["watch"]["count"] == 0

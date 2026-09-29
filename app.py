@@ -4,6 +4,7 @@
 """
 import asyncio
 import os
+import re
 import io
 import base64
 from pathlib import Path
@@ -85,7 +86,10 @@ from web3_attestation import (
     register_wallet_attestation, scan_personal_info, PersonalInfoWarning, build_verification_kit,
 )
 from onchain_ledger import fetch_ledger_entries, get_ledger_entry, ledger_meta, LedgerNotConfigured
-from ledger_reactions import get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES
+from ledger_reactions import (
+    get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES,
+    verify_wallet_signature, wallet_reactor_id,
+)
 from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
 from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
@@ -1158,7 +1162,10 @@ async def ledger_page():
 
 
 @app.get("/api/ledger")
-async def api_ledger(current_user: Optional[User] = Depends(get_current_user_optional)):
+async def api_ledger(
+    address: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     """オンチェーン（EAS）に記録された開示請求の一覧と、市民リアクションの件数。
 
     記録はCivic Lensのデータベースではなく、チェーン（easscan GraphQL）から直接読み出す。
@@ -1170,7 +1177,12 @@ async def api_ledger(current_user: Optional[User] = Depends(get_current_user_opt
         raise HTTPException(503, str(e))
     except Exception as e:
         raise HTTPException(502, f"オンチェーン台帳の読み込みに失敗しました: {e}")
-    user_id = current_user.user_id if current_user else None
+    if current_user:
+        user_id = current_user.user_id
+    elif address and re.fullmatch(r"0x[0-9a-fA-F]{40}", address):
+        user_id = wallet_reactor_id(address)  # 自分の反応済み表示用（件数のみ返し、誰かは公開しない）
+    else:
+        user_id = None
     return {
         **meta,
         "logged_in": current_user is not None,
@@ -1196,6 +1208,29 @@ async def api_ledger_react(
     if entry is None:
         raise HTTPException(404, "オンチェーン台帳に該当する記録がありません。")
     return {"uid": entry["uid"], "reactions": toggle_reaction(entry["uid"], current_user.user_id, reaction)}
+
+
+class WalletReactionRequest(BaseModel):
+    reaction: str
+    address: str
+    timestamp: int
+    signature: str
+
+
+@app.post("/api/ledger/{uid}/react-wallet")
+async def api_ledger_react_wallet(uid: str, body: WalletReactionRequest):
+    """ログイン不要のリアクション。ウォレットのpersonal_sign（ガス代なし・トランザクションではない）で本人性を確認する。"""
+    try:
+        reactor = verify_wallet_signature(uid, body.reaction, body.address, body.timestamp, body.signature)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    try:
+        entry = get_ledger_entry(uid)
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    if entry is None:
+        raise HTTPException(404, "オンチェーン台帳に該当する記録がありません。")
+    return {"uid": entry["uid"], "reactions": toggle_reaction(entry["uid"], reactor, body.reaction)}
 
 
 # ---------------------------------------------------------------------------

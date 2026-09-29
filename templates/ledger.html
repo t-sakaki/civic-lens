@@ -129,6 +129,7 @@
         }
 
         let loggedIn = false;
+        let walletAddress = null;
 
         function formatDate(iso) {
             const [y, m, d] = iso.split('-').map(Number);
@@ -226,7 +227,7 @@
         async function loadLedger() {
             const status = document.getElementById('ledgerStatus');
             try {
-                const res = await fetch('/api/ledger', { credentials: 'same-origin' });
+                const res = await fetch('/api/ledger' + (walletAddress ? `?address=${walletAddress}` : ''), { credentials: 'same-origin' });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || '読み込みに失敗しました');
                 loggedIn = data.logged_in;
@@ -245,14 +246,35 @@
             if (reactBtn) {
                 const uid = reactBtn.dataset.uid;
                 const msg = document.querySelector(`[data-react-msg="${CSS.escape(uid)}"]`);
-                if (!loggedIn) {
-                    msg.innerHTML = 'リアクションにはログインが必要です。<a class="cl-link" href="/">トップページでログイン</a>してから戻ってください。';
+                let res;
+                if (loggedIn) {
+                    const form = new FormData();
+                    form.append('reaction', reactBtn.dataset.reaction);
+                    res = await fetch(`/api/ledger/${encodeURIComponent(uid)}/react`, { method: 'POST', body: form, credentials: 'same-origin' });
+                } else if (window.ethereum) {
+                    // ログイン不要：ウォレットの無料署名（ガス代なし・トランザクションではない）で本人性を示す
+                    try {
+                        if (!signer) await connectWallet();
+                        if (!signer) throw new Error('ウォレットが接続されていません。');
+                        const address = await signer.getAddress();
+                        const reaction = reactBtn.dataset.reaction;
+                        const timestamp = Math.floor(Date.now() / 1000);
+                        const signature = await signer.signMessage(
+                            `Civic Lens ledger reaction (no gas, not a transaction)\nrecord: ${uid.toLowerCase()}\nreaction: ${reaction}\ntimestamp: ${timestamp}`);
+                        res = await fetch(`/api/ledger/${encodeURIComponent(uid)}/react-wallet`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reaction, address, timestamp, signature }),
+                        });
+                    } catch (err) {
+                        msg.textContent = 'ウォレットでの署名がキャンセルされたか失敗しました。';
+                        msg.classList.remove('hidden');
+                        return;
+                    }
+                } else {
+                    msg.innerHTML = 'リアクションには、<a class="cl-link" href="/">ログイン</a>するか、MetaMask等のウォレットが必要です。';
                     msg.classList.remove('hidden');
                     return;
                 }
-                const form = new FormData();
-                form.append('reaction', reactBtn.dataset.reaction);
-                const res = await fetch(`/api/ledger/${encodeURIComponent(uid)}/react`, { method: 'POST', body: form, credentials: 'same-origin' });
                 const data = await res.json();
                 if (!res.ok) {
                     msg.textContent = data.detail || 'リアクションに失敗しました';
@@ -370,6 +392,8 @@
                 statusEl.innerHTML = `✅ ウォレット接続済み: <span class="font-mono">${address}</span>（あなた自身の署名で送金・記録します）`;
                 document.getElementById('connectWalletBtn').textContent = '🦊 ' + short(address);
                 document.getElementById('connectWalletBtn').disabled = true;
+                walletAddress = address;
+                if (!loggedIn) loadLedger();
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('recipient')) document.getElementById('tipRecipient').value = params.get('recipient');
                 if (params.has('ref_uid')) document.getElementById('tipRefUid').value = params.get('ref_uid');
