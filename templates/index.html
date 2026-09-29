@@ -550,6 +550,27 @@
         .authority-tag-flash {
             animation: authorityTagFlash 0.9s ease-out;
         }
+        /* GPSでの現在地特定に失敗した際、表示中の対象機関が「特定結果」ではなく
+           一例に過ぎないことを一目で分かるようにする（誤認防止） */
+        .authority-tag-unconfirmed {
+            border-style: dashed;
+            border-color: #d97706;
+            color: #d97706;
+        }
+        .authority-tag-unconfirmed::after {
+            content: "？";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.1em;
+            height: 1.1em;
+            border-radius: 999px;
+            background: #d97706;
+            color: #fff;
+            font-size: 0.7em;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
         .authority-popover {
             position: absolute;
             z-index: 30;
@@ -2820,7 +2841,7 @@
         // プレースホルダーの例文と一緒に対象機関タグも切り替える。ただし一度でも
         // ユーザーが自分で対象機関を選んだ後は、その選択を尊重して自動切り替えをやめる
         function syncAuthorityToPrompt(category) {
-            if (userManuallySelectedAuthority || allAuthorities.length === 0) return;
+            if (userManuallySelectedAuthority || geolocationAttempted || allAuthorities.length === 0) return;
             const match = allAuthorities.find(a => a.category === category);
             if (!match) return;
             setSelectedAuthority(match.key, { auto: true });
@@ -3018,13 +3039,20 @@
         // 対象機関を選択する唯一の入口。<select>の値を更新し、選択中バッジと
         // チップの見た目を同期させる（シチュエーションチップ・位置情報検出のどちらから来ても同じ経路を通す）
         let userManuallySelectedAuthority = false;
+        // GPS位置情報の取得を試みた後は、例文に合わせた対象機関タグの自動切り替え（演出）を止める。
+        // 演出中のタグは実際の位置情報検出結果と見た目が同じで区別できず、GPSが失敗した場合に
+        // 「これがGPSで特定された場所だ」と誤解されるおそれがあるため。
+        let geolocationAttempted = false;
 
         function setSelectedAuthority(key, { auto = false } = {}) {
             if (auto && userManuallySelectedAuthority) return;
             const select = document.getElementById('targetAuthority');
             if (![...select.options].some(o => o.value === key)) return;
             select.value = key;
-            if (!auto) userManuallySelectedAuthority = true;
+            if (!auto) {
+                userManuallySelectedAuthority = true;
+                clearAuthorityTagUnconfirmed();
+            }
             updateSelectedAuthorityBadge();
         }
 
@@ -3672,9 +3700,11 @@
         async function detectMunicipalityFromLocation(options = {}) {
             const silent = options.silent === true;
             const statusEl = document.getElementById('detectMunicipalityStatus');
+            geolocationAttempted = true;
             if (!navigator.geolocation) {
                 setNearbyState({ status: 'error', message: '📍 このブラウザは位置情報に対応していません。下の一覧から選んでください' });
                 if (!silent) statusEl.textContent = 'このブラウザは位置情報取得に対応していません';
+                markAuthorityTagUnconfirmed('このブラウザは位置情報取得に対応していません');
                 return;
             }
 
@@ -3701,6 +3731,7 @@
                 } catch (e) {
                     statusEl.textContent = `❌ ${e.message}`;
                     setNearbyState({ status: 'error', message: `📍 ${e.message}` });
+                    markAuthorityTagUnconfirmed(e.message);
                 }
             }, (err) => {
                 setNearbyState({ status: 'error', message: '' });
@@ -3709,7 +3740,26 @@
                 statusEl.textContent = silent
                     ? '📍 位置情報が利用できません（ボタンから手動で特定できます）'
                     : `❌ 位置情報を取得できませんでした（${err.message}）`;
+                markAuthorityTagUnconfirmed('位置情報を取得できませんでした');
             }, silent ? { timeout: 8000 } : undefined);
+        }
+
+        // GPSでの自治体特定に失敗した場合、対象機関タグに表示されている内容が
+        // 「実際の現在地から特定された結果」だと誤解されないよう、タグに未確認である旨を明示する。
+        // ユーザーが手動で対象機関を選ぶか、GPS特定に成功すると解除される。
+        function markAuthorityTagUnconfirmed(reason) {
+            if (userManuallySelectedAuthority) return;
+            const tag = document.getElementById('authorityTag');
+            if (!tag) return;
+            tag.classList.add('authority-tag-unconfirmed');
+            tag.title = `📍 現在地は特定できていません（${reason}）。表示中の対象機関は一例です。タップして選び直してください`;
+        }
+
+        function clearAuthorityTagUnconfirmed() {
+            const tag = document.getElementById('authorityTag');
+            if (!tag) return;
+            tag.classList.remove('authority-tag-unconfirmed');
+            tag.removeAttribute('title');
         }
 
         // 対象機関は1つに絞り込まず、都道府県・周辺市区町村を含む候補を一覧表示し、
