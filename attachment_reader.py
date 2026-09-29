@@ -12,7 +12,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from timeout_utils import call_with_timeout
+from gemini_models import generate as gemini_generate
 
 try:
     from google.genai import types  # type: ignore
@@ -108,10 +108,10 @@ def read_attachments(attachments: List[Attachment], user_input: str, genai_clien
             user_input=user_input or "（コメントなし）",
             filenames="、".join(a.filename for a in attachments),
         )
-        response = call_with_timeout(
-            genai_client.models.generate_content,
-            model="gemini-3.1-pro-preview",
-            contents=[*parts, prompt],
+        response = gemini_generate(
+            genai_client,
+            "pro",
+            [*parts, prompt],
             config=types.GenerateContentConfig(response_mime_type="application/json"),
             timeout_s=30.0,
         )

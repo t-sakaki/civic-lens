@@ -984,6 +984,48 @@
             font-size: 0.62rem;
             color: var(--chat-muted);
         }
+        .start-news-agents {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin: 0.25rem 0 0.35rem 0.6rem;
+        }
+        .start-news-agents .status {
+            font-size: 0.65rem;
+            color: var(--chat-muted);
+        }
+        .start-news-agent {
+            display: flex;
+            align-items: baseline;
+            gap: 0.4rem;
+            text-align: left;
+            font-size: 0.7rem;
+            padding: 0.3rem 0.55rem;
+            border-radius: 0.55rem;
+            border: 1px solid rgba(244, 63, 94, 0.35);
+            background: rgba(244, 63, 94, 0.07);
+            color: var(--chat-text);
+            animation: agentAppear 0.35s ease-out;
+        }
+        .start-news-agent:hover,
+        .start-news-agent:focus-visible {
+            border-color: rgba(244, 63, 94, 0.7);
+            outline: none;
+        }
+        .start-news-agent .who {
+            flex-shrink: 0;
+            font-weight: 700;
+            color: #f43f5e;
+        }
+        .start-news-agent .lvl {
+            flex-shrink: 0;
+            font-size: 0.62rem;
+            color: var(--chat-muted);
+        }
+        @keyframes agentAppear {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: none; }
+        }
         .start-news-item .cta {
             flex-shrink: 0;
             font-size: 0.68rem;
@@ -1793,10 +1835,9 @@
                                     </div>
                                     <div class="start-menu-section" data-section="news">
                                         <div class="start-menu-section-head">
-                                            <h4 id="startMenuNewsTitle">📰 ニュースから怒りを再現</h4>
+                                            <h4 id="startMenuNewsTitle">📰 ニュースに登場する怒りのエージェント</h4>
                                             <button type="button" id="startMenuNewsReloadBtn" class="start-menu-link">再読み込み</button>
                                         </div>
-                                        <div id="startMenuNewsThemeChips" class="start-news-theme-chips"></div>
                                         <p id="startMenuNewsStatus" class="start-menu-status hidden"></p>
                                         <div id="startMenuNewsList" class="start-news-list"></div>
                                     </div>
@@ -3268,11 +3309,11 @@
             });
         }
 
-        // ニュースは地域×テーマごとにキャッシュし、メニューを開くたびに取り直さない
+        // ニュースは地域ごとにキャッシュし、メニューを開くたびに取り直さない
+        // （ニュース自体はエージェントに依存しない。エージェントは選んだ記事の分析観点だけを決める）
         const newsCache = {};
-        // テーマ別怒り再現エージェント（news_anger_agent.NEWS_THEMES）の選択状態。
-        // ジェンダー・貧困・公正・気候変動・生物多様性・人権など、同じニュースでも
-        // どの立場から怒るかをユーザーが切り替えられるようにする。
+        // 怒り再現エージェント（news_anger_agent.NEWS_THEMES）の選択状態。
+        // SDGs 17目標それぞれのエージェントがいて、同じニュースを各目標の観点から分析する。
         let newsAgentThemes = [{ id: 'general', label: '一般（行政監視）' }];
         let selectedNewsTheme = 'general';
 
@@ -3285,45 +3326,23 @@
                     newsAgentThemes = data.themes;
                     selectedNewsTheme = data.default_theme || newsAgentThemes[0].id;
                 }
-                renderNewsThemeChips();
             } catch (err) {
                 console.warn('テーマ一覧の取得に失敗:', err.message);
             }
         }
 
-        function renderNewsThemeChips() {
-            const wrap = document.getElementById('startMenuNewsThemeChips');
-            if (!wrap) return;
-            wrap.innerHTML = '';
-            newsAgentThemes.forEach(t => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'start-news-theme-chip' + (t.id === selectedNewsTheme ? ' active' : '');
-                chip.textContent = t.label;
-                chip.addEventListener('click', () => {
-                    if (selectedNewsTheme === t.id) return;
-                    selectedNewsTheme = t.id;
-                    renderNewsThemeChips();
-                    const region = getNewsRegion();
-                    if (region) loadNewsForRegion(region, { force: true });
-                });
-                wrap.appendChild(chip);
-            });
-        }
-
-        function newsCacheKey(region, theme) {
-            return `${region}::${theme}`;
+        function newsCacheKey(region) {
+            return region;
         }
 
         async function loadNewsForRegion(region, { force = false } = {}) {
             if (!region) return;
-            const theme = selectedNewsTheme;
-            const key = newsCacheKey(region, theme);
+            const key = newsCacheKey(region);
             if (!force && newsCache[key] && newsCache[key].status !== 'error') return;
             newsCache[key] = { status: 'loading', items: [] };
             if (isStartMenuOpen()) renderNewsSection();
             try {
-                const params = new URLSearchParams({ region, theme, max_items: '6' });
+                const params = new URLSearchParams({ region, max_items: '6' });
                 const res = await fetchWithRetry(`/api/news-agent/list?${params.toString()}`);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
@@ -3351,11 +3370,11 @@
             const list = document.getElementById('startMenuNewsList');
             const statusEl = document.getElementById('startMenuNewsStatus');
             document.getElementById('startMenuNewsTitle').textContent = region
-                ? `📰 ${region}のニュースから怒りを再現`
-                : '📰 ニュースから怒りを再現';
+                ? `📰 ${region}のニュースに怒りのエージェントが登場`
+                : '📰 ニュースに登場する怒りのエージェント';
             list.innerHTML = '';
 
-            const entry = region ? newsCache[newsCacheKey(region, selectedNewsTheme)] : null;
+            const entry = region ? newsCache[newsCacheKey(region)] : null;
             let statusText = '';
             if (!region) statusText = '対象地域が決まると、その地域のニュースを表示します';
             else if (!entry || entry.status === 'loading') statusText = '🔄 ニュースを収集中…';
@@ -3365,23 +3384,73 @@
             statusEl.classList.toggle('hidden', !statusText);
 
             (entry && entry.items || []).forEach(item => {
-                const row = document.createElement('button');
-                row.type = 'button';
+                const entryEl = document.createElement('div');
+                entryEl.className = 'start-news-entry';
+                entryEl.dataset.search = `${item.title} ${region} ニュース`;
+                const row = document.createElement('div');
                 row.className = 'start-news-item';
-                row.dataset.search = `${item.title} ${region} ニュース`;
                 row.innerHTML = `
                     <span class="min-w-0 flex-1">
                         <span class="title">${escapeHtml(item.title)}</span>
                         <span class="meta">${escapeHtml(formatNewsDate(item.published))}</span>
                     </span>
-                    <span class="cta">怒りを再現</span>
                 `;
-                row.addEventListener('click', () => {
-                    closePlusMenu();
-                    analyzeNewsItemInChat(item);
-                });
-                list.appendChild(row);
+                const agentsEl = document.createElement('div');
+                agentsEl.className = 'start-news-agents';
+                entryEl.appendChild(row);
+                entryEl.appendChild(agentsEl);
+                list.appendChild(entryEl);
+                renderAgentAppearances(agentsEl, item, region);
             });
+        }
+
+        // 怒りのエージェントは記事が表示されると自律的に記事を読み、出番のあるものだけが登場する
+        const agentAppearCache = {};
+
+        function renderAgentAppearances(container, item, region) {
+            const cached = agentAppearCache[item.link];
+            const draw = (state) => {
+                container.innerHTML = '';
+                if (state.status === 'loading') {
+                    container.innerHTML = '<span class="status">🤖 怒りのエージェントが記事を読んでいます…</span>';
+                    return;
+                }
+                if (state.status === 'error' || !state.appearances || state.appearances.length === 0) {
+                    container.innerHTML = '<span class="status">今回は名乗り出たエージェントはいません</span>';
+                    return;
+                }
+                state.appearances.forEach(a => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'start-news-agent';
+                    btn.title = 'このエージェントの観点で詳しく分析する';
+                    btn.innerHTML = `
+                        <span class="who">😡 ${escapeHtml(a.label.replace(/^目標(\d+)\s*/, 'SDG$1 '))}</span>
+                        <span class="min-w-0 flex-1">${escapeHtml(a.remark)}</span>
+                        <span class="lvl">怒り${a.anger_level}</span>
+                    `;
+                    btn.addEventListener('click', () => {
+                        closePlusMenu();
+                        analyzeNewsItemInChat(item, a.theme);
+                    });
+                    container.appendChild(btn);
+                });
+            };
+            if (cached && cached.status !== 'loading') { draw(cached); return; }
+            draw({ status: 'loading' });
+            if (cached && cached.status === 'loading') { cached.waiters.push(draw); return; }
+            const state = { status: 'loading', waiters: [draw] };
+            agentAppearCache[item.link] = state;
+            const formData = new FormData();
+            formData.append('title', item.title);
+            formData.append('link', item.link);
+            formData.append('summary', item.summary || '');
+            if (region) formData.append('region', region);
+            fetchWithRetry('/api/news-agent/appear', { method: 'POST', body: formData })
+                .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+                .then(data => { state.status = 'ready'; state.appearances = data.appearances || []; })
+                .catch(() => { state.status = 'error'; delete agentAppearCache[item.link]; })
+                .finally(() => state.waiters.forEach(w => w(state)));
         }
 
         function renderStartMenu() {
@@ -3390,7 +3459,7 @@
             renderNearbySection(selectedKey);
 
             const region = getNewsRegion();
-            if (region && !newsCache[newsCacheKey(region, selectedNewsTheme)]) loadNewsForRegion(region);
+            if (region && !newsCache[newsCacheKey(region)]) loadNewsForRegion(region);
             renderNewsSection();
 
             const situationGrid = document.getElementById('startMenuSituationGrid');
@@ -3439,7 +3508,7 @@
             let visibleCount = 0;
             plusMenuPopover.querySelectorAll('.start-menu-section').forEach(section => {
                 let sectionVisible = 0;
-                section.querySelectorAll('.start-tile, .start-news-item').forEach(el => {
+                section.querySelectorAll('.start-tile, .start-news-entry').forEach(el => {
                     const hit = !q || el.dataset.search.toLowerCase().includes(q);
                     el.classList.toggle('hidden', !hit);
                     if (hit) sectionVisible++;
@@ -3508,7 +3577,7 @@
             // 検索中にEnterで最初に一致した項目を選ぶ
             if (e.key === 'Enter' && !e.isComposing) {
                 e.preventDefault();
-                plusMenuPopover.querySelector('.start-tile:not(.hidden), .start-news-item:not(.hidden)')?.click();
+                plusMenuPopover.querySelector('.start-tile:not(.hidden)')?.click();
             }
         });
 
@@ -3631,8 +3700,11 @@
         }
 
         // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
-        async function analyzeNewsItemInChat(item) {
-            addChatBubble('user', `📰 「${item.title}」のニュースから怒りを再現して`);
+        async function analyzeNewsItemInChat(item, theme) {
+            const agentThemeId = theme || selectedNewsTheme;
+            const agentTheme = newsAgentThemes.find(x => x.id === agentThemeId);
+            const agentName = agentTheme ? `SDGs ${agentTheme.label}` : '怒り再現';
+            addChatBubble('user', `📰 「${item.title}」のニュースについて、${agentName}のエージェントの怒りを詳しく聞かせて`);
             const assistantBubble = addChatBubble('assistant', '🔄 ニュースを読み解いて、怒りを再現しています…（数十秒かかる場合があります）');
 
             try {
@@ -3643,7 +3715,7 @@
                 if (item.published) formData.append('published', item.published);
                 const region = getNewsRegion();
                 if (region) formData.append('region', region);
-                formData.append('theme', selectedNewsTheme);
+                formData.append('theme', agentThemeId);
                 // regionは表示名の文字列に過ぎずGPS調査済みの未収録自治体（pool:キー）を
                 // 正しく特定できないため、実際に選択中の対象機関キーも一緒に送る
                 const currentKey = document.getElementById('targetAuthority').value;

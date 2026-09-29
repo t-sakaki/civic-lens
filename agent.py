@@ -17,6 +17,12 @@ from precedent_cases import (
     format_precedent_case_for_prompt,
 )
 from timeout_utils import call_with_timeout, GeminiCallTimeout
+from gemini_models import (
+    attempts as gemini_attempts,
+    generate as gemini_generate,
+    primary_model,
+    report_failure as gemini_report_failure,
+)
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -459,7 +465,7 @@ def create_adk_agent():
     # 怒り分析 & メタ認知批評エージェント
     anger_agent = LlmAgent(
         name="anger_analyzer",
-        model="gemini-pro-latest",
+        model=primary_model("pro"),
         description="市民の怒り・不満を構造化データに変換し、メタ認知批評とタスクDAGを構築する",
         instruction="""
 あなたは情報公開請求の専門家AIエージェントです。
@@ -490,7 +496,7 @@ def create_adk_agent():
     # 反論構築エージェント
     counter_agent = LlmAgent(
         name="counter_argument_builder",
-        model="gemini-pro-latest",
+        model=primary_model("pro"),
         description="不開示決定への反論ロジックを構築する",
         instruction="""
 あなたは情報公開・審査請求の実務に精通したAIです。
@@ -602,7 +608,11 @@ JSONのみを返してください。
             # Gemini呼び出しは一過性のタイムアウト/レート制限で失敗することがあるため、
             # まず本命モデルを長めのタイムアウトで試し、失敗した場合は軽量モデルで
             # 1回だけリトライしてから、初めてルールベースにフォールバックする。
-            for model_name, timeout_s in (("gemini-pro-latest", 40.0), ("gemini-flash-latest", 20.0)):
+            # モデルの優先順・タイムアウトは gemini_models.py（環境変数で差し替え可）に集約。
+            # 404/403/429になったモデルは一定時間スキップされる。
+            model_attempts = list(gemini_attempts("pro", 40.0))
+            for attempt_idx, (model_name, timeout_s) in enumerate(model_attempts):
+                is_last_attempt = attempt_idx == len(model_attempts) - 1
                 try:
                     response = call_with_timeout(
                         self.genai_client.models.generate_content,
@@ -651,6 +661,7 @@ JSONのみを返してください。
                         data["safeguard_options"] = critique_val.get("safeguard_options", []) if isinstance(critique_val, dict) else getattr(critique_val, "safeguard_options", [])
                     return AngerAnalysis(**data)
                 except Exception as e:
+                    gemini_report_failure(model_name, e)
                     if isinstance(e, GeminiCallTimeout):
                         mock_reason = "timeout"
                     elif isinstance(e, json.JSONDecodeError):
@@ -659,7 +670,7 @@ JSONのみを返してください。
                         mock_reason = "api_error"
                     print(
                         f"Gemini API analysis error ({model_name}): {e}, "
-                        f"{'retrying with a lighter model' if model_name != 'gemini-flash-latest' else 'falling back to rule-based analysis'}"
+                        f"{'falling back to rule-based analysis' if is_last_attempt else 'retrying with the next model'}"
                     )
         else:
             mock_reason = "no_api_key"
@@ -722,9 +733,10 @@ JSONのみを返してください。
 
 JSONのみを出力してください。
 """
-                response = self.genai_client.models.generate_content(
-                    model="gemini-pro-latest",
-                    contents=prompt,
+                response = gemini_generate(
+                    self.genai_client,
+                    "pro",
+                    prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                     ),
@@ -835,10 +847,7 @@ JSONのみを出力してください。
 ### 6. 申出（請求）の目的・理由
 ### 7. 特記事項
 """
-                response = self.genai_client.models.generate_content(
-                    model="gemini-pro-latest",
-                    contents=prompt,
-                )
+                response = gemini_generate(self.genai_client, "pro", prompt)
                 text = response.text.strip()
                 if text.startswith("```"):
                     lines = text.split("\n")

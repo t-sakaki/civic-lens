@@ -103,8 +103,8 @@ from auth import (
     create_session_token, verify_session_token, get_user_by_id,
     generate_siwe_nonce, request_magic_link, verify_magic_link
 )
-from news_collector_agent import get_news_collector_agent, theme_search_keywords
-from news_anger_agent import AngerReproductionAgent, PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME
+from news_collector_agent import get_news_collector_agent
+from news_anger_agent import AngerReproductionAgent, select_appearing_agents, PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME
 from news_reactions import (
     make_news_id, record_analysis, add_reaction, list_records, get_record,
     mark_read, count_unread,
@@ -635,10 +635,10 @@ async def analyze_anger(
 
 @app.get("/api/news-agent/themes")
 async def list_news_agent_themes():
-    """テーマ別怒り再現エージェント（news_anger_agent.NEWS_THEMES）の一覧。
+    """怒り再現エージェント（news_anger_agent.NEWS_THEMES）の一覧。
 
-    ジェンダー・貧困・公正・気候変動・生物多様性・国際人権など、テーマごとに異なる
-    立場から同じニュースに怒ることができる（news_anger_agent.py参照）。
+    SDGs 17目標それぞれのエージェント（sdg1〜sdg17）と一般（行政監視）。
+    同じニュースを、各エージェントが自分のSDG目標の観点から分析する（news_anger_agent.py参照）。
     """
     return {
         "default_theme": DEFAULT_THEME,
@@ -650,18 +650,17 @@ async def list_news_agent_themes():
 async def list_news_for_region(
     region: str,
     keyword: Optional[str] = None,
-    theme: Optional[str] = None,
     max_items: int = 8,
 ):
     """指定地域のニュースを複数件取得する（NewsCollectorAgent）。
     1件だけ自動選択するのではなく、ユーザーが記事を選んで分析できるようにする一覧表示用。
-    theme を指定すると、そのテーマに関連しやすいキーワードを絞り込みに加える。
+    ニュースは地域（と任意のキーワード）だけで収集し、テーマ（SDGs）では絞り込まない。
+    SDGsごとの観点は、選んだ記事を分析する段階（/api/news-agent/analyze）で適用される。
     """
     collector = get_news_collector_agent()
-    extra_keywords = ([keyword] if keyword else []) + theme_search_keywords(theme)
     items = collector.fetch_news(
         region,
-        extra_keywords=extra_keywords or None,
+        extra_keywords=[keyword] if keyword else None,
         max_items=max(1, min(max_items, 20)),
     )
     if not items:
@@ -682,6 +681,31 @@ async def list_news_for_region(
             for item in items
         ]
     }
+
+
+_APPEARANCE_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+
+
+@app.post("/api/news-agent/appear")
+async def agents_appear_for_news(
+    title: str = Form(...),
+    link: str = Form(...),
+    summary: str = Form(""),
+    region: Optional[str] = Form(None),
+):
+    """ニュース1件に対し、どのSDGsエージェントが自律的に登場するかを返す。
+
+    ユーザーがボタンを押さなくても、ニュース一覧の表示と同時に各エージェントが記事を読み、
+    自分の担当観点から見過ごせない記事にだけ名乗り出て一言コメントする。
+    詳細な分析（論点整理・擬似市民の声・開示請求の該当箇所）は /api/news-agent/analyze で行う。
+    """
+    news_id = make_news_id(link)
+    cached = _APPEARANCE_CACHE.get(news_id)
+    if cached is None:
+        news_text = "\n".join([p for p in [title, summary] if p])
+        cached = await asyncio.to_thread(select_appearing_agents, news_text, region)
+        _APPEARANCE_CACHE[news_id] = cached
+    return {"news_id": news_id, "appearances": cached}
 
 
 def _analyze_news_text(
@@ -751,7 +775,8 @@ async def analyze_news_item(
     authority_key: 一覧取得時にユーザーが実際に選択していた対象機関キー（分かる場合）。
     regionは表示名の文字列に過ぎないため、GPS調査済みの未収録自治体（pool:キー）まで
     正しく紐づけるには、こちらを優先してヒントに使う。
-    theme: どのテーマ別怒り再現エージェントで分析するか（news_anger_agent.NEWS_THEMES）。
+    theme: どの怒り再現エージェント（SDGs目標別）の観点で分析するか（news_anger_agent.NEWS_THEMES）。
+    同じ記事でもエージェントごとに別の記録として保存する。
 
     エージェント構成（AGENTS.md参照）:
       AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
@@ -759,7 +784,7 @@ async def analyze_news_item(
     news_text = "\n".join([p for p in [title, summary] if p])
     analyzed = _analyze_news_text(news_text, region=region, theme=theme, hint_key=authority_key)
 
-    news_id = make_news_id(link)
+    news_id = make_news_id(link, theme)
     source_news = {"title": title, "link": link, "published": published}
     record = record_analysis(
         news_id=news_id,
@@ -788,12 +813,14 @@ async def autonomous_scan_news(
     max_items_per_region: int = 3,
     scheduler_secret: Optional[str] = Header(None, alias="X-Scheduler-Secret"),
 ):
-    """複数地域 x 複数テーマを自律的にスキャンし、怒りレベルが高い記事だけを未読記録として保存する。
+    """複数地域のニュースを収集し、各SDGsエージェントの観点で分析して、怒りレベルが高いものだけを未読記録として保存する。
 
     regions: カンマ区切りの地域名（例: "名古屋市,安城市"）。ユーザー登録地域の代わりに
       呼び出し側（Cloud Scheduler設定）がリスト管理する想定（AGENTS.md: 専用の地理エージェントは
       別途作らない方針のため、既存の地域推定結果をCloud Scheduler側の引数として渡す運用）。
-    themes: カンマ区切りのテーマID（省略時は全テーマ）。
+    themes: カンマ区切りの怒りエージェントID（sdg1〜sdg17 / general。省略時は全エージェント）。
+      ニュースは地域ごとに1回だけ収集し、各エージェントが記事を読んで自分の出番か判断する。
+      名乗り出たエージェント（themesで許可されたものに限る・最大3体）だけが詳細分析を行う。
     """
     expected_secret = os.getenv("NEWS_AGENT_SCHEDULER_SECRET")
     if expected_secret and scheduler_secret != expected_secret:
@@ -808,17 +835,19 @@ async def autonomous_scan_news(
     errors: List[Dict[str, str]] = []
 
     for region in region_list:
-        for theme in theme_list:
-            try:
-                extra_keywords = theme_search_keywords(theme)
-                items = collector.fetch_news(
-                    region, extra_keywords=extra_keywords or None, max_items=max_items_per_region
-                )
-                for item in items:
-                    news_id = make_news_id(item.link)
-                    existing = get_record(news_id)
-                    if existing is not None:
-                        continue  # 既に分析済みの記事は再スキャンしない
+        try:
+            items = collector.fetch_news(region, max_items=max_items_per_region)
+        except Exception as e:
+            errors.append({"region": region, "theme": "", "error": str(e)})
+            continue
+        for item in items:
+            # 全エージェントで総当たりせず、記事を読んで名乗り出たエージェントだけが分析する
+            appearing = await asyncio.to_thread(select_appearing_agents, item.as_text(), region)
+            for theme in [a["theme"] for a in appearing if a["theme"] in theme_list]:
+                try:
+                    news_id = make_news_id(item.link, theme)
+                    if get_record(news_id) is not None:
+                        continue  # 既にこのエージェントで分析済みの記事は再スキャンしない
 
                     analyzed = _analyze_news_text(item.as_text(), region=region, theme=theme)
                     anger_level = analyzed["anger_analysis"].anger_level
@@ -838,8 +867,8 @@ async def autonomous_scan_news(
                         autonomous=True,
                     )
                     created.append(record)
-            except Exception as e:
-                errors.append({"region": region, "theme": theme, "error": str(e)})
+                except Exception as e:
+                    errors.append({"region": region, "theme": theme, "error": str(e)})
 
     return {"created_count": len(created), "created": created, "errors": errors}
 

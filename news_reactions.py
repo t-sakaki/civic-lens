@@ -29,9 +29,14 @@ REACTION_TYPES = ["heart", "angry", "shock"]
 REACTION_EMOJI = {"heart": "❤️", "angry": "😡", "shock": "😳"}
 
 
-def make_news_id(link: str) -> str:
-    """ニュースリンクから安定した記録IDを生成する"""
-    return hashlib.sha256(link.encode("utf-8")).hexdigest()[:16]
+def make_news_id(link: str, theme: Optional[str] = None) -> str:
+    """ニュースリンク（と怒りエージェント）から安定した記録IDを生成する
+
+    同じ記事を複数のSDGsエージェントが分析できるよう、themeが一般以外の場合は
+    エージェントごとに別の記録IDにする（themeなし/generalは従来のIDと同一）。
+    """
+    key = link if not theme or theme == "general" else f"{link}#{theme}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 def _load() -> Dict[str, Any]:
