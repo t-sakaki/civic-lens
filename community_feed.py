@@ -94,7 +94,10 @@ def fetch_unified_feed(
 
     try:
         entries = fetch_ledger_entries()
-        tip_totals = all_time_tip_totals()
+        try:
+            tip_totals = all_time_tip_totals()
+        except Exception:
+            tip_totals = {}  # 投げ銭スキーマ未設定・障害でも台帳一覧は表示する
         onchain_items = [_onchain_item(e, tip_totals) for e in entries]
         if category:
             onchain_items = [it for it in onchain_items if it["category"] == category]

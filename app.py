@@ -159,7 +159,7 @@ async def unhandled_exception_handler(request, exc: Exception):
     traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"detail": f"サーバー内部エラーが発生しました: {exc}"},
+        content={"detail": "サーバー内部エラーが発生しました。しばらくしてからお試しください。"},
     )
 
 
