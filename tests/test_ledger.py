@@ -183,3 +183,44 @@ def test_api_react_wallet_rejects_bad_signatures(client):
     body3, _ = _wallet_body("watch", uid=other)
     assert c.post(f"/api/ledger/{other}/react-wallet", json=body3).status_code == 404
     assert c.get("/api/ledger").json()["entries"][0]["reactions"]["watch"]["count"] == 0
+
+
+def test_reactions_use_upstash_when_configured(monkeypatch):
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://example.upstash.io")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "tok")
+    sets: dict = {}
+
+    class Resp:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.data
+
+    def fake_post(url, json, headers, timeout):
+        assert url == "https://example.upstash.io/pipeline" and headers["Authorization"] == "Bearer tok"
+        out = []
+        for cmd, k, *rest in json:
+            members = sets.setdefault(k, set())
+            if cmd == "SCARD":
+                out.append({"result": len(members)})
+            elif cmd == "SISMEMBER":
+                out.append({"result": int(rest[0] in members)})
+            elif cmd == "SADD":
+                members.add(rest[0]); out.append({"result": 1})
+            elif cmd == "SREM":
+                members.discard(rest[0]); out.append({"result": 1})
+        return Resp(out)
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    r = lr.toggle_reaction(UID, "user-a", "watch")
+    assert r["watch"]["count"] == 1 and r["watch"]["mine"] is True
+    assert lr.get_reactions(UID)["watch"]["mine"] is False
+    # 保存されるのは生のユーザーIDではなくハッシュ
+    assert all("user-a" not in m for v in sets.values() for m in v)
+    assert lr.toggle_reaction(UID, "user-a", "watch")["watch"]["count"] == 0
