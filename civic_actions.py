@@ -18,14 +18,13 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from ordinance_data import AuthorityInfo, addressee_name
-from timeout_utils import call_with_timeout
+from gemini_models import generate as gemini_generate
 
 try:
     from google.genai import types
 except ImportError:  # google-genai 未導入環境ではテンプレート生成のみ
     types = None
 
-GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 LEGAL_NOTICE = (
     "※ 本書面はCivic Lensによる書式作成支援であり、法的助言ではありません。"
@@ -111,13 +110,7 @@ def _generate(genai_client, prompt: str, json_output: bool = False) -> Optional[
         return None
     try:
         config = types.GenerateContentConfig(response_mime_type="application/json") if json_output else None
-        response = call_with_timeout(
-            genai_client.models.generate_content,
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=config,
-            timeout_s=40.0,
-        )
+        response = gemini_generate(genai_client, "pro", prompt, config=config, timeout_s=40.0)
         return _strip_code_fence(response.text)
     except Exception as e:
         print(f"[civic_actions] Gemini生成エラー: {e}, テンプレートを使用します")

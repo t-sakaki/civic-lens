@@ -24,28 +24,6 @@ GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 # 自治体・警察・公的行事の話題に絞り込むためのデフォルトキーワード
 DEFAULT_TOPIC_KEYWORDS = ["市", "県", "町", "村", "警察", "自治体", "大会", "式典"]
 
-# テーマ別の怒り再現エージェント（news_anger_agent.py の NEWS_THEMES）向けの検索キーワードヒント。
-# 同じ地域でもテーマごとに異なる切り口のニュースを拾えるようにする。
-THEME_SEARCH_HINTS: dict[str, list[str]] = {
-    "general": [],
-    "gender": ["女性活躍", "男女共同参画", "審議会 女性比率"],
-    "poverty": ["生活困窮", "生活保護", "子ども食堂", "福祉予算"],
-    "fairness": ["随意契約", "入札", "利益相反", "天下り"],
-    "climate": ["脱炭素", "再エネ", "CO2削減", "気候変動対策"],
-    "biodiversity": ["自然環境", "里山", "開発 環境アセスメント", "緑地"],
-    "human_rights": ["外国人 支援", "多文化共生", "人権 相談窓口"],
-}
-
-
-def theme_search_keywords(theme: str | None, max_terms: int = 1) -> list[str]:
-    """テーマの検索キーワードヒントを返す。
-
-    Google News RSSはスペース区切りのキーワードをAND検索するため、
-    地域名にテーマキーワードを足しすぎるとヒット件数が0件になりやすい。
-    デフォルトでは代表的な1語だけ足す。
-    """
-    return list(THEME_SEARCH_HINTS.get(theme or "general", []))[:max_terms]
-
 
 @dataclass
 class NewsItem:
