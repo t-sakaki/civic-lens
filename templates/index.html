@@ -3631,6 +3631,10 @@
                 const region = getNewsRegion();
                 if (region) formData.append('region', region);
                 formData.append('theme', selectedNewsTheme);
+                // regionは表示名の文字列に過ぎずGPS調査済みの未収録自治体（pool:キー）を
+                // 正しく特定できないため、実際に選択中の対象機関キーも一緒に送る
+                const currentKey = document.getElementById('targetAuthority').value;
+                if (currentKey) formData.append('authority_key', currentKey);
 
                 const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData }, 2);
                 if (!res.ok) {

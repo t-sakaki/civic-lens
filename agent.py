@@ -557,16 +557,25 @@ class CivicLensAgent:
         （例: ブラウザGeolocationで特定済みの自治体）。Gemini・ルールベースいずれも
         本文からの判定を優先し、判定できない場合にのみこの値を採用する。
         """
-        from ordinance_data import AUTHORITIES, match_authority_by_text, addressee_name
+        from ordinance_data import AUTHORITIES, match_authority_by_text, addressee_name, get_ordinance
 
+        # ヒントは data/authorities/*.json 収録済みの11機関に限らず、GPSのバックグラウンド
+        # 調査で判明した未収録自治体（"pool:<muni_code>" キー）も対象になりうるため、
+        # 固定辞書 AUTHORITIES ではなく pool: キーにも対応する get_ordinance() で検証する。
+        hint_info = get_ordinance(hint_authority_key) if hint_authority_key else None
         hint_line = ""
-        if hint_authority_key and hint_authority_key in AUTHORITIES:
-            hint_name = AUTHORITIES[hint_authority_key].authority
+        target_authority_key_options = "anjo-city, nagoya-city, okazaki-city, toyota-city, gamagori-city, aichi-pref, aichi-assembly, metropolitan-police, aichi-police, kanagawa-police, osaka-police"
+        if hint_info:
+            hint_name = hint_info.authority
             hint_line = (
                 f"\nヒント: この入力はユーザーが「{hint_name}」に関心を持って調べた内容です。"
                 f"入力文中に別の具体的な機関（警察組織や他の自治体など）への明確な言及がない限り、"
                 f"target_authority は「{hint_name}」、target_authority_key は「{hint_authority_key}」としてください。\n"
             )
+            # ヒントのキーがpool:形式（固定11機関の外）の場合、その値も選択肢として明示しないと
+            # Geminiが下のスキーマ列挙に引っ張られて無関係な11機関の中から選んでしまうため追加する
+            if hint_authority_key not in AUTHORITIES:
+                target_authority_key_options = f'"{hint_authority_key}"（ヒントで指定された機関）, ' + target_authority_key_options
 
         mock_reason = None
         if self.genai_client:
@@ -580,7 +589,7 @@ class CivicLensAgent:
 - anger_level: 怒り・不満レベルの整数 (1〜10)
 - emotion_keywords: 市民が感じている感情キーワードのリスト (例: ["不信", "隠蔽", "怒り"])
 - target_authority: 対象となる行政機関または警察組織の名前 (例: "安城市", "名古屋市", "愛知県", "愛知県警察本部", "警視庁" など)
-- target_authority_key: 条例キー (anjo-city, nagoya-city, okazaki-city, toyota-city, gamagori-city, aichi-pref, aichi-assembly, metropolitan-police, aichi-police, kanagawa-police, osaka-police のいずれか)
+- target_authority_key: 条例キー ({target_authority_key_options} のいずれか)
 - pain_summary: 市民の不満や問題の要約 (100文字程度)
 - specific_documents_requested: 請求すべき具体的な行政文書名のリスト (例: ["海外視察の復命書", "精算内訳書", "領収書一式"])
 - legal_basis: 適用される条例条文 (例: "安城市情報公開条例第7条")
@@ -612,16 +621,17 @@ JSONのみを返してください。
                     data = json.loads(text)
 
                     # target_authority_key がスキーマ外の値（LLMの逸脱・ハルシネーション）の場合、
-                    # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）
-                    if data.get("target_authority_key") not in AUTHORITIES:
-                        fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else match_authority_by_text(user_input)
+                    # ヒントまたはテキストマッチングで安全な値に補正する（誤った機関への紐づけを防止）。
+                    # get_ordinance() は固定11機関に加えpool:キー（GPS調査済み未収録自治体）も認識する。
+                    if get_ordinance(data.get("target_authority_key")) is None:
+                        fallback_key = hint_authority_key if hint_info else match_authority_by_text(user_input)
                         print(
                             f"[analyze_anger] 不正なtarget_authority_key '{data.get('target_authority_key')}' を "
                             f"'{fallback_key}' に補正しました"
                         )
                         data["target_authority_key"] = fallback_key
                     # target_authority はLLMの自由記述ではなく、実施機関名（例: 愛知県知事）で正規化する
-                    data["target_authority"] = addressee_name(AUTHORITIES[data["target_authority_key"]])
+                    data["target_authority"] = addressee_name(get_ordinance(data["target_authority_key"]))
 
                     if "task_dag" not in data or not data["task_dag"]:
                         data["task_dag"] = build_task_dag(
