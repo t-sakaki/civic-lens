@@ -7,7 +7,8 @@
   🙋 want_to_know 私も知りたい — 自分もこの文書に関心がある
   🔁 fork_local   自分の自治体でも — 同じ請求を別の自治体に出したい
 
-1人1記録につき各種類1回まで（ログイン必須、トグル）。誰が反応したかは公開せず件数のみ返す。
+1人1記録につき各種類1回まで（ログイン、またはウォレットの無料署名（personal_sign、ガス代なし）が必要、トグル）。
+ウォレット署名はcivic-disclosure-tip（ETHGlobal Tokyo 2026）と同じ方式で、サーバーは署名の検証のみ行い代理署名しない。誰が反応したかは公開せず件数のみ返す。
 保存するのはユーザーIDそのものではなく、記録UIDと組み合わせたハッシュ（記録をまたいだ突合を防ぐ）。
 
 保存先は本番では Firestore（`ledger_reactions` コレクション、ドキュメントID = 記録UID）。
@@ -76,6 +77,46 @@ def _read_entry(uid: str) -> Dict[str, list]:
         snap = _doc(uid).get()
         return (snap.to_dict() or {}) if snap.exists else {}
     return _load().get(uid.lower(), {})
+
+
+WALLET_MESSAGE_MAX_AGE_SECONDS = 300
+
+
+def wallet_reactor_id(address: str) -> str:
+    """ウォレット署名で反応した人の識別子。ログインユーザーIDと名前空間が衝突しないよう接頭辞を付ける。"""
+    return f"wallet:{address.lower()}"
+
+
+def build_wallet_message(uid: str, reaction: str, timestamp: int) -> str:
+    """ブラウザ（templates/ledger.html）が署名する文言と完全に一致させること。"""
+    return (
+        "Civic Lens ledger reaction (no gas, not a transaction)\n"
+        f"record: {uid.lower()}\n"
+        f"reaction: {reaction}\n"
+        f"timestamp: {timestamp}"
+    )
+
+
+def verify_wallet_signature(uid: str, reaction: str, address: str, timestamp: int, signature: str) -> str:
+    """署名を検証し、リアクション用の識別子（wallet:0x...）を返す。ガス代不要のpersonal_sign。"""
+    import time
+
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+
+    if reaction not in REACTION_TYPES:
+        raise ValueError(f"未対応のリアクションです: {reaction}")
+    if abs(time.time() - timestamp) > WALLET_MESSAGE_MAX_AGE_SECONDS:
+        raise ValueError("署名の有効期限が切れています。もう一度お試しください。")
+    try:
+        recovered = Account.recover_message(
+            encode_defunct(text=build_wallet_message(uid, reaction, timestamp)), signature=signature
+        )
+    except Exception:
+        raise ValueError("署名を検証できませんでした。")
+    if recovered.lower() != address.lower():
+        raise ValueError("署名がウォレットアドレスと一致しません。")
+    return wallet_reactor_id(recovered)
 
 
 def get_reactions(uid: str, user_id: Optional[str] = None) -> Dict[str, dict]:
