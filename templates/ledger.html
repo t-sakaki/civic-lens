@@ -245,7 +245,9 @@
             const reactBtn = ev.target.closest('[data-reaction]');
             if (reactBtn) {
                 const uid = reactBtn.dataset.uid;
-                const msg = document.querySelector(`[data-react-msg="${CSS.escape(uid)}"]`);
+                // ウォレット接続で台帳が再描画されるため、要素は使う直前に毎回取り直す
+                const msgEl = () => document.querySelector(`[data-react-msg="${CSS.escape(uid)}"]`);
+                const showMsg = (html) => { const m = msgEl(); m.innerHTML = html; m.classList.remove('hidden'); };
                 let res;
                 if (loggedIn) {
                     const form = new FormData();
@@ -255,7 +257,10 @@
                     // ログイン不要：ウォレットの無料署名（ガス代なし・トランザクションではない）で本人性を示す
                     try {
                         if (!signer) await connectWallet();
-                        if (!signer) throw new Error('ウォレットが接続されていません。');
+                        if (!signer) {
+                            showMsg('ウォレットに接続できませんでした：' + escapeHtml(document.getElementById('walletStatus').textContent.trim()));
+                            return;
+                        }
                         const address = await signer.getAddress();
                         const reaction = reactBtn.dataset.reaction;
                         const timestamp = Math.floor(Date.now() / 1000);
@@ -266,22 +271,19 @@
                             body: JSON.stringify({ reaction, address, timestamp, signature }),
                         });
                     } catch (err) {
-                        msg.textContent = 'ウォレットでの署名がキャンセルされたか失敗しました。';
-                        msg.classList.remove('hidden');
+                        showMsg('ウォレットでの署名がキャンセルされたか失敗しました。');
                         return;
                     }
                 } else {
-                    msg.innerHTML = 'リアクションには、<a class="cl-link" href="/">ログイン</a>するか、MetaMask等のウォレットが必要です。';
-                    msg.classList.remove('hidden');
+                    showMsg('リアクションには、<a class="cl-link" href="/">ログイン</a>するか、MetaMask等のウォレットが必要です。');
                     return;
                 }
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                    msg.textContent = data.detail || 'リアクションに失敗しました';
-                    msg.classList.remove('hidden');
+                    showMsg(escapeHtml(typeof data.detail === 'string' ? data.detail : 'リアクションに失敗しました（サーバーエラー）'));
                     return;
                 }
-                msg.classList.add('hidden');
+                msgEl().classList.add('hidden');
                 for (const [type, r] of Object.entries(data.reactions)) {
                     const btn = document.querySelector(`[data-uid="${CSS.escape(uid)}"][data-reaction="${type}"]`);
                     btn.setAttribute('aria-pressed', r.mine);
