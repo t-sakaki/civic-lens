@@ -3630,7 +3630,7 @@
 
         // 疑似市民の声をユーザー自身のBluesky/Xアカウントからシェアする
         // （専用botアカウントは使わない。認証情報未設定時は投稿用テキストを表示するフォールバック）
-        function renderNewsShareButtons(bubbleEl, newsId) {
+        function renderNewsShareButtons(bubbleEl, newsId, record) {
             const container = bubbleEl.querySelector('.news-share-buttons');
             const resultEl = bubbleEl.querySelector('.news-share-result');
 
@@ -3640,7 +3640,14 @@
                     const res = await fetch('/api/social/share', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ platform, news_id: newsId }),
+                        body: JSON.stringify({
+                            platform,
+                            news_id: newsId,
+                            title: record && record.source_news ? record.source_news.title : null,
+                            link: record && record.source_news ? record.source_news.link : null,
+                            pseudo_citizen_voice: record ? record.pseudo_citizen_voice : null,
+                            key_points: record ? record.key_points : null,
+                        }),
                     });
                     const data = await res.json();
 
@@ -3741,7 +3748,7 @@
                     <div class="news-share-result mt-2"></div>
                 `;
                 renderNewsReactions(assistantBubble.querySelector('.news-reactions'), record.news_id, record.reactions);
-                renderNewsShareButtons(assistantBubble, record.news_id);
+                renderNewsShareButtons(assistantBubble, record.news_id, record);
 
                 // 既存の怒り分析結果パネル（右ペイン）に接続
                 lastSubmittedText = record.pseudo_citizen_voice;
