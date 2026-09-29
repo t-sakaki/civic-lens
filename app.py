@@ -553,7 +553,10 @@ async def analyze_anger(
             raise HTTPException(400, f"「{upload.filename}」のサイズが大きすぎます（{MAX_ATTACHMENT_BYTES // (1024 * 1024)}MBまで）。")
         files.append(Attachment(filename=upload.filename or "添付ファイル", mime_type=mime_type, data=data))
 
-    hint_authority_key = target_authority if target_authority in AUTHORITIES else None
+    # get_ordinance() は固定収録済みの機関に加え、GPSのバックグラウンド調査で判明した
+    # 未収録自治体（"pool:<muni_code>" キー）も認識する。AUTHORITIES直接参照だと
+    # pool:キーが常に無効扱いになり、GPSで特定した自治体のヒントが失われてしまう。
+    hint_authority_key = target_authority if target_authority and get_ordinance(target_authority) else None
     # 1. 感情解析（画像があれば）
     anger_level = None
     emotion_data = None
@@ -595,7 +598,7 @@ async def analyze_anger(
         print(f"Gemini エラー: {e}")
         # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
         fallback_key = hint_authority_key or "anjo-city"
-        fallback_authority = AUTHORITIES[fallback_key]
+        fallback_authority = get_ordinance(fallback_key) or AUTHORITIES["anjo-city"]
         anger_analysis = AngerAnalysis(
             anger_level=anger_level,
             emotion_keywords=["怒り", "不信"],
@@ -678,12 +681,15 @@ async def list_news_for_region(
 
 
 def _analyze_news_text(
-    news_text: str, region: Optional[str] = None, theme: Optional[str] = None
+    news_text: str, region: Optional[str] = None, theme: Optional[str] = None, hint_key: Optional[str] = None
 ) -> Dict[str, Any]:
     """怒り再現→開示請求分析の共通処理（1記事分）
 
     region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
     無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
+    hint_key: ユーザーが一覧取得時に実際に選択していた対象機関キー（分かっている場合）。
+    regionは表示名の自由文字列で、固定11機関のエイリアスにしかマッチできないため、
+    GPS調査済みの未収録自治体（pool:キー）まで正しく紐づけるにはこちらを優先する。
     theme: どのテーマ別怒り再現エージェントで分析するか（未指定ならDEFAULT_THEME）。
     """
     anger_agent = AngerReproductionAgent()
@@ -691,7 +697,9 @@ def _analyze_news_text(
     pseudo_voice = step1["pseudo_citizen_voice"]
 
     hint_authority_key = None
-    if region:
+    if hint_key and get_ordinance(hint_key):
+        hint_authority_key = hint_key
+    elif region:
         hint_authority_key = match_authority_by_text(region, default="") or None
 
     agent = get_agent()
@@ -699,8 +707,8 @@ def _analyze_news_text(
         anger_analysis = agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key)
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        fallback_key = hint_authority_key if hint_authority_key in AUTHORITIES else "anjo-city"
-        fallback_authority = AUTHORITIES[fallback_key].authority
+        fallback_key = hint_authority_key if hint_authority_key and get_ordinance(hint_authority_key) else "anjo-city"
+        fallback_authority = (get_ordinance(fallback_key) or AUTHORITIES["anjo-city"]).authority
         anger_analysis = AngerAnalysis(
             anger_level=text_to_anger_level(pseudo_voice),
             emotion_keywords=["怒り", "不信"],
@@ -730,18 +738,22 @@ async def analyze_news_item(
     published: Optional[str] = Form(None),
     region: Optional[str] = Form(None),
     theme: Optional[str] = Form(None),
+    authority_key: Optional[str] = Form(None),
 ):
     """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
 
     region: ユーザーが一覧取得時に指定した対象地域。記事本文が具体的な自治体名に
     触れていない場合でも、無関係な自治体に誤って紐づかないよう対象機関特定に使う。
+    authority_key: 一覧取得時にユーザーが実際に選択していた対象機関キー（分かる場合）。
+    regionは表示名の文字列に過ぎないため、GPS調査済みの未収録自治体（pool:キー）まで
+    正しく紐づけるには、こちらを優先してヒントに使う。
     theme: どのテーマ別怒り再現エージェントで分析するか（news_anger_agent.NEWS_THEMES）。
 
     エージェント構成（AGENTS.md参照）:
       AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
     """
     news_text = "\n".join([p for p in [title, summary] if p])
-    analyzed = _analyze_news_text(news_text, region=region, theme=theme)
+    analyzed = _analyze_news_text(news_text, region=region, theme=theme, hint_key=authority_key)
 
     news_id = make_news_id(link)
     source_news = {"title": title, "link": link, "published": published}
