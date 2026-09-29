@@ -27,6 +27,15 @@ def list_prefectures() -> List[str]:
         return json.load(f)
 
 
+def _iso3166_2_jp_to_prefecture() -> Dict[str, str]:
+    """ISO 3166-2:JP コード（"JP-13"等）から都道府県名への対応表
+
+    data/prefectures.json はISO 3166-2:JPの番号順（JP-01=北海道 ... JP-47=沖縄県）に
+    並んでいるため、そのインデックスから機械的に対応表を作れる。
+    """
+    return {f"JP-{i + 1:02d}": name for i, name in enumerate(list_prefectures())}
+
+
 class MunicipalityLocation(BaseModel):
     """特定した行政区画（現在地から、または手動選択から）"""
     muni_code: str          # 都道府県+市区町村名から生成した安定な内部キー（JISコードではない）
@@ -88,6 +97,10 @@ def _reverse_geocode(lat: float, lon: float) -> Optional[Dict]:
     address = response.json().get("address", {})
 
     prefecture = address.get("province") or address.get("state") or ""
+    if not prefecture:
+        # 東京都はOSM側の行政境界データにprovince/stateタグが付いておらず、
+        # ISO3166-2-lvl4（例: "JP-13"）だけが返ってくる。番号から都道府県名を逆引きする。
+        prefecture = _iso3166_2_jp_to_prefecture().get(address.get("ISO3166-2-lvl4", ""), "")
     municipality = (
         address.get("city")
         or address.get("town")
