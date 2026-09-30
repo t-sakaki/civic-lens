@@ -1,4 +1,6 @@
 """ニュース1件ごとの複数エージェントの声の統合 → 開示請求対象の提案（Geminiなしのフォールバック経路）"""
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,7 +11,7 @@ import news_reactions
 
 client = TestClient(app_module.app)
 
-NEWS = {
+NEWS_BASE = {
     "title": "アジア大会が成功裏に閉幕 警備に多数の警察官 交通規制も",
     "link": "http://example.com/news/1",
     "summary": "式典と大規模警備が行われた",
@@ -25,13 +27,23 @@ def _isolated(monkeypatch, tmp_path):
     app_module._APPEARANCE_CACHE.clear()
 
 
-def test_analyze_aggregates_multiple_agent_voices_and_proposes_targets():
-    res = client.post("/api/news-agent/analyze", data=NEWS)
+@pytest.fixture
+def news():
+    """テストごとに記事URLを一意にする。
+
+    CIはFirestoreエミュレータ上で動き記録がテスト間で残るため、同じURLを使い回すと
+    「分析済みの記事」として自律スキャン等がスキップされてしまう。
+    """
+    return {**NEWS_BASE, "link": f"http://example.com/news/{uuid.uuid4().hex}"}
+
+
+def test_analyze_aggregates_multiple_agent_voices_and_proposes_targets(news):
+    res = client.post("/api/news-agent/analyze", data=news)
     assert res.status_code == 200
     record = res.json()
 
     # 記録IDはニュース1件ごと（エージェント別ではない）
-    assert record["news_id"] == news_reactions.make_news_id(NEWS["link"])
+    assert record["news_id"] == news_reactions.make_news_id(news["link"])
     assert record["theme"] == "multi"
     # 交通規制・警察・式典 → 複数のSDGsエージェントが名乗り出て、それぞれ声を挙げる
     themes = [v["theme"] for v in record["voices"]]
@@ -49,8 +61,8 @@ def test_analyze_aggregates_multiple_agent_voices_and_proposes_targets():
     assert record["pseudo_citizen_voice"]
 
 
-def test_select_proposal_runs_disclosure_analysis_and_stores_it():
-    record = client.post("/api/news-agent/analyze", data=NEWS).json()
+def test_select_proposal_runs_disclosure_analysis_and_stores_it(news):
+    record = client.post("/api/news-agent/analyze", data=news).json()
     res = client.post(
         "/api/news-agent/select-proposal",
         data={"news_id": record["news_id"], "proposal_index": 0},
@@ -62,11 +74,11 @@ def test_select_proposal_runs_disclosure_analysis_and_stores_it():
     assert news_reactions.get_record(record["news_id"])["selected_proposal"] == 0
 
 
-def test_select_proposal_validation():
+def test_select_proposal_validation(news):
     assert client.post(
         "/api/news-agent/select-proposal", data={"news_id": "missing", "proposal_index": 0}
     ).status_code == 404
-    record = client.post("/api/news-agent/analyze", data=NEWS).json()
+    record = client.post("/api/news-agent/analyze", data=news).json()
     assert client.post(
         "/api/news-agent/select-proposal", data={"news_id": record["news_id"], "proposal_index": 99}
     ).status_code == 400
@@ -86,11 +98,11 @@ def test_normalize_proposals_fixes_invalid_authority_and_unknown_supporters():
     assert result[0]["supporting_themes"] == ["sdg16"]  # 存在しないエージェントIDは除外
 
 
-def test_autonomous_scan_stores_one_record_per_news(monkeypatch):
+def test_autonomous_scan_stores_one_record_per_news(monkeypatch, news):
     class _Item:
-        title, link, published = NEWS["title"], NEWS["link"], None
+        title, link, published = news["title"], news["link"], None
         def as_text(self):
-            return f"{NEWS['title']}\n{NEWS['summary']}"
+            return f"{news['title']}\n{news['summary']}"
 
     class _Collector:
         def fetch_news(self, region, extra_keywords=None, max_items=5):
@@ -109,7 +121,7 @@ def test_autonomous_scan_stores_one_record_per_news(monkeypatch):
     assert again["created_count"] == 0
 
 
-def test_ticker_endpoint_returns_agent_remarks_for_input_placeholder(monkeypatch):
+def test_ticker_endpoint_returns_agent_remarks_for_input_placeholder(monkeypatch, news):
     from news_collector_agent import NewsItem
 
     class _Collector:
@@ -118,8 +130,8 @@ def test_ticker_endpoint_returns_agent_remarks_for_input_placeholder(monkeypatch
         def fetch_news(self, region, extra_keywords=None, max_items=5):
             _Collector.calls += 1
             return [
-                NewsItem(title=NEWS["title"], link="http://example.com/t1", published=None, summary=NEWS["summary"]),
-                NewsItem(title="市が新庁舎の入札結果を公表 随意契約に疑問の声", link="http://example.com/t2", published=None, summary="契約"),
+                NewsItem(title=news["title"], link=news["link"] + "/t1", published=None, summary=news["summary"]),
+                NewsItem(title="市が新庁舎の入札結果を公表 随意契約に疑問の声", link=news["link"] + "/t2", published=None, summary="契約"),
             ]
 
     monkeypatch.setattr(app_module, "get_news_collector_agent", lambda: _Collector())
