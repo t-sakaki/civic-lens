@@ -1012,6 +1012,16 @@
             border-color: rgba(244, 63, 94, 0.7);
             outline: none;
         }
+        .start-news-agent-summary {
+            align-self: flex-start;
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            color: #fff;
+            background: #f43f5e;
+        }
+        .start-news-agent-summary:hover { background: #e11d48; }
         .start-news-agent .who {
             flex-shrink: 0;
             font-weight: 700;
@@ -2906,6 +2916,23 @@
             let charIndex = 0;
             let deleting = false;
             let authoritySynced = false;
+            // いま参考入力として見せているもの。時事ニュース由来ならTabキーで入力欄へ反映できる
+            let shownPrompt = null;
+
+            // フォーカス中はアニメーションが止まるので、Tabで入る内容が分かるよう全文を見せる
+            el.addEventListener('focus', () => {
+                if (el.value.trim() === '' && shownPrompt && shownPrompt.isNews) {
+                    el.placeholder = `${shownPrompt.text}　⇥ Tabで入力`;
+                }
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key !== 'Tab' || e.shiftKey || e.isComposing) return;
+                if (el.value.trim() !== '' || !shownPrompt || !shownPrompt.isNews) return;
+                e.preventDefault();
+                el.value = shownPrompt.fillText;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.setSelectionRange(el.value.length, el.value.length);
+            });
 
             const tick = () => {
                 // ユーザーが何か入力している間は邪魔をせず、空になったら自動的に再開する
@@ -2914,11 +2941,14 @@
                     return;
                 }
 
-                const current = SUGGESTION_PROMPTS[promptIndex % SUGGESTION_PROMPTS.length];
+                // ニュースへのエージェントの怒りが取得できていればそれを流し、なければ固定の例文
+                const prompts = angerPromptItems.length ? angerPromptItems : SUGGESTION_PROMPTS;
+                const current = prompts[promptIndex % prompts.length];
+                shownPrompt = current;
 
                 if (!authoritySynced) {
                     authoritySynced = true;
-                    syncAuthorityToPrompt(current.category);
+                    if (current.category) syncAuthorityToPrompt(current.category);
                 }
 
                 if (!deleting) {
@@ -3312,25 +3342,6 @@
         // ニュースは地域ごとにキャッシュし、メニューを開くたびに取り直さない
         // （ニュース自体はエージェントに依存しない。エージェントは選んだ記事の分析観点だけを決める）
         const newsCache = {};
-        // 怒り再現エージェント（news_anger_agent.NEWS_THEMES）の選択状態。
-        // SDGs 17目標それぞれのエージェントがいて、同じニュースを各目標の観点から分析する。
-        let newsAgentThemes = [{ id: 'general', label: '一般（行政監視）' }];
-        let selectedNewsTheme = 'general';
-
-        async function loadNewsAgentThemes() {
-            try {
-                const res = await fetch('/api/news-agent/themes');
-                if (!res.ok) return;
-                const data = await res.json();
-                if (Array.isArray(data.themes) && data.themes.length > 0) {
-                    newsAgentThemes = data.themes;
-                    selectedNewsTheme = data.default_theme || newsAgentThemes[0].id;
-                }
-            } catch (err) {
-                console.warn('テーマ一覧の取得に失敗:', err.message);
-            }
-        }
-
         function newsCacheKey(region) {
             return region;
         }
@@ -3423,7 +3434,7 @@
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'start-news-agent';
-                    btn.title = 'このエージェントの観点で詳しく分析する';
+                    btn.title = '登場したエージェントの声をまとめて、開示請求の対象を提案してもらう';
                     btn.innerHTML = `
                         <span class="who">😡 ${escapeHtml(a.label.replace(/^目標(\d+)\s*/, 'SDG$1 '))}</span>
                         <span class="min-w-0 flex-1">${escapeHtml(a.remark)}</span>
@@ -3431,10 +3442,19 @@
                     `;
                     btn.addEventListener('click', () => {
                         closePlusMenu();
-                        analyzeNewsItemInChat(item, a.theme);
+                        analyzeNewsItemInChat(item);
                     });
                     container.appendChild(btn);
                 });
+                const sum = document.createElement('button');
+                sum.type = 'button';
+                sum.className = 'start-news-agent-summary';
+                sum.textContent = '🗣️ 声をまとめて、開示請求する対象を提案してもらう';
+                sum.addEventListener('click', () => {
+                    closePlusMenu();
+                    analyzeNewsItemInChat(item);
+                });
+                container.appendChild(sum);
             };
             if (cached && cached.status !== 'loading') { draw(cached); return; }
             draw({ status: 'loading' });
@@ -3595,6 +3615,40 @@
         // 対象機関が変わったら、開いているメニューのニュース・選択状態を更新する
         function updateNewsRegionLabel() {
             if (isStartMenuOpen()) renderStartMenu();
+            loadAngerPrompts();
+        }
+
+        // 入力欄の参考入力（プレースホルダー）に、対象地域のニュースへ各SDGsエージェントが自律的に
+        // 上げた怒りを流す。ユーザーの操作は不要。
+        // 声はAI生成であり実在の市民の声ではないため、エージェント名を必ず頭に付けて出す。
+        let angerPromptItems = [];
+        let angerPromptRegion = null;
+
+        async function loadAngerPrompts() {
+            const region = getNewsRegion();
+            if (!region || region === angerPromptRegion) return;
+            angerPromptRegion = region;
+            try {
+                const res = await fetchWithRetry(`/api/news-agent/ticker?${new URLSearchParams({ region, limit: '12' })}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (getNewsRegion() !== region) return;  // 取得中に地域が変わっていたら捨てる
+                angerPromptItems = (data.items || []).map(it => {
+                    const who = String(it.label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
+                    const src = it.title.length > 26 ? `${it.title.slice(0, 26)}…` : it.title;
+                    return {
+                        text: `😡 ${who}のエージェント：${it.remark}（📰 ${src}）`,
+                        // Tabキーで入力欄へ反映するときの本文。反映後はユーザー自身の文章として編集できる
+                        fillText: `「${it.title}」のニュースについて。${it.remark}`,
+                        category: null,
+                        isNews: true,
+                    };
+                });
+                if (!angerPromptItems.length) angerPromptRegion = null;  // 空なら次回また試す
+            } catch (err) {
+                console.warn('ニュースへの怒りの取得に失敗:', err.message);
+                angerPromptRegion = null;
+            }
         }
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
@@ -3706,13 +3760,92 @@
             }
         }
 
-        // ニュースを選択して分析し、結果をチャットのやり取りとして表示する
-        async function analyzeNewsItemInChat(item, theme) {
-            const agentThemeId = theme || selectedNewsTheme;
-            const agentTheme = newsAgentThemes.find(x => x.id === agentThemeId);
-            const agentName = agentTheme ? `SDGs ${agentTheme.label}` : '怒り再現';
-            addChatBubble('user', `📰 「${item.title}」のニュースについて、${agentName}のエージェントの怒りを詳しく聞かせて`);
-            const assistantBubble = addChatBubble('assistant', '🔄 ニュースを読み解いて、怒りを再現しています…（数十秒かかる場合があります）');
+        function shortAgentLabel(label) {
+            return String(label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
+        }
+
+        function renderNewsSynthesis(bubble, record, region) {
+            const voices = record.voices || [];
+            const proposals = record.proposals || [];
+            const voicesHtml = voices.map(v => `
+                <div class="border rounded-md p-2 mb-2">
+                    <div class="text-xs font-semibold mb-1">😡 ${escapeHtml(shortAgentLabel(v.label))}</div>
+                    <ul class="list-disc list-inside text-xs text-gray-600 mb-1">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
+                    <p class="text-sm">${escapeHtml(v.pseudo_citizen_voice || '')}</p>
+                </div>`).join('');
+            const labelOf = (theme) => {
+                const v = voices.find(x => x.theme === theme);
+                return v ? shortAgentLabel(v.label) : theme;
+            };
+            const proposalsHtml = proposals.map((p, i) => `
+                <div class="border rounded-md p-2 mb-2" data-proposal="${i}">
+                    <div class="text-xs text-gray-500">提案 ${i + 1}</div>
+                    <div class="text-sm font-semibold">📮 ${escapeHtml(p.target_authority)}</div>
+                    <ul class="list-disc list-inside text-sm my-1">${(p.documents || []).map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul>
+                    <p class="text-xs text-gray-600 mb-1">${escapeHtml(p.reason || '')}</p>
+                    <div class="text-xs text-gray-500 mb-1">支持: ${(p.supporting_themes || []).map(t => escapeHtml(labelOf(t))).join(' / ') || '—'}</div>
+                    <button type="button" class="news-proposal-btn text-xs bg-gray-800 text-white px-2.5 py-1.5 rounded-md hover:bg-gray-700">この提案で開示請求を準備する</button>
+                </div>`).join('');
+            bubble.innerHTML = `
+                <span class="chat-bubble-label">🔍 Civic Lens</span>
+                <div class="text-xs text-gray-500 mb-1">🧭 統合エージェントの所見（怒りレベル ${escapeHtml(String(record.overall_anger_level ?? '-'))}/10）</div>
+                <p class="text-sm mb-2">${escapeHtml(record.summary || '')}</p>
+                <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
+                ${voicesHtml}
+                <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
+                <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
+                ${proposalsHtml}
+                <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
+                <div class="news-share-buttons flex items-center gap-2 mt-2"></div>
+                <div class="news-share-result mt-2"></div>
+            `;
+            renderNewsReactions(bubble.querySelector('.news-reactions'), record.news_id, record.reactions);
+            renderNewsShareButtons(bubble, record.news_id, record);
+            bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
+                    selectNewsProposal(record, idx, region, btn);
+                });
+            });
+        }
+
+        // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
+        async function selectNewsProposal(record, index, region, btn) {
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '🔄 開示請求を準備しています…';
+            try {
+                const formData = new FormData();
+                formData.append('news_id', record.news_id);
+                formData.append('proposal_index', String(index));
+                if (region) formData.append('region', region);
+                const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.detail || `HTTP ${res.status}`);
+                }
+                const updated = await res.json();
+                lastSubmittedText = updated.pseudo_citizen_voice;
+                displayAnalysis({ anger_analysis: updated.anger_analysis, emotion_is_mock: null });
+                document.getElementById('resultSection').classList.remove('hidden');
+                document.getElementById('actionSection').classList.remove('hidden');
+                activateSplitView();
+                if (updated.anger_analysis.target_authority_key) {
+                    setSelectedAuthority(updated.anger_analysis.target_authority_key);
+                }
+                btn.textContent = '✅ この提案で準備しました';
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = original;
+                alert(`開示請求の準備に失敗しました: ${err.message}`);
+            }
+        }
+
+        // ニュース1件について、登場したSDGsエージェントの声をまとめ、開示請求の対象を提案して
+        // チャットのやり取りとして表示する
+        async function analyzeNewsItemInChat(item) {
+            addChatBubble('user', `📰 「${item.title}」のニュースについて、怒りのエージェントたちの声をまとめて、開示請求すべき対象を提案して`);
+            const assistantBubble = addChatBubble('assistant', '🔄 各エージェントが声を挙げ、統合エージェントが開示請求の対象を検討しています…（数十秒かかる場合があります）');
 
             try {
                 const formData = new FormData();
@@ -3722,7 +3855,6 @@
                 if (item.published) formData.append('published', item.published);
                 const region = getNewsRegion();
                 if (region) formData.append('region', region);
-                formData.append('theme', agentThemeId);
                 // regionは表示名の文字列に過ぎずGPS調査済みの未収録自治体（pool:キー）を
                 // 正しく特定できないため、実際に選択中の対象機関キーも一緒に送る
                 const currentKey = document.getElementById('targetAuthority').value;
@@ -3734,31 +3866,7 @@
                     throw new Error(errData.detail || `HTTP ${res.status}`);
                 }
                 const record = await res.json();
-
-                const keyPointsHtml = record.key_points.map(p => `<li>${p}</li>`).join('');
-                assistantBubble.innerHTML = `
-                    <span class="chat-bubble-label">🔍 Civic Lens</span>
-                    <div class="text-xs text-gray-500 mb-1">🔍 論点整理</div>
-                    <ul class="list-disc list-inside text-sm mb-2">${keyPointsHtml}</ul>
-                    <div class="text-xs text-gray-500 mb-1">🗣️ 再現された市民の声（AIによる疑似生成）</div>
-                    <p class="text-sm mb-1">${record.pseudo_citizen_voice}</p>
-                    <p class="text-xs text-gray-400 mb-2">※ ${record.pseudo_citizen_voice_disclaimer}</p>
-                    <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
-                    <div class="news-share-buttons flex items-center gap-2 mt-2"></div>
-                    <div class="news-share-result mt-2"></div>
-                `;
-                renderNewsReactions(assistantBubble.querySelector('.news-reactions'), record.news_id, record.reactions);
-                renderNewsShareButtons(assistantBubble, record.news_id, record);
-
-                // 既存の怒り分析結果パネル（右ペイン）に接続
-                lastSubmittedText = record.pseudo_citizen_voice;
-                displayAnalysis({ anger_analysis: record.anger_analysis, emotion_is_mock: null });
-                document.getElementById('resultSection').classList.remove('hidden');
-                document.getElementById('actionSection').classList.remove('hidden');
-                activateSplitView();
-                if (record.anger_analysis.target_authority_key) {
-                    setSelectedAuthority(record.anger_analysis.target_authority_key);
-                }
+                renderNewsSynthesis(assistantBubble, record, region);
             } catch (err) {
                 // 分析はGemini呼び出しを2回連続で行うため数十秒かかり、不安定なネットワークでは
                 // "Failed to fetch"（TypeError）になりやすい。サーバー側は処理を継続・完了している
@@ -6627,7 +6735,6 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         checkAuthStatus().then(acceptInviteFromUrl);
         loadSituations();
         loadPublicFeed();
-        loadNewsAgentThemes();
         startPromptSuggestionAnimation();
         // 見出しは最初のチャット発言として静的に表示するため、タイプライター切り替えは行わない
 

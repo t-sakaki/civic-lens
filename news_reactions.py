@@ -114,14 +114,23 @@ def record_analysis(
     key_points: List[str],
     pseudo_citizen_voice: str,
     disclaimer: str,
-    anger_analysis: Dict[str, Any],
+    anger_analysis: Optional[Dict[str, Any]],
     theme: str = "general",
     region: Optional[str] = None,
     autonomous: bool = False,
+    voices: Optional[List[Dict[str, Any]]] = None,
+    proposals: Optional[List[Dict[str, Any]]] = None,
+    summary: Optional[str] = None,
+    overall_anger_level: Optional[int] = None,
 ) -> Dict[str, Any]:
     """分析結果を記録する（既存レコードがあればリアクション数・既読状態は維持して内容だけ更新）
 
-    theme: どのテーマ別怒り再現エージェントが生成したか（news_anger_agent.NEWS_THEMES のキー）
+    theme: どのテーマ別怒り再現エージェントが生成したか（news_anger_agent.NEWS_THEMES のキー）。
+      複数エージェントの声を統合した記録は "multi"
+    voices: ニュース1件に対して各SDGsエージェントが挙げた声（統合記録のみ）
+    proposals: 統合エージェントが提案した開示請求の対象（機関・文書・根拠となるエージェント）
+    summary / overall_anger_level: 統合エージェントの所見と怒りレベル
+    anger_analysis: 開示請求の分析結果。統合記録ではユーザーが提案を選んだ時点で埋まる（それまでNone）
     autonomous: Cloud Scheduler等からの自律スキャンによる記録か（ユーザー操作による記録ならFalse）
     """
     with _LOCK:
@@ -138,6 +147,11 @@ def record_analysis(
             "pseudo_citizen_voice_disclaimer": disclaimer,
             "anger_analysis": anger_analysis,
             "reactions": reactions,
+            "voices": voices if voices is not None else (existing or {}).get("voices", []),
+            "proposals": proposals if proposals is not None else (existing or {}).get("proposals", []),
+            "summary": summary if summary is not None else (existing or {}).get("summary"),
+            "overall_anger_level": overall_anger_level,
+            "selected_proposal": (existing or {}).get("selected_proposal"),
             "autonomous": autonomous,
             # 自律スキャンで生成された記録はユーザーがまだ見ていない「未読」として扱う。
             # ユーザー自身の操作による記録（一覧から選んで分析）は既読扱い。
@@ -145,6 +159,18 @@ def record_analysis(
             "created_at": existing["created_at"] if existing else datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        _put(record)
+        return record
+
+
+def update_record(news_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
+    """既存の記録の一部の項目だけを更新する（例: 選んだ提案と、その開示請求分析結果）"""
+    with _LOCK:
+        record = _get(news_id)
+        if record is None:
+            return None
+        record.update(fields)
+        record["updated_at"] = datetime.now(timezone.utc).isoformat()
         _put(record)
         return record
 

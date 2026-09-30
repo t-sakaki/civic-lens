@@ -3,6 +3,7 @@
 市民の怒りを情報公開に変換するエンドポイント
 """
 import asyncio
+import time
 import os
 import re
 import io
@@ -104,10 +105,13 @@ from auth import (
     generate_siwe_nonce, request_magic_link, verify_magic_link
 )
 from news_collector_agent import get_news_collector_agent
-from news_anger_agent import AngerReproductionAgent, select_appearing_agents, PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME
+from news_anger_agent import (
+    select_appearing_agents, generate_agent_voices, propose_disclosure_targets, build_proposal_input,
+    PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME,
+)
 from news_reactions import (
     make_news_id, record_analysis, add_reaction, list_records, get_record,
-    mark_read, count_unread,
+    mark_read, count_unread, update_record,
 )
 from social_posting import (
     build_share_texts,
@@ -692,6 +696,15 @@ async def list_news_for_region(
 _APPEARANCE_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 
 
+def _get_appearances(news_id: str, news_text: str, region: Optional[str]) -> List[Dict[str, Any]]:
+    """記事を読んで名乗り出るSDGsエージェントを返す（同じ記事は再判定しない）"""
+    cached = _APPEARANCE_CACHE.get(news_id)
+    if cached is None:
+        cached = select_appearing_agents(news_text, region)
+        _APPEARANCE_CACHE[news_id] = cached
+    return cached
+
+
 @app.post("/api/news-agent/appear")
 async def agents_appear_for_news(
     title: str = Form(...),
@@ -703,52 +716,129 @@ async def agents_appear_for_news(
 
     ユーザーがボタンを押さなくても、ニュース一覧の表示と同時に各エージェントが記事を読み、
     自分の担当観点から見過ごせない記事にだけ名乗り出て一言コメントする。
-    詳細な分析（論点整理・擬似市民の声・開示請求の該当箇所）は /api/news-agent/analyze で行う。
+    声の詳細と開示請求の対象提案は /api/news-agent/analyze で、ニュース1件ごとにまとめて行う。
     """
     news_id = make_news_id(link)
-    cached = _APPEARANCE_CACHE.get(news_id)
-    if cached is None:
-        news_text = "\n".join([p for p in [title, summary] if p])
-        cached = await asyncio.to_thread(select_appearing_agents, news_text, region)
-        _APPEARANCE_CACHE[news_id] = cached
-    return {"news_id": news_id, "appearances": cached}
+    news_text = "\n".join([p for p in [title, summary] if p])
+    appearances = await asyncio.to_thread(_get_appearances, news_id, news_text, region)
+    return {"news_id": news_id, "appearances": appearances}
 
 
-def _analyze_news_text(
-    news_text: str, region: Optional[str] = None, theme: Optional[str] = None, hint_key: Optional[str] = None
-) -> Dict[str, Any]:
-    """怒り再現→開示請求分析の共通処理（1記事分）
+# メイン画面の入力欄（参考入力）に流すニュースへの怒り用。地域ごとに短時間キャッシュして、ページを開くたびにニュース取得・Gemini判定をしない
+_TICKER_CACHE: Dict[str, Any] = {}
+_TICKER_TTL_S = 600.0
+_TICKER_MAX_NEWS = 6
 
-    region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
-    無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
-    hint_key: ユーザーが一覧取得時に実際に選択していた対象機関キー（分かっている場合）。
-    regionは表示名の自由文字列で、固定11機関のエイリアスにしかマッチできないため、
-    GPS調査済みの未収録自治体（pool:キー）まで正しく紐づけるにはこちらを優先する。
-    theme: どのテーマ別怒り再現エージェントで分析するか（未指定ならDEFAULT_THEME）。
+
+async def _build_ticker_items(region: str) -> List[Dict[str, Any]]:
+    collector = get_news_collector_agent()
+    news = await asyncio.to_thread(collector.fetch_news, region, None, _TICKER_MAX_NEWS)
+
+    async def _one(item) -> List[Dict[str, Any]]:
+        news_id = make_news_id(item.link)
+        try:
+            appearances = await asyncio.to_thread(_get_appearances, news_id, item.as_text(), region)
+        except Exception as e:
+            print(f"[news-agent/ticker] 登場判定に失敗: {e}")
+            return []
+        return [
+            {
+                "news_id": news_id,
+                "title": item.title,
+                "link": item.link,
+                "summary": item.summary,
+                "published": item.published,
+                "theme": a["theme"],
+                "label": a["label"],
+                "remark": a["remark"],
+                "anger_level": a["anger_level"],
+            }
+            for a in appearances
+        ]
+
+    grouped = await asyncio.gather(*[_one(i) for i in news])
+    # 同じ記事の声が連続しないよう、記事をまたいで交互に並べる
+    items: List[Dict[str, Any]] = []
+    for row in range(MAX_TICKER_AGENTS_PER_NEWS):
+        for g in grouped:
+            if row < len(g):
+                items.append(g[row])
+    return items
+
+
+MAX_TICKER_AGENTS_PER_NEWS = 3
+
+
+@app.get("/api/news-agent/ticker")
+async def news_agent_ticker(region: str, limit: int = 12):
+    """メイン画面の入力欄の参考入力（プレースホルダー）用。地域の最新ニュースに、各SDGsエージェントが自律的に上げた怒りを返す。
+
+    ユーザーの操作は不要。エージェントが記事を読んで名乗り出た一言コメントだけを返す
+    （AI生成であり実在の市民の声ではない。画面側でもその旨を明示する）。
     """
-    anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text, region=region, theme=theme)
-    pseudo_voice = step1["pseudo_citizen_voice"]
+    now = time.monotonic()
+    cached = _TICKER_CACHE.get(region)
+    if cached and now - cached[0] < _TICKER_TTL_S:
+        items = cached[1]
+    else:
+        items = await _build_ticker_items(region)
+        if items:
+            _TICKER_CACHE[region] = (now, items)
+    return {
+        "region": region,
+        "items": items[: max(1, min(limit, 30))],
+        "disclaimer": "AIエージェントがニュースを読んで生成した見解であり、実在の市民の声ではありません。",
+    }
 
-    hint_authority_key = None
+
+def _resolve_hint_key(region: Optional[str], hint_key: Optional[str]) -> Optional[str]:
     if hint_key and get_ordinance(hint_key):
-        hint_authority_key = hint_key
-    elif region:
-        hint_authority_key = match_authority_by_text(region, default="") or None
+        return hint_key
+    if region:
+        return match_authority_by_text(region, default="") or None
+    return None
 
-    agent = get_agent()
+
+def _multi_agent_analysis(
+    news_id: str,
+    news_text: str,
+    region: Optional[str],
+    hint_key: Optional[str],
+    appearances: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """1ニュースについて、名乗り出た各SDGsエージェントの声を集め、統合して開示請求の対象を提案する。
+
+    流れ: 登場判定 → 各エージェントの声（並行）→ 統合エージェントが開示請求の対象を提案
+    hint_key: ユーザーが選択中の対象機関キー（GPS調査済みの未収録自治体 pool: キーも含む）。
+    """
+    hint = _resolve_hint_key(region, hint_key)
+    if appearances is None:
+        appearances = _get_appearances(news_id, news_text, region)
+    voices = generate_agent_voices(news_text, region, appearances)
+    proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint)
+    return {"voices": voices, **proposed}
+
+
+def _voices_to_record_fields(voices: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """SNSシェア等の既存機能が参照する pseudo_citizen_voice / key_points には、最も怒りの強い声を使う"""
+    top = max(voices, key=lambda v: v.get("anger_level", 0))
+    return {"key_points": top["key_points"], "pseudo_citizen_voice": top["pseudo_citizen_voice"]}
+
+
+def _run_anger_analysis(analysis_input: str, hint_key: Optional[str]) -> AngerAnalysis:
+    """開示請求の分析（agent.analyze_anger）。Gemini失敗時は最低限のモック結果を返す"""
     try:
-        anger_analysis = agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key)
+        return get_agent().analyze_anger(analysis_input, hint_authority_key=hint_key)
     except Exception as e:
         print(f"Gemini エラー: {e}")
-        fallback_key = hint_authority_key if hint_authority_key and get_ordinance(hint_authority_key) else "anjo-city"
+        fallback_key = hint_key if hint_key and get_ordinance(hint_key) else "anjo-city"
         fallback_authority = (get_ordinance(fallback_key) or AUTHORITIES["anjo-city"]).authority
-        anger_analysis = AngerAnalysis(
-            anger_level=text_to_anger_level(pseudo_voice),
+        return AngerAnalysis(
+            anger_level=text_to_anger_level(analysis_input),
             emotion_keywords=["怒り", "不信"],
             target_authority=fallback_authority,
             target_authority_key=fallback_key,
-            pain_summary=pseudo_voice[:100],
+            pain_summary=analysis_input[:100],
             specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
             legal_basis=f"{fallback_authority}情報公開条例第7条",
             next_action="disclosure_request",
@@ -756,12 +846,6 @@ def _analyze_news_text(
             recommended_response_time="30日",
             is_mock=True,
         )
-
-    return {
-        "key_points": step1["key_points"],
-        "pseudo_citizen_voice": pseudo_voice,
-        "anger_analysis": anger_analysis,
-    }
 
 
 @app.post("/api/news-agent/analyze")
@@ -771,39 +855,62 @@ async def analyze_news_item(
     summary: str = Form(""),
     published: Optional[str] = Form(None),
     region: Optional[str] = Form(None),
-    theme: Optional[str] = Form(None),
     authority_key: Optional[str] = Form(None),
 ):
-    """一覧から選んだ1記事を分析し、記録として保存する（NewsCollectorAgent選択後のフロー）。
+    """1ニュースに対して、名乗り出た複数のSDGsエージェントの声をまとめ、開示請求の対象を提案する。
 
     region: ユーザーが一覧取得時に指定した対象地域。記事本文が具体的な自治体名に
     触れていない場合でも、無関係な自治体に誤って紐づかないよう対象機関特定に使う。
     authority_key: 一覧取得時にユーザーが実際に選択していた対象機関キー（分かる場合）。
-    regionは表示名の文字列に過ぎないため、GPS調査済みの未収録自治体（pool:キー）まで
-    正しく紐づけるには、こちらを優先してヒントに使う。
-    theme: どの怒り再現エージェント（SDGs目標別）の観点で分析するか（news_anger_agent.NEWS_THEMES）。
-    同じ記事でもエージェントごとに別の記録として保存する。
 
     エージェント構成（AGENTS.md参照）:
-      AngerReproductionAgent → 怒り分析(agent.analyze_anger) → 記録保存（news_reactions.py）
+      登場判定 → 各SDGsエージェントの声（並行）→ 統合エージェントの対象提案 → 記録保存（news_reactions.py）
+    開示請求の詳細分析は、ユーザーが提案を選んだ時点で /api/news-agent/select-proposal が行う。
     """
     news_text = "\n".join([p for p in [title, summary] if p])
-    analyzed = _analyze_news_text(news_text, region=region, theme=theme, hint_key=authority_key)
-
-    news_id = make_news_id(link, theme)
-    source_news = {"title": title, "link": link, "published": published}
+    news_id = make_news_id(link)
+    result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, authority_key)
     record = record_analysis(
         news_id=news_id,
-        source_news=source_news,
-        key_points=analyzed["key_points"],
-        pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
+        source_news={"title": title, "link": link, "published": published},
         disclaimer=PSEUDO_VOICE_DISCLAIMER,
-        anger_analysis=analyzed["anger_analysis"].model_dump(),
-        theme=theme or DEFAULT_THEME,
+        anger_analysis=None,
+        theme="multi",
         region=region,
         autonomous=False,
+        voices=result["voices"],
+        proposals=result["proposals"],
+        summary=result["summary"],
+        overall_anger_level=result["anger_level"],
+        **_voices_to_record_fields(result["voices"]),
     )
     return record
+
+
+@app.post("/api/news-agent/select-proposal")
+async def select_disclosure_proposal(
+    news_id: str = Form(...),
+    proposal_index: int = Form(...),
+    region: Optional[str] = Form(None),
+):
+    """統合エージェントの提案から1つ選び、その対象・文書で開示請求の詳細分析（根拠条例・期限など）を行う。"""
+    record = get_record(news_id)
+    if record is None or not record.get("proposals"):
+        raise HTTPException(404, "対象の記録が見つかりませんでした。先にニュースを分析してください。")
+    proposals = record["proposals"]
+    if not 0 <= proposal_index < len(proposals):
+        raise HTTPException(400, "選択した提案が見つかりません。")
+    proposal = proposals[proposal_index]
+
+    source = record.get("source_news", {})
+    news_text = source.get("title", "")
+    analysis_input = build_proposal_input(news_text, record.get("voices", []), proposal)
+    analysis = await asyncio.to_thread(_run_anger_analysis, analysis_input, proposal["target_authority_key"])
+    return update_record(
+        news_id,
+        anger_analysis=analysis.model_dump(),
+        selected_proposal=proposal_index,
+    )
 
 
 # Cloud Scheduler等から定期実行され、ユーザー操作を待たずに自律的にニュースをスキャンし
@@ -819,22 +926,21 @@ async def autonomous_scan_news(
     max_items_per_region: int = 3,
     scheduler_secret: Optional[str] = Header(None, alias="X-Scheduler-Secret"),
 ):
-    """複数地域のニュースを収集し、各SDGsエージェントの観点で分析して、怒りレベルが高いものだけを未読記録として保存する。
+    """複数地域のニュースを収集し、各SDGsエージェントの声を統合して、怒りレベルが高いニュースだけを未読記録として保存する。
 
     regions: カンマ区切りの地域名（例: "名古屋市,安城市"）。ユーザー登録地域の代わりに
       呼び出し側（Cloud Scheduler設定）がリスト管理する想定（AGENTS.md: 専用の地理エージェントは
       別途作らない方針のため、既存の地域推定結果をCloud Scheduler側の引数として渡す運用）。
-    themes: カンマ区切りの怒りエージェントID（sdg1〜sdg17 / general。省略時は全エージェント）。
-      ニュースは地域ごとに1回だけ収集し、各エージェントが記事を読んで自分の出番か判断する。
-      名乗り出たエージェント（themesで許可されたものに限る・最大3体）だけが詳細分析を行う。
+    themes: カンマ区切りの怒りエージェントID（sdg1〜sdg17。省略時は全エージェント）。
+      各エージェントが記事を読んで自分の出番か判断し、名乗り出た（themesで許可された）エージェントの声を
+      ニュース1件にまとめて統合分析する。
     """
     expected_secret = os.getenv("NEWS_AGENT_SCHEDULER_SECRET")
     if expected_secret and scheduler_secret != expected_secret:
         raise HTTPException(401, "スケジューラ認証に失敗しました。")
 
     region_list = [r.strip() for r in regions.split(",") if r.strip()]
-    theme_list = [t.strip() for t in themes.split(",") if t.strip()] if themes else list(NEWS_THEMES.keys())
-    theme_list = [t for t in theme_list if t in NEWS_THEMES] or [DEFAULT_THEME]
+    allowed_themes = {t.strip() for t in themes.split(",") if t.strip()} if themes else set(NEWS_THEMES)
 
     collector = get_news_collector_agent()
     created: List[Dict[str, Any]] = []
@@ -844,37 +950,41 @@ async def autonomous_scan_news(
         try:
             items = collector.fetch_news(region, max_items=max_items_per_region)
         except Exception as e:
-            errors.append({"region": region, "theme": "", "error": str(e)})
+            errors.append({"region": region, "error": str(e)})
             continue
         for item in items:
-            # 全エージェントで総当たりせず、記事を読んで名乗り出たエージェントだけが分析する
-            appearing = await asyncio.to_thread(select_appearing_agents, item.as_text(), region)
-            for theme in [a["theme"] for a in appearing if a["theme"] in theme_list]:
-                try:
-                    news_id = make_news_id(item.link, theme)
-                    if get_record(news_id) is not None:
-                        continue  # 既にこのエージェントで分析済みの記事は再スキャンしない
+            try:
+                news_id = make_news_id(item.link)
+                if get_record(news_id) is not None:
+                    continue  # 既に分析済みの記事は再スキャンしない
 
-                    analyzed = _analyze_news_text(item.as_text(), region=region, theme=theme)
-                    anger_level = analyzed["anger_analysis"].anger_level
-                    if anger_level < ANGER_LEVEL_AUTOSCAN_THRESHOLD:
-                        continue  # 怒りレベルが低い記事はユーザーに通知するほどではないと判断しスキップ
+                news_text = item.as_text()
+                appearances = await asyncio.to_thread(_get_appearances, news_id, news_text, region)
+                allowed = [a for a in appearances if a["theme"] in allowed_themes]
+                if not allowed:
+                    continue  # 許可されたエージェントの誰も名乗り出なかった記事はスキップ
 
-                    source_news = {"title": item.title, "link": item.link, "published": item.published}
-                    record = record_analysis(
-                        news_id=news_id,
-                        source_news=source_news,
-                        key_points=analyzed["key_points"],
-                        pseudo_citizen_voice=analyzed["pseudo_citizen_voice"],
-                        disclaimer=PSEUDO_VOICE_DISCLAIMER,
-                        anger_analysis=analyzed["anger_analysis"].model_dump(),
-                        theme=theme,
-                        region=region,
-                        autonomous=True,
-                    )
-                    created.append(record)
-                except Exception as e:
-                    errors.append({"region": region, "theme": theme, "error": str(e)})
+                result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, None, allowed)
+                if result["anger_level"] < ANGER_LEVEL_AUTOSCAN_THRESHOLD:
+                    continue  # 怒りレベルが低い記事はユーザーに通知するほどではないと判断しスキップ
+
+                record = record_analysis(
+                    news_id=news_id,
+                    source_news={"title": item.title, "link": item.link, "published": item.published},
+                    disclaimer=PSEUDO_VOICE_DISCLAIMER,
+                    anger_analysis=None,
+                    theme="multi",
+                    region=region,
+                    autonomous=True,
+                    voices=result["voices"],
+                    proposals=result["proposals"],
+                    summary=result["summary"],
+                    overall_anger_level=result["anger_level"],
+                    **_voices_to_record_fields(result["voices"]),
+                )
+                created.append(record)
+            except Exception as e:
+                errors.append({"region": region, "error": str(e)})
 
     return {"created_count": len(created), "created": created, "errors": errors}
 

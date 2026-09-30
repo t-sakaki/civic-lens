@@ -5,6 +5,17 @@
 
 ---
 
+## 🧭 最上位原則: 人間の尊厳と基本的権利を守る
+
+**本プロジェクトのすべてのルール・設計判断の土台は、「人間としての尊厳や基本的権利を守ること」である。** AI技術の革新性や経済的利益を優先しない。技術的な目新しさや収益性は、人の尊厳・権利を損なう設計を正当化する理由にならない。以下の個別ルールはすべてこの原則から導かれる。
+
+- 新機能・プロンプト・データの扱い・インセンティブ設計（オンチェーン台帳や報酬を含む）・デモ/ピッチの見せ方は、この原則に照らして確認する
+- 技術的な見せ場や収益と権利が衝突する場合は、**権利を優先**し、そのトレードオフをユーザーに明示する（黙って実装しない）
+- 既存ルールとの対応: AIが生成する「市民の声」はフィクションであり実在の個人を装わない（免責文必須）／開示請求書に氏名・住所等の個人情報を含めない／請求・投稿の最終判断は必ずユーザー本人が行う／AIは法的助言ではなく情報提供・書式作成支援に徹する（弁護士法72条）
+- ハッカソンで「破壊的」な提案を目指すことは歓迎するが、あくまでこの原則の範囲内で行う
+
+---
+
 ## 📌 ハッカソン基本情報
 
 | 項目 | 内容 |
@@ -143,7 +154,8 @@
 |---|---|---|
 | **NewsCollectorAgent** | `news_collector_agent.py` | 対象地域（市区町村名等）を入力に、Google News RSSからその地域の自治体・警察・公的行事に関するニュースを複数件自動収集する |
 | **AngerReproductionAgent**（怒り再現エージェント。**SDGs17目標それぞれ＋一般の計18エージェント**） | `news_anger_agent.py`（`NEWS_THEMES`: `sdg1`〜`sdg17` / `general`） | 収集済みのニュース本文を、各エージェントが自分のSDG目標の観点から分析し、批判的に見た場合の論点整理（`key_points`）と、対象地域の市民が怒っているかのような一人称の疑似的な声（`pseudo_citizen_voice`）を生成する。**ニュース収集はテーマ（SDGs）に依存せず地域だけで行い、テーマは選んだ記事の分析観点だけを決める**（テーマ別にニュースを検索し直さない）。同じ記事を複数エージェントが分析でき、記録IDは記事×エージェントごとに分かれる。**エージェントはユーザーのボタン操作ではなく自律的に登場する**: ニュース一覧の表示と同時に `select_appearing_agents`（`POST /api/news-agent/appear`）が記事を読み、自分の担当観点から見過ごせない記事にだけ最大3体が名乗り出て一言コメントする（17体ぶんを1回のGemini呼び出しで判定、未設定時はキーワード判定）。自律スキャンも名乗り出たエージェントだけが詳細分析を行う。検索地域をプロンプトのヒントとして渡し、記事本文が具体的な自治体に触れていない場合でも誤った地域に紐づかないようにしている |
-| **DisclosureRequestAgent**（開示請求エージェント、既存） | `agent.py`（`CivicLensAgent.analyze_anger`、`hint_authority_key`引数） | 疑似的な怒りの声を、開示請求書の該当箇所（対象機関・請求文書・根拠条例・請求理由要約・推奨対応期限）に変換する。返却された`target_authority_key`が条例DB（`ordinance_data.AUTHORITIES`）に存在しないスキーマ外の値だった場合は、ヒントまたはテキストマッチングで安全な値に自動補正する |
+| **DisclosureTargetAgent**（統合エージェント） | `news_anger_agent.py`（`propose_disclosure_targets`） | ニュース1件について、名乗り出た複数のSDGsエージェントの声を横断的に分析し、開示請求すべき対象（機関・請求文書・提案を支持するエージェント）を優先順位つきで最大3件提案する。返却された機関キーが条例DBに存在しない場合は、ヒントまたはテキストマッチングで補正する |
+| **DisclosureRequestAgent**（開示請求エージェント、既存） | `agent.py`（`CivicLensAgent.analyze_anger`、`hint_authority_key`引数） | ユーザーが選んだ提案（と各エージェントの声）を、開示請求書の該当箇所（対象機関・請求文書・根拠条例・請求理由要約・推奨対応期限）に変換する。返却された`target_authority_key`が条例DB（`ordinance_data.AUTHORITIES`）に存在しないスキーマ外の値だった場合は、ヒントまたはテキストマッチングで安全な値に自動補正する |
 | **SocialPostingAgent**（SNSシェア） | `social_posting.py` | 再現された「疑似的な市民の声」を、ユーザー自身のX/Blueskyアカウントから投稿するためのテキスト生成・投稿処理。専用botアカウントは使わない |
 
 ### パイプラインの流れ
@@ -152,19 +164,27 @@
 ユーザーの対象地域（登録市区町村 / GPS推定 / 行動履歴推定）
         ↓
 NewsCollectorAgent.fetch_news(region)  ── Google News RSS から関連ニュースを複数件取得（一覧表示）
-        ↓（ユーザーが記事を選択）
-AngerReproductionAgent.generate(news_text, region) ── 論点整理 + 擬似市民の声
+        ↓（一覧表示と同時に自律的に）
+select_appearing_agents ── 各SDGsエージェントが記事を読み、出番のあるものだけが名乗り出て一言コメント（最大3体）
+        ↓（ユーザーが「声をまとめる」を選択 / 自律スキャンでは自動）
+AngerReproductionAgent.generate ×名乗り出た各エージェント（並行）── エージェントごとの論点整理 + 擬似市民の声
         ↓
-DisclosureRequestAgent.analyze_anger(pseudo_citizen_voice, hint_authority_key) ── 開示請求書の該当箇所を生成
+DisclosureTargetAgent（統合）── 複数の声を分析し、開示請求する対象（機関・文書）を最大3件提案
         ↓
-news_reactions.py に記録として永続化（❤️😡😳リアクション、履歴一覧）
+news_reactions.py にニュース1件=1記録として永続化（各エージェントの声・提案・❤️😡😳リアクション）
+        ↓（ユーザーが提案を1つ選択）
+DisclosureRequestAgent.analyze_anger(選んだ提案, hint_authority_key) ── 根拠条例・請求理由・期限など開示請求書の該当箇所を生成
         ↓（ユーザーの任意操作）
 SocialPostingAgent: X.com / Blueskyへシェア（未認証時は手動投稿用テキストを提示）
 ```
 
 主なAPIエンドポイント（`app.py`）:
 - `GET /api/news-agent/list` — 地域のニュース一覧取得
-- `POST /api/news-agent/analyze` — 選択記事の怒り再現分析 + 記録保存
+- `POST /api/news-agent/appear` — 記事を読んで名乗り出るSDGsエージェントの判定（一言コメント）
+- `POST /api/news-agent/analyze` — ニュース1件の各エージェントの声を集めて統合し、開示請求の対象を提案 + 記録保存
+- `POST /api/news-agent/select-proposal` — 選んだ提案で開示請求の詳細分析（根拠条例・期限など）を実行
+- `POST /api/news-agent/autonomous-scan` — 定期実行で、怒りレベルの高いニュースの統合結果を未読として蓄積
+- `GET /api/news-agent/ticker` — 対象地域の最新ニュースへ各SDGsエージェントが自律的に上げた怒り（一言）。メイン画面の入力欄の参考入力（プレースホルダー）に、ユーザー操作なしで流す。AI生成であることが分かるよう必ずエージェント名を添える
 - `POST /api/news-agent/react` — リアクション付与
 - `GET /api/news-agent/history` — 分析履歴一覧
 - `POST /api/social/share` — SNSシェア（投稿 or フォールバックのシェアテキスト生成）
