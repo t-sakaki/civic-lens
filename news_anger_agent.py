@@ -282,28 +282,225 @@ class AngerReproductionAgent:
         }
 
 
+# ---------------------------------------------------------------------------
+# 複数エージェントの声の統合 → 開示請求の対象提案（統合エージェント）
+# ---------------------------------------------------------------------------
+
+MAX_PROPOSALS = 3
+_KEY_OPTIONS = (
+    "anjo-city, nagoya-city, okazaki-city, toyota-city, gamagori-city, aichi-pref, aichi-assembly, "
+    "metropolitan-police, aichi-police, kanagawa-police, osaka-police"
+)
+
+PROPOSAL_PROMPT = """あなたは情報公開請求の専門家AI（統合エージェント）です。
+同じニュース記事について、SDGs目標別の複数の「怒りのエージェント」がそれぞれの観点から声を挙げました。
+これらを横断的に分析し、行政文書の開示請求によって事実を確認すべき対象（機関と文書）を、
+優先順位の高い順に最大{max_proposals}件提案してください。
+
+ルール:
+- 複数のエージェントが共通して指摘している論点を優先する
+- 開示請求の対象になりうる具体的な行政文書名（契約書・仕様書・決裁文書・支出関係書類・議事録・検討資料など）を挙げる
+- 記事にない事実は断定せず、「確認のための請求」として書く
+- 氏名・住所などの個人情報は含めない
+- target_authority_key は次のいずれか: {key_options}
+{hint_line}
+【ニュース記事】
+{news_text}
+
+【各エージェントの声】
+{voices_text}
+
+以下のJSON形式のみで出力してください（前後に説明文やコードブロック記号は不要）:
+{{
+  "summary": "各エージェントの声を踏まえた統合所見（120文字程度）",
+  "anger_level": 1〜10の整数,
+  "proposals": [
+    {{
+      "target_authority_key": "機関キー",
+      "documents": ["請求する行政文書名1", "請求する行政文書名2"],
+      "reason": "なぜこの機関のこの文書を請求すべきか（80文字程度）",
+      "supporting_themes": ["この提案を支持するエージェントID 例: sdg13"]
+    }}
+  ]
+}}
+"""
+
+
+def generate_agent_voices(
+    news_text: str, region: str | None, appearances: list[dict]
+) -> list[dict]:
+    """名乗り出た各SDGsエージェントが、それぞれの観点で声（論点整理＋擬似市民の声）を挙げる（並行実行）。
+
+    appearances が空の場合は一般（行政監視）エージェントが1体だけ声を挙げる。
+    戻り値: [{"theme", "label", "remark", "anger_level", "key_points", "pseudo_citizen_voice"}]
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    targets = appearances or [
+        {"theme": DEFAULT_THEME, "label": NEWS_THEMES[DEFAULT_THEME]["label"], "remark": "", "anger_level": 5}
+    ]
+    agent = AngerReproductionAgent()
+
+    def _one(a: dict) -> dict:
+        data = agent.generate(news_text, region=region, theme=a["theme"])
+        return {**a, "key_points": data["key_points"], "pseudo_citizen_voice": data["pseudo_citizen_voice"]}
+
+    with ThreadPoolExecutor(max_workers=len(targets), thread_name_prefix="anger-voice") as pool:
+        return list(pool.map(_one, targets))
+
+
+def _format_voices(voices: list[dict]) -> str:
+    blocks = []
+    for v in voices:
+        points = " / ".join(v.get("key_points", []))
+        blocks.append(f"■ {v['label']}（{v['theme']}）\n論点: {points}\n声: {v.get('pseudo_citizen_voice', '')}")
+    return "\n\n".join(blocks)
+
+
+def _resolve_key(raw_key: str | None, hint_key: str | None, news_text: str, region: str | None) -> str:
+    from ordinance_data import get_ordinance, match_authority_by_text
+
+    if raw_key and get_ordinance(raw_key):
+        return raw_key
+    if hint_key and get_ordinance(hint_key):
+        return hint_key
+    return match_authority_by_text(region or news_text, default="anjo-city")
+
+
+def _normalize_proposals(raw: list, voices: list[dict], hint_key: str | None, news_text: str, region: str | None) -> list[dict]:
+    from ordinance_data import get_ordinance, addressee_name
+
+    valid_themes = {v["theme"] for v in voices}
+    proposals: list[dict] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        docs = [str(d) for d in (item.get("documents") or []) if str(d).strip()]
+        if not docs:
+            continue
+        key = _resolve_key(item.get("target_authority_key"), hint_key, news_text, region)
+        info = get_ordinance(key)
+        supporting = [t for t in (item.get("supporting_themes") or []) if t in valid_themes]
+        proposals.append({
+            "target_authority_key": key,
+            "target_authority": addressee_name(info) if info else key,
+            "documents": docs[:5],
+            "reason": str(item.get("reason", "")),
+            "supporting_themes": supporting,
+        })
+    return proposals[:MAX_PROPOSALS]
+
+
+def propose_disclosure_targets(
+    news_text: str, region: str | None, voices: list[dict], hint_key: str | None = None
+) -> dict:
+    """複数エージェントの声を統合して分析し、開示請求する対象（機関・文書）を提案する統合エージェント。
+
+    戻り値: {"summary", "anger_level", "proposals": [{"target_authority_key", "target_authority",
+             "documents", "reason", "supporting_themes"}]}
+    Gemini未設定/失敗時は、ヒント機関に対する一般的な請求案にフォールバックする。
+    """
+    from ordinance_data import get_ordinance, AUTHORITIES
+
+    civic_agent = get_agent()
+    if GENAI_AVAILABLE and civic_agent.genai_client and voices:
+        hint_info = get_ordinance(hint_key) if hint_key else None
+        key_options = _KEY_OPTIONS
+        hint_line = ""
+        if hint_info:
+            hint_line = (
+                f"\nヒント: ユーザーは「{hint_info.authority}」（{hint_key}）に関心を持っています。"
+                "記事が別の具体的な機関に明確に触れていない限り、この機関を優先してください。\n"
+            )
+            if hint_key not in AUTHORITIES:
+                key_options = f'"{hint_key}"（ヒントで指定された機関）, ' + key_options
+        try:
+            response = gemini_generate(
+                civic_agent.genai_client,
+                "pro",
+                PROPOSAL_PROMPT.format(
+                    max_proposals=MAX_PROPOSALS,
+                    key_options=key_options,
+                    hint_line=hint_line,
+                    news_text=news_text,
+                    voices_text=_format_voices(voices),
+                ),
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+                timeout_s=30.0,
+            )
+            text = response.text.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
+            data = json.loads(text.strip())
+            proposals = _normalize_proposals(data.get("proposals"), voices, hint_key, news_text, region)
+            if proposals and data.get("summary"):
+                try:
+                    level = max(1, min(10, int(data.get("anger_level", 5))))
+                except (TypeError, ValueError):
+                    level = 5
+                return {"summary": str(data["summary"]), "anger_level": level, "proposals": proposals}
+        except Exception as e:
+            print(f"[propose_disclosure_targets] Gemini呼び出しに失敗、フォールバックを使用します: {e}", file=sys.stderr)
+
+    # フォールバック（API未設定/失敗時のデモ用）
+    from ordinance_data import addressee_name
+
+    key = _resolve_key(None, hint_key, news_text, region)
+    info = get_ordinance(key)
+    top_points = voices[0]["key_points"][0] if voices and voices[0].get("key_points") else "支出や意思決定の経緯の説明が不足している"
+    title = news_text.split("\n", 1)[0][:40]
+    return {
+        "summary": f"{len(voices)}体のエージェントが声を挙げました。共通する懸念は「{top_points}」です。",
+        "anger_level": max((v.get("anger_level", 5) for v in voices), default=5),
+        "proposals": [{
+            "target_authority_key": key,
+            "target_authority": addressee_name(info) if info else key,
+            "documents": [f"「{title}」に関する契約書・仕様書・決裁文書", "支出関係書類（支出負担行為決議書・請求書・領収書）", "意思決定の経緯がわかる会議資料・議事録"],
+            "reason": f"エージェントたちの共通の懸念（{top_points}）を、記録された行政文書で確認するため。",
+            "supporting_themes": [v["theme"] for v in voices],
+        }],
+    }
+
+
+def build_proposal_input(news_text: str, voices: list[dict], proposal: dict) -> str:
+    """選んだ提案を、既存の開示請求分析（CivicLensAgent.analyze_anger）へ渡す入力テキストにする"""
+    docs = "、".join(proposal.get("documents", []))
+    return (
+        f"【ニュース】\n{news_text}\n\n"
+        f"【複数のエージェントの声】\n{_format_voices(voices)}\n\n"
+        f"【請求したい内容】{proposal.get('target_authority', '')}に対し、{docs}の開示を求めたい。"
+        f"理由: {proposal.get('reason', '')}"
+    )
+
+
 def run_pipeline(
     news_text: str,
     source: dict | None = None,
     region: str | None = None,
     theme: str | None = None,
 ) -> dict:
-    """怒り再現 → 開示請求の該当箇所生成までを実行する
+    """ニュース → 複数エージェントの声 → 統合・開示請求対象の提案 → 先頭案の開示請求分析 まで実行する（CLI用）
 
     region: ユーザーが検索した対象地域。記事本文だけでは対象機関が曖昧な場合に、
     無関係な自治体へ誤って紐づかないよう、対象機関特定のヒントとして使う。
-    theme: どの立場から怒るか（NEWS_THEMES のキー。未指定なら DEFAULT_THEME）。
+    theme: 指定した場合はそのエージェント1体だけが声を挙げる（未指定なら記事を読んで名乗り出た複数体）。
     """
-    anger_agent = AngerReproductionAgent()
-    step1 = anger_agent.generate(news_text, region=region, theme=theme)
-    pseudo_voice = step1["pseudo_citizen_voice"]
-
     from ordinance_data import match_authority_by_text
 
-    hint_authority_key = match_authority_by_text(region, default="") if region else ""
-    disclosure_agent = get_agent()
-    analysis = disclosure_agent.analyze_anger(pseudo_voice, hint_authority_key=hint_authority_key or None)
+    if theme:
+        appearances = [{"theme": theme, "label": get_theme(theme)["label"], "remark": "", "anger_level": 5}]
+    else:
+        appearances = select_appearing_agents(news_text, region)
+    voices = generate_agent_voices(news_text, region, appearances)
 
+    hint_authority_key = match_authority_by_text(region, default="") if region else ""
+    proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint_authority_key or None)
+    top = proposed["proposals"][0]
+
+    analysis = get_agent().analyze_anger(
+        build_proposal_input(news_text, voices, top), hint_authority_key=top["target_authority_key"]
+    )
     disclosure_excerpt = {
         "対象機関": analysis.target_authority,
         "請求する行政文書": analysis.specific_documents_requested,
@@ -313,9 +510,9 @@ def run_pipeline(
     }
 
     result = {
-        "theme": theme or DEFAULT_THEME,
-        "key_points": step1["key_points"],
-        "pseudo_citizen_voice": pseudo_voice,
+        "agent_voices": voices,
+        "summary": proposed["summary"],
+        "proposals": proposed["proposals"],
         "pseudo_citizen_voice_disclaimer": PSEUDO_VOICE_DISCLAIMER,
         "disclosure_request_excerpt": disclosure_excerpt,
         "anger_level": analysis.anger_level,
