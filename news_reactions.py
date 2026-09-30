@@ -166,14 +166,12 @@ def record_analysis(
 def update_record(news_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
     """既存の記録の一部の項目だけを更新する（例: 選んだ提案と、その開示請求分析結果）"""
     with _LOCK:
-        data = _load()
-        record = data.get(news_id)
+        record = _get(news_id)
         if record is None:
             return None
         record.update(fields)
         record["updated_at"] = datetime.now(timezone.utc).isoformat()
-        data[news_id] = record
-        _save(data)
+        _put(record)
         return record
 
 
