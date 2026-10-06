@@ -24,6 +24,8 @@ def gql_attestation(uid=UID, revoked=False, requested=AIKON, authority="愛知�
         "id": uid,
         "time": 1790179246,  # 2026-09-24 01:00:46 JST
         "txid": "0x007d90ec41872bf900cc23a0502490bf7d0dba2cb5e53b1260d40a39464a1b9c",
+        "attester": "0x2a9B2cfeC60210d713dCCcE3943c8Ff0e9EE299b",
+        "recipient": "0x" + "00" * 20,
         "revoked": revoked,
         "refUID": "0x" + "00" * 32,
         "decodedDataJson": json.dumps([{"name": n, "value": {"value": v}} for n, v in fields], ensure_ascii=False),
@@ -82,7 +84,9 @@ def test_fetch_reads_chain_and_skips_revoked(graphql):
     assert e["explorer_url"].endswith(UID) and "sepolia.basescan.org/tx/0x007d" in e["tx_url"]
     url, variables = graphql[0]
     assert "base-sepolia.easscan.org/graphql" in url
-    assert variables["attester"] == "0x2a9B2cfeC60210d713dCCcE3943c8Ff0e9EE299b"
+    # 台帳は署名者を問わず（市民本人のウォレット署名も含む）スキーマUIDだけで絞り込む
+    assert variables == {"schema": "0x3de8ea7980a484e5fa14166785cb0fdb7d01a9984e156bf0ee95ab894724b4ec"}
+    assert e["signer_type"] == "official" and e["tip_recipient"] is None
     ol.fetch_ledger_entries()
     assert len(graphql) == 1, "60秒以内はキャッシュを使う"
 
@@ -90,7 +94,7 @@ def test_fetch_reads_chain_and_skips_revoked(graphql):
 def test_private_entry_has_no_plaintext(graphql, monkeypatch):
     monkeypatch.setattr(ol, "_cache", {"at": 0.0, "entries": None})
     graphql.clear()
-    e = ol._parse(gql_attestation(requested=""), 84532)
+    e = ol._parse(gql_attestation(requested=""), 84532, None)
     assert not e["is_public"] and e["requested_documents"] == ""
 
 

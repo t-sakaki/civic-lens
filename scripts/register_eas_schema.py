@@ -16,14 +16,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from web3_attestation import EAS_SCHEMA_RAW
 from web3_sbt import BADGE_SCHEMA_RAW
+from ledger_extensions import EXTENSION_SCHEMA_RAW
 from web3_chain_client import register_schema
 
 if __name__ == "__main__":
     for label, env_name, schema_raw in [
         ("開示請求証跡アテステーション", "EAS_SCHEMA_UID", EAS_SCHEMA_RAW),
         ("SBTバッジアテステーション", "BADGE_EAS_SCHEMA_UID", BADGE_SCHEMA_RAW),
+        ("延長決定アテステーション", "EXTENSION_SCHEMA_UID", EXTENSION_SCHEMA_RAW),
     ]:
-        result = register_schema(schema_raw, revocable=False)
+        # 延長決定は請求者が誤記を撤回できるよう revocable=True で登録する
+        result = register_schema(schema_raw, revocable=(env_name == "EXTENSION_SCHEMA_UID"))
         print(f"[{label}] 登録完了:")
         print(f"  schema_uid : {result['schema_uid']}")
         print(f"  tx_hash    : {result['tx_hash']}")
