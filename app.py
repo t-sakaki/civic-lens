@@ -91,6 +91,7 @@ from ledger_reactions import (
     get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES,
     verify_wallet_signature, wallet_reactor_id,
 )
+from ledger_extensions import fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_SUMMARY_BYTES
 from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
 from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
@@ -1337,10 +1338,38 @@ async def api_ledger(
         user_id = wallet_reactor_id(address)  # 自分の反応済み表示用（件数のみ返し、誰かは公開しない）
     else:
         user_id = None
+    # 延長決定の記録は任意機能（スキーマ未設定や読み込み失敗でも台帳本体は表示する）
+    try:
+        extensions = fetch_extensions_by_request({e["uid"].lower(): e for e in entries})
+    except Exception:
+        extensions = {}
     return {
         **meta,
         "logged_in": current_user is not None,
-        "entries": [{**e, "reactions": get_reactions(e["uid"], user_id)} for e in entries],
+        "entries": [
+            {
+                **e,
+                "reactions": get_reactions(e["uid"], user_id),
+                "extensions": extensions.get(e["uid"].lower(), []),
+            }
+            for e in entries
+        ],
+    }
+
+
+@app.get("/api/ledger/extensions/config")
+async def api_ledger_extensions_config():
+    """フロントエンドがウォレットから直接、延長決定のattestationを送信するために必要な設定値。"""
+    try:
+        meta = ledger_meta()
+        schema_uid = extension_schema_uid()
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return {
+        "extension_schema_uid": schema_uid,
+        "network": meta["network"],
+        "kinds": list(EXTENSION_KINDS),
+        "max_reason_summary_bytes": MAX_REASON_SUMMARY_BYTES,
     }
 
 

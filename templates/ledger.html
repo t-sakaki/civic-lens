@@ -65,6 +65,45 @@
         <div id="ledgerStatus" class="text-sm text-gray-400">読み込み中...</div>
         <div id="ledgerList" class="space-y-5"></div>
 
+        <section class="cl-card rounded-lg p-5 mt-8" id="extensionSection">
+            <h2 class="font-bold mb-1 flex items-center gap-2">📅 延長決定を記録する</h2>
+            <p class="text-xs text-gray-400 mb-3 leading-relaxed">
+                行政機関から決定期間の延長通知が届いたとき、その<strong>日付と理由の要約</strong>をオンチェーンに記録します。
+                通知書の全文は載せず、ハッシュだけを記録します。<strong>請求者・職員の氏名や連絡先は書かないでください</strong>（記録は削除できません）。
+                署名は<strong>あなた自身のウォレット</strong>で行い、Civic Lens は代理署名しません。理由の要約は通知書の記載の転記にとどめてください。
+            </p>
+            <form id="extForm" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">対象の開示請求 attestation UID（上の「延長決定を記録する」で自動入力）</label>
+                    <input type="text" id="extRefUid" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">種別</label>
+                    <select id="extKind" class="w-full rounded px-2.5 py-1.5"><option>期間延長</option><option>特例延長</option></select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">延長決定の日</label>
+                    <input type="date" id="extDecisionDate" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">延長後の決定期限（通知書の記載）</label>
+                    <input type="date" id="extNewDeadline" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">通知書の全文（ハッシュ計算のみ・どこにも送信されません）</label>
+                    <input type="file" id="extNoticeFile" accept=".txt,.pdf,.png,.jpg,.jpeg,application/pdf,text/plain,image/*" class="text-xs" required>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">通知書記載の延長理由（要約・個人情報を含めない）</label>
+                    <textarea id="extReason" rows="3" class="w-full rounded px-2.5 py-1.5 text-sm" placeholder="例：対象文書が大量で、検索・内容確認に日数を要するため"></textarea>
+                </div>
+                <div class="sm:col-span-2">
+                    <button type="submit" class="cl-btn rounded px-4 py-2">📅 自分のウォレットで署名して記録する</button>
+                </div>
+            </form>
+            <div id="extResult" class="text-xs mt-2 leading-relaxed"></div>
+        </section>
+
         <section class="cl-card rounded-lg p-5 mt-8">
             <h2 class="font-bold mb-1 flex items-center gap-2">💸 投げ銭で応援する</h2>
             <p class="text-xs text-gray-400 mb-3 leading-relaxed">
@@ -157,6 +196,31 @@
                 </p>`;
         }
 
+        function extensionsHtml(e) {
+            const list = e.extensions || [];
+            const items = list.map(x => `
+                <div class="rounded-md p-3 text-xs leading-relaxed" style="border:1px solid rgba(255,255,255,.12)">
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                        <span class="cl-badge rounded-full px-2 py-0.5 font-semibold">${escapeHtml(x.kind)}</span>
+                        <span class="text-gray-300">決定日 ${formatDate(x.decision_date)} ／ 延長後の期限 <strong>${formatDate(x.new_deadline)}</strong></span>
+                        ${x.by_requester === true ? '<span class="cl-badge-teal rounded-full px-2 py-0.5">請求者本人の記録</span>'
+                          : x.by_requester === false ? '<span class="rounded-full px-2 py-0.5 text-red-300" style="border:1px solid currentColor">第三者の記録（請求者本人のものではありません）</span>'
+                          : '<span class="cl-badge rounded-full px-2 py-0.5">記録者の照合不可</span>'}
+                    </div>
+                    <p class="whitespace-pre-wrap">通知書記載の理由（要約）：${escapeHtml(x.reason_summary || '（記載なし）')}</p>
+                    ${x.exceeds_ordinance_limit && e.deadline ? `<p class="mt-1" style="color: var(--cl-amber)">条例上の延長上限（目安 ${formatDate(e.deadline.extended_deadline)}）を超える日付が記録されています。通知書の記載（特例延長の有無など）をご確認ください。</p>` : ''}
+                    <p class="mt-1 text-gray-400">期限を過ぎても決定がない場合、審査請求（不作為）を検討できるのは ${formatDate(x.inaction_review_from)} 以降の目安です。
+                        <a class="cl-link" href="${escapeHtml(x.explorer_url)}" target="_blank" rel="noopener noreferrer">記録を見る ↗</a></p>
+                    <p class="font-mono break-all text-gray-500">通知書ハッシュ: ${escapeHtml(x.notice_hash)}</p>
+                </div>`).join('');
+            return `
+                <div class="border-t border-white/10 pt-3 space-y-2">
+                    <div class="text-xs text-gray-400">延長決定（行政機関の対応）</div>
+                    ${items || '<p class="text-xs text-gray-500">記録された延長決定はありません。</p>'}
+                    <button type="button" class="cl-btn-ghost text-xs rounded-full px-3 py-1.5" data-ext-target="${escapeHtml(e.uid)}">📅 延長決定を記録する</button>
+                </div>`;
+        }
+
         function reactionsHtml(entry) {
             return Object.entries(entry.reactions).map(([type, r]) => `
                 <button type="button" class="cl-react rounded-full px-3 py-1.5 text-sm flex items-center gap-1.5 transition"
@@ -187,6 +251,7 @@
                         ${docs}
                     </div>
                     <div class="border-t border-white/10 pt-3">${deadlineHtml(e.deadline)}</div>
+                    ${extensionsHtml(e)}
                     <details class="text-xs text-gray-300">
                         <summary class="cursor-pointer cl-link">🔎 この記録を検証する</summary>
                         <div class="mt-2 space-y-2 leading-relaxed">
@@ -289,6 +354,13 @@
                     btn.setAttribute('aria-pressed', r.mine);
                     btn.querySelector('[data-count]').textContent = r.count;
                 }
+                return;
+            }
+
+            const extTargetBtn = ev.target.closest('[data-ext-target]');
+            if (extTargetBtn) {
+                document.getElementById('extRefUid').value = extTargetBtn.dataset.extTarget;
+                document.getElementById('extensionSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
 
@@ -415,6 +487,57 @@
             const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url.toString())}`;
             return `<a class="cl-link" href="${intent}" target="_blank" rel="noopener noreferrer">🔥 この応援をSNSでシェアして紹介リンクを広める ↗</a>`;
         }
+
+        // 延長決定の記録 — 署名は常に請求者本人のウォレット。通知書の全文はハッシュだけを記録する。
+        let extConfig = null;
+        function jstMidnightUnix(dateStr) { return Math.floor(new Date(dateStr + 'T00:00:00+09:00').getTime() / 1000); }
+
+        document.getElementById('extForm').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const out = document.getElementById('extResult');
+            const btn = ev.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            try {
+                if (!signer) throw new Error('先にウォレットを接続してください');
+                if (!extConfig) {
+                    const res = await fetch('/api/ledger/extensions/config');
+                    if (!res.ok) throw new Error((await res.json()).detail || '延長決定の設定取得に失敗しました');
+                    extConfig = await res.json();
+                }
+                const refUid = document.getElementById('extRefUid').value.trim();
+                const reason = document.getElementById('extReason').value.trim();
+                const decision = jstMidnightUnix(document.getElementById('extDecisionDate').value);
+                const newDeadline = jstMidnightUnix(document.getElementById('extNewDeadline').value);
+                if (newDeadline < decision) throw new Error('延長後の期限が延長決定の日より前になっています');
+                if (new TextEncoder().encode(reason).length > extConfig.max_reason_summary_bytes) throw new Error('理由の要約が長すぎます（約200文字まで）');
+
+                // 公開前に個人情報らしき記述を確認する（記録は削除できないため）
+                const scan = await (await fetch('/api/web3/attestation/scan-pii', { method: 'POST', body: new URLSearchParams({ text: reason }) })).json();
+                if (scan.warnings.length) {
+                    const list = scan.warnings.map(w => `${w.type}: ${w.match}`).join('\n');
+                    if (!confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。このまま記録しますか？`)) throw new Error('記録を中止しました');
+                }
+                if (!confirm('記録は削除できません。通知書の全文は載せず、日付・理由の要約・ハッシュだけを、あなたのウォレット署名で公開します。よろしいですか？')) throw new Error('記録を中止しました');
+
+                const file = document.getElementById('extNoticeFile').files[0];
+                const noticeHash = ethers.sha256(new Uint8Array(await file.arrayBuffer()));
+                const coder = ethers.AbiCoder.defaultAbiCoder();
+                const encoded = coder.encode(['string', 'uint256', 'uint256', 'string', 'bytes32'],
+                    [document.getElementById('extKind').value, decision, newDeadline, reason, noticeHash]);
+                out.textContent = '⏳ 延長決定の記録を署名してください...';
+                const tx = await eas.attest({
+                    schema: extConfig.extension_schema_uid,
+                    data: { recipient: ZERO_ADDRESS, expirationTime: 0, revocable: true, refUID: refUid, data: encoded, value: 0 },
+                });
+                const receipt = await tx.wait();
+                out.innerHTML = `✅ 延長決定を記録しました（あなたのウォレットで署名済み）<br>記録tx: <a class="cl-link" href="https://sepolia.basescan.org/tx/${receipt.hash}" target="_blank">${short(receipt.hash)} ↗</a>`;
+                loadLedger();
+            } catch (err) {
+                out.innerHTML = `<span class="text-red-300">エラー: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                btn.disabled = false;
+            }
+        });
 
         document.getElementById('tipForm').addEventListener('submit', async (ev) => {
             ev.preventDefault();

@@ -68,10 +68,12 @@ def test_tampered_index_cannot_fake_a_record(chain):
     assert [x.record_id for x in wa.list_all_attestations()] == ["req-real"]
 
 
-def test_other_attester_or_schema_is_rejected(chain):
+def test_other_schema_is_rejected_but_wallet_attester_is_accepted(chain):
     r = wa.issue_attestation("req-x", "t", FULL_TEXT, "愛知県知事")
+    # 署名者は公証アドレスに限定しない（請求者本人のウォレット署名も正当な記録）。署名者の種別だけが変わる
     chain["_ledger"][r.uid]["attester"] = "0x" + "12" * 20
-    assert wa.get_attestation(r.uid) is None
+    got = wa.get_attestation(r.uid)
+    assert got is not None and got.attester.lower() == "0x" + "12" * 20
     chain["_ledger"][r.uid]["attester"] = NOTARY
     chain["_ledger"][r.uid]["schema"] = "0x" + "22" * 32
     assert wa.get_attestation(r.uid) is None
