@@ -25,6 +25,7 @@ import time
 from typing import Any, Iterator, Optional
 
 from timeout_utils import call_with_timeout
+import cost_guard
 
 DEFAULT_CHAINS: dict[str, str] = {
     "pro": "gemini-pro-latest,gemini-flash-latest,gemini-flash-lite-latest",
@@ -107,6 +108,8 @@ def generate(client: Any, tier: str, contents: Any, config: Any = None, timeout_
 
     全モデルが失敗した場合は最後の例外を送出する。
     """
+    # 日次上限（GEMINI_DAILY_CALL_LIMIT）。超過時は例外を送出し、呼び出し側のルールベース処理に任せる
+    cost_guard.consume("gemini")
     last_exc: Optional[Exception] = None
     for model, timeout in attempts(tier, timeout_s):
         try:
