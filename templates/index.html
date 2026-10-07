@@ -3767,12 +3767,22 @@
         function renderNewsSynthesis(bubble, record, region) {
             const voices = record.voices || [];
             const proposals = record.proposals || [];
-            const voicesHtml = voices.map(v => `
-                <div class="border rounded-md p-2 mb-2">
-                    <div class="text-xs font-semibold mb-1">😡 ${escapeHtml(shortAgentLabel(v.label))}</div>
-                    <ul class="list-disc list-inside text-xs text-gray-600 mb-1">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-                    <p class="text-sm">${escapeHtml(v.pseudo_citizen_voice || '')}</p>
+            // 画面の表示は音声パネルの読み上げと同じ「エージェントごとの一言」。論点の詳細は折りたたむ
+            const lines = record.panel_script && record.panel_script.length
+                ? record.panel_script
+                : voices.map(v => ({ label: shortAgentLabel(v.label), body: v.pseudo_citizen_voice || '' }));
+            const voicesHtml = lines.map(l => `
+                <div class="mb-2">
+                    <div class="text-xs font-semibold">😡 ${escapeHtml(l.label)}</div>
+                    <p class="text-sm">${escapeHtml(l.body)}</p>
                 </div>`).join('');
+            const detailsHtml = voices.some(v => (v.key_points || []).length) ? `
+                <details class="mb-2">
+                    <summary class="text-xs text-gray-500 cursor-pointer">論点の詳細を見る</summary>
+                    ${voices.map(v => `
+                        <div class="text-xs font-semibold mt-1">${escapeHtml(shortAgentLabel(v.label))}</div>
+                        <ul class="list-disc list-inside text-xs text-gray-600">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`).join('')}
+                </details>` : '';
             const labelOf = (theme) => {
                 const v = voices.find(x => x.theme === theme);
                 return v ? shortAgentLabel(v.label) : theme;
@@ -3790,8 +3800,9 @@
                 <span class="chat-bubble-label">🔍 Civic Lens</span>
                 <div class="text-xs text-gray-500 mb-1">🧭 統合エージェントの所見（怒りレベル ${escapeHtml(String(record.overall_anger_level ?? '-'))}/10）</div>
                 <p class="text-sm mb-2">${escapeHtml(record.summary || '')}</p>
-                <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
+                <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AI生成）</div>
                 ${voicesHtml}
+                ${detailsHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
                 <div class="flex items-center gap-2 flex-wrap mb-2">
                     <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>

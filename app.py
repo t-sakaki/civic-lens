@@ -888,8 +888,8 @@ async def analyze_news_item(
         overall_anger_level=result["anger_level"],
         **_voices_to_record_fields(result["voices"]),
     )
-    return record
-
+    # 画面の表示は、音声パネルの読み上げと同じ「エージェントごとの一言」にする（保存はしない）
+    return {**record, "panel_script": voice_panel.agent_lines(record)}
 
 
 @app.post("/api/news-agent/voice-panel", dependencies=[Depends(rate_limit)])
