@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>公開の承認 | Civic Lens</title>
+<style>
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#1d4ed8; --ok:#047857; --bad:#b91c1c; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#111a2e; --text:#e2e8f0; --muted:#94a3b8; --line:#1e293b; --accent:#7aa2ff; --ok:#34d399; --bad:#f87171; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; line-height:1.6 }
+main { max-width:760px; margin:0 auto; padding:24px 16px 64px }
+h1 { font-size:1.3rem; margin:0 0 12px }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+input[type=password] { flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text) }
+button { padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer }
+button.primary { background:var(--accent); color:#fff; border-color:var(--accent) }
+button:disabled { opacity:.5; cursor:default }
+.badge { font-size:.75rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line) }
+.badge.pub { color:var(--ok); border-color:var(--ok) }
+.meta { color:var(--muted); font-size:.8rem; margin:4px 0 8px }
+.who { font-size:.78rem; font-weight:600; color:var(--muted) }
+.line { margin:6px 0 }
+.msg { font-size:.85rem; margin-top:8px }
+.msg.err { color:var(--bad) } .msg.ok { color:var(--ok) }
+label.chk { display:flex; gap:8px; align-items:flex-start; font-size:.85rem; margin:10px 0 }
+audio { width:100%; margin-top:6px }
+a { color:var(--accent) }
+</style>
+</head>
+<body>
+<main>
+  <h1>🛂 音声の公開承認（運営者用）</h1>
+  <div class="card">
+    <div class="row">
+      <input type="password" id="token" placeholder="運営者の確認トークン" autocomplete="off">
+      <button id="load" class="primary">一覧を読み込む</button>
+      <a href="/voices">公開ページ</a>
+    </div>
+    <div id="top-msg" class="msg"></div>
+  </div>
+  <div id="list"></div>
+</main>
+<script>
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const tokenInput = document.getElementById('token');
+const topMsg = document.getElementById('top-msg');
+const headers = () => ({ 'X-Admin-Token': tokenInput.value });
+function setMsg(node, text, kind) { node.textContent = text; node.className = 'msg ' + (kind || ''); }
+
+async function load() {
+  const list = document.getElementById('list');
+  const res = await fetch('/api/voice-archive/admin/list', { headers: headers() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { setMsg(topMsg, data.detail || '読み込めませんでした', 'err'); list.textContent = ''; return; }
+  setMsg(topMsg, `${data.items.length}件（非公開 ${data.items.filter(i => i.status !== 'published').length} / 公開 ${data.items.filter(i => i.status === 'published').length}）`, 'ok');
+  list.textContent = '';
+  for (const it of data.items) list.appendChild(card(it));
+}
+
+function card(it) {
+  const c = el('div', 'card'); const src = it.source_news || {};
+  const msg = el('div', 'msg');
+  const head = el('div', 'row');
+  head.appendChild(el('strong', null, src.title || '無題'));
+  head.appendChild(el('span', 'badge' + (it.status === 'published' ? ' pub' : ''), it.status === 'published' ? '公開中' : '非公開'));
+  c.appendChild(head);
+  const meta = el('div', 'meta', [it.region, (it.generated_at || '').slice(0, 16).replace('T', ' ')].filter(Boolean).join(' ・ ') + ' ・ 出典: ');
+  if (src.link) { const a = el('a', null, src.link); a.href = src.link; a.target = '_blank'; a.rel = 'noopener noreferrer'; meta.appendChild(a); }
+  c.appendChild(meta);
+
+  const audio = document.createElement('audio'); audio.controls = true; audio.className = 'hidden-audio'; audio.style.display = 'none';
+  const play = el('button', null, '▶ 確認用に再生');
+  play.addEventListener('click', async () => {
+    play.disabled = true;
+    const r = await fetch(`/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio`, { headers: headers() });
+    play.disabled = false;
+    if (!r.ok) { setMsg(msg, (await r.json().catch(() => ({}))).detail || '再生できませんでした', 'err'); return; }
+    audio.src = URL.createObjectURL(await r.blob()); audio.style.display = 'block'; play.style.display = 'none'; audio.play();
+  });
+  c.appendChild(play); c.appendChild(audio);
+
+  for (const l of it.script) { const r = el('div', 'line'); r.appendChild(el('div', 'who', l.speaker)); r.appendChild(el('div', null, l.text)); c.appendChild(r); }
+
+  if (it.status === 'published') {
+    const b = el('button', null, '非公開に戻す');
+    b.addEventListener('click', async () => {
+      const r = await fetch(`/api/voice-archive/admin/${encodeURIComponent(it.archive_id)}/unpublish`, { method: 'POST', headers: headers() });
+      if (r.ok) load(); else setMsg(msg, (await r.json().catch(() => ({}))).detail || '失敗しました', 'err');
+    });
+    c.appendChild(b);
+  } else {
+    const lab = el('label', 'chk'); const cb = document.createElement('input'); cb.type = 'checkbox';
+    lab.appendChild(cb); lab.appendChild(el('span', null, '出典の記事と照らして、事実の断定・個人の特定・法的助言がなく、論点や疑問の形に収まっていることを確認した'));
+    c.appendChild(lab);
+    const b = el('button', 'primary', '承認して公開する'); b.disabled = true;
+    cb.addEventListener('change', () => { b.disabled = !cb.checked; });
+    b.addEventListener('click', async () => {
+      const fd = new FormData(); fd.append('confirmed', 'true');
+      const r = await fetch(`/api/voice-archive/admin/${encodeURIComponent(it.archive_id)}/publish`, { method: 'POST', headers: headers(), body: fd });
+      if (r.ok) load(); else setMsg(msg, (await r.json().catch(() => ({}))).detail || '失敗しました', 'err');
+    });
+    c.appendChild(b);
+  }
+  c.appendChild(msg);
+  return c;
+}
+document.getElementById('load').addEventListener('click', load);
+</script>
+</body>
+</html>

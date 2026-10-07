@@ -10,18 +10,20 @@ import io
 import base64
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import hmac
 import uuid
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
 import voice_panel
+import voice_archive
 from cost_guard import rate_limit
 from pydantic import BaseModel
 
@@ -912,7 +914,127 @@ async def news_voice_panel(news_id: str = Form(...)):
     except Exception as e:
         print(f"[news-agent/voice-panel] 音声合成に失敗: {e}")
         raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
-    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600"})
+    headers = {"Cache-Control": "private, max-age=3600"}
+    # 記録は開示請求の有無にかかわらず常に残す（既定は非公開。公開は運営者の承認が必要）
+    try:
+        entry = await asyncio.to_thread(voice_archive.save, news_id, record, wav)
+        headers["X-Voice-Archive-Id"] = entry["archive_id"]
+    except Exception as e:
+        print(f"[news-agent/voice-panel] 音声アーカイブへの記録に失敗: {e}")
+    return Response(content=wav, media_type="audio/wav", headers=headers)
+
+
+# ---- 音声アーカイブ（人が承認したものだけ公開） ----
+
+def _require_archive_admin(token: Optional[str]) -> None:
+    expected = os.getenv("ARCHIVE_ADMIN_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="公開の承認機能は未設定です（ARCHIVE_ADMIN_TOKEN）")
+    if not token or not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="運営者の確認トークンが正しくありません")
+
+
+def _page(name: str) -> HTMLResponse:
+    with open(BASE_DIR / "templates" / name, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/voices", response_class=HTMLResponse)
+async def voices_page():
+    """承認済みの「AIエージェントの声」の公開アーカイブ"""
+    return _page("voices.html")
+
+
+@app.get("/admin/voices", response_class=HTMLResponse)
+async def voices_admin_page():
+    """公開の承認画面（運営者の確認トークンで操作する）"""
+    return _page("voices_admin.html")
+
+
+@app.get("/api/voice-archive")
+async def api_voice_archive():
+    return {"items": [voice_archive.public_view(e) for e in voice_archive.list_published()]}
+
+
+@app.get("/api/voice-archive/{archive_id}/audio")
+async def api_voice_archive_audio(archive_id: str, x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+    """公開済みの音声は誰でも再生できる。未公開の音声は運営者のみ（承認前の確認用）"""
+    entry = voice_archive.get(archive_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    if entry.get("status") != voice_archive.PUBLISHED:
+        _require_archive_admin(x_admin_token)
+    wav = await asyncio.to_thread(voice_archive.read_audio, entry)
+    if wav is None:
+        raise HTTPException(status_code=404, detail="音声ファイルが見つかりません")
+    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/voices/feed.xml")
+async def voices_feed(request: Request):
+    """承認済みの声のポッドキャスト形式RSS"""
+    from xml.sax.saxutils import escape
+    from email.utils import format_datetime
+
+    base = str(request.base_url).rstrip("/")
+    items = []
+    for e in voice_archive.list_published():
+        src = e.get("source_news") or {}
+        pub = datetime.fromisoformat(e["published_at"]) if e.get("published_at") else datetime.now(timezone.utc)
+        desc = f"{e.get('disclaimer', '')} 出典: {src.get('title') or ''} {src.get('link') or ''}"
+        items.append(
+            "<item>"
+            f"<title>{escape(src.get('title') or '無題')}</title>"
+            f"<description>{escape(desc)}</description>"
+            f"<guid isPermaLink=\"false\">{escape(e['archive_id'])}</guid>"
+            f"<pubDate>{format_datetime(pub)}</pubDate>"
+            f"<enclosure url=\"{escape(base)}/api/voice-archive/{escape(e['archive_id'])}/audio\" length=\"{int(e.get('audio_bytes') or 0)}\" type=\"audio/wav\"/>"
+            "</item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>'
+        "<title>Civic Lens — AIエージェントの声（フィクション）</title>"
+        f"<link>{escape(base)}/voices</link>"
+        "<language>ja</language>"
+        "<description>ニュースを読んだAIエージェントたちの議論。実在の市民の声ではなく、AIが生成したフィクションです。運営者が確認したものだけを公開しています。</description>"
+        + "".join(items) + "</channel></rss>"
+    )
+    return Response(content=xml, media_type="application/rss+xml; charset=utf-8")
+
+
+@app.get("/api/voice-archive/admin/list")
+async def api_voice_archive_admin_list(x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+    _require_archive_admin(x_admin_token)
+    return {"items": [{**voice_archive.public_view(e), "status": e.get("status")} for e in voice_archive.list_all()]}
+
+
+@app.post("/api/voice-archive/admin/{archive_id}/publish")
+async def api_voice_archive_publish(
+    archive_id: str,
+    confirmed: bool = Form(False),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+):
+    """運営者が内容を確認したうえで公開する（confirmed=true が必須。ガードレールも再検査する）"""
+    _require_archive_admin(x_admin_token)
+    try:
+        entry = await asyncio.to_thread(voice_archive.publish, archive_id, confirmed)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    except voice_archive.NotConfirmed as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except voice_archive.GuardrailViolation as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"archive_id": archive_id, "status": entry["status"], "published_at": entry["published_at"]}
+
+
+@app.post("/api/voice-archive/admin/{archive_id}/unpublish")
+async def api_voice_archive_unpublish(archive_id: str, x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+    _require_archive_admin(x_admin_token)
+    try:
+        entry = await asyncio.to_thread(voice_archive.unpublish, archive_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    return {"archive_id": archive_id, "status": entry["status"]}
 
 
 @app.post("/api/news-agent/select-proposal", dependencies=[Depends(rate_limit)])
