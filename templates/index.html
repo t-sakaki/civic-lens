@@ -3834,6 +3834,12 @@
                     panelAudio.classList.remove('hidden');
                     panelAudio.play().catch(() => {});
                     panelBtn.textContent = '🔊 もう一度聴く';
+                    if (res.headers.get('X-Voice-Archive-Id') && !bubble.querySelector('.news-voice-archived')) {
+                        const note = document.createElement('p');
+                        note.className = 'news-voice-archived text-xs text-gray-400 mb-2';
+                        note.textContent = '🗂️ この音声は非公開で記録しました。運営者が内容を確認して承認したものだけが、公開アーカイブに載ります。';
+                        panelAudio.insertAdjacentElement('afterend', note);
+                    }
                 } catch (e) {
                     panelBtn.textContent = '🔊 ' + (e.message || '音声を生成できませんでした');
                 } finally {
