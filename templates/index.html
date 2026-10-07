@@ -3812,6 +3812,11 @@
         // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
         async function selectNewsProposal(record, index, region, btn) {
             const original = btn.textContent;
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
+                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
+                </div>
+                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
             btn.disabled = true;
             btn.textContent = '🔄 開示請求を準備しています…';
             try {
@@ -3820,6 +3825,29 @@
                 formData.append('proposal_index', String(index));
                 if (region) formData.append('region', region);
                 const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
+            const panelBtn = bubble.querySelector('.news-voice-panel-btn');
+            const panelAudio = bubble.querySelector('.news-voice-panel-audio');
+            panelBtn.addEventListener('click', async () => {
+                panelBtn.disabled = true;
+                panelBtn.textContent = '🔊 音声を生成中…';
+                try {
+                    const fd = new FormData();
+                    fd.append('news_id', record.news_id);
+                    const res = await fetchWithRetry('/api/news-agent/voice-panel', { method: 'POST', body: fd }, 1);
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.detail || '音声を生成できませんでした');
+                    }
+                    panelAudio.src = URL.createObjectURL(await res.blob());
+                    panelAudio.classList.remove('hidden');
+                    panelAudio.play().catch(() => {});
+                    panelBtn.textContent = '🔊 もう一度聴く';
+                } catch (e) {
+                    panelBtn.textContent = '🔊 ' + (e.message || '音声を生成できませんでした');
+                } finally {
+                    panelBtn.disabled = false;
+                }
+            });
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);

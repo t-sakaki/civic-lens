@@ -25,6 +25,7 @@ from agent import get_agent, GENAI_AVAILABLE
 from google.genai import types  # type: ignore
 from news_collector_agent import get_news_collector_agent, NewsItem
 from gemini_models import generate as gemini_generate
+from guardrail import guard_voice, guard_proposal_result
 
 
 PSEUDO_VOICE_DISCLAIMER = (
@@ -343,7 +344,8 @@ def generate_agent_voices(
 
     def _one(a: dict) -> dict:
         data = agent.generate(news_text, region=region, theme=a["theme"])
-        return {**a, "key_points": data["key_points"], "pseudo_citizen_voice": data["pseudo_citizen_voice"]}
+        # 生成直後にガードレール検査（個人情報・実在人物の偽装・法的助言の逸脱は安全な文に差し替える）
+        return guard_voice({**a, "key_points": data["key_points"], "pseudo_citizen_voice": data["pseudo_citizen_voice"]})
 
     with ThreadPoolExecutor(max_workers=len(targets), thread_name_prefix="anger-voice") as pool:
         return list(pool.map(_one, targets))
@@ -391,7 +393,7 @@ def _normalize_proposals(raw: list, voices: list[dict], hint_key: str | None, ne
     return proposals[:MAX_PROPOSALS]
 
 
-def propose_disclosure_targets(
+def _propose_disclosure_targets_raw(
     news_text: str, region: str | None, voices: list[dict], hint_key: str | None = None
 ) -> dict:
     """複数エージェントの声を統合して分析し、開示請求する対象（機関・文書）を提案する統合エージェント。
@@ -461,6 +463,13 @@ def propose_disclosure_targets(
             "supporting_themes": [v["theme"] for v in voices],
         }],
     }
+
+
+def propose_disclosure_targets(
+    news_text: str, region: str | None, voices: list[dict], hint_key: str | None = None
+) -> dict:
+    """統合エージェントの提案。生成結果はガードレールで検査してから返す（詳細は _propose_disclosure_targets_raw）"""
+    return guard_proposal_result(_propose_disclosure_targets_raw(news_text, region, voices, hint_key=hint_key))
 
 
 def build_proposal_input(news_text: str, voices: list[dict], proposal: dict) -> str:

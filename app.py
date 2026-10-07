@@ -20,6 +20,9 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cook
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import cost_guard
+import voice_panel
+from cost_guard import rate_limit
 from pydantic import BaseModel
 
 from agent import get_agent, AngerAnalysis, AgentResponse
@@ -706,7 +709,7 @@ def _get_appearances(news_id: str, news_text: str, region: Optional[str]) -> Lis
     return cached
 
 
-@app.post("/api/news-agent/appear")
+@app.post("/api/news-agent/appear", dependencies=[Depends(rate_limit)])
 async def agents_appear_for_news(
     title: str = Form(...),
     link: str = Form(...),
@@ -770,7 +773,7 @@ async def _build_ticker_items(region: str) -> List[Dict[str, Any]]:
 MAX_TICKER_AGENTS_PER_NEWS = 3
 
 
-@app.get("/api/news-agent/ticker")
+@app.get("/api/news-agent/ticker", dependencies=[Depends(rate_limit)])
 async def news_agent_ticker(region: str, limit: int = 12):
     """メイン画面の入力欄の参考入力（プレースホルダー）用。地域の最新ニュースに、各SDGsエージェントが自律的に上げた怒りを返す。
 
@@ -849,7 +852,7 @@ def _run_anger_analysis(analysis_input: str, hint_key: Optional[str]) -> AngerAn
         )
 
 
-@app.post("/api/news-agent/analyze")
+@app.post("/api/news-agent/analyze", dependencies=[Depends(rate_limit)])
 async def analyze_news_item(
     title: str = Form(...),
     link: str = Form(...),
@@ -888,7 +891,31 @@ async def analyze_news_item(
     return record
 
 
-@app.post("/api/news-agent/select-proposal")
+
+@app.post("/api/news-agent/voice-panel", dependencies=[Depends(rate_limit)])
+async def news_voice_panel(news_id: str = Form(...)):
+    """分析済みニュースの、名乗り出たSDGsエージェントたちの議論をエージェントごとに違う声で読み上げた音声（WAV）を返す。
+
+    冒頭で「AI生成のフィクションであり実在の市民の声ではない」ことを必ず読み上げる（voice_panel.OPENING）。
+    TTSが使えない・日次上限に達した場合は 503 を返し、画面側はテキスト表示のままにする。
+    """
+    record = get_record(news_id)
+    if not record or not record.get("voices"):
+        raise HTTPException(status_code=404, detail="先にこのニュースの分析を行ってください")
+    client = get_agent().genai_client
+    if client is None:
+        raise HTTPException(status_code=503, detail="音声合成は現在利用できません（Gemini未設定）")
+    try:
+        wav = await asyncio.to_thread(voice_panel.synthesize_panel, client, news_id, record)
+    except cost_guard.BudgetExceeded:
+        raise HTTPException(status_code=503, detail="本日の音声合成の上限に達しました。テキストでご覧ください")
+    except Exception as e:
+        print(f"[news-agent/voice-panel] 音声合成に失敗: {e}")
+        raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
+    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/api/news-agent/select-proposal", dependencies=[Depends(rate_limit)])
 async def select_disclosure_proposal(
     news_id: str = Form(...),
     proposal_index: int = Form(...),
