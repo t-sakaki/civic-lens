@@ -39,24 +39,43 @@ def _short_label(label: str) -> str:
     return re.sub(r"^目標\d+\s*", "", str(label or "").strip()) or "行政監視"
 
 
-def _clip(text: str) -> str:
+def _clip(text: str, limit: int = MAX_LINE_CHARS) -> str:
     text = re.sub(r"\s+", " ", text or "").strip()
-    return text if len(text) <= MAX_LINE_CHARS else text[: MAX_LINE_CHARS - 1] + "…"
+    if len(text) <= limit:
+        return text
+    # 文の途中で切れないよう、収まる最後の文末（。！？）で切る（短くなりすぎる場合だけ「…」で切る）
+    head = text[:limit]
+    cut = max(head.rfind(c) for c in "。！？!?")
+    if cut >= limit // 3:
+        return text[: cut + 1]
+    return text[: limit - 1] + "…"
+
+
+def agent_lines(record: dict[str, Any]) -> list[dict[str, str]]:
+    """名乗り出たエージェントごとの短い一言（怒りの強い順・最大 MAX_AGENT_LINES 体）。
+
+    音声パネルの読み上げと、画面の表示の両方でこの内容を使い、画面と音声を一致させる。
+    [{"theme", "label", "body"}]（label は「目標N」を除いた担当名）
+    """
+    lines = []
+    voices = sorted(record.get("voices") or [], key=lambda v: -int(v.get("anger_level") or 0))
+    for v in voices[:MAX_AGENT_LINES]:
+        label = _short_label(v.get("label", ""))
+        prefix_len = len(f"AIの{label}担当です。")
+        body = _clip(v.get("pseudo_citizen_voice") or v.get("remark") or "", MAX_LINE_CHARS - prefix_len)
+        if body:
+            lines.append({"theme": v.get("theme", ""), "label": label, "body": body})
+    return lines
 
 
 def build_script(record: dict[str, Any]) -> list[dict[str, str]]:
     """記録から読み上げ台本を作る: [{"speaker", "voice", "text"}]（先頭は必ず免責の読み上げ）"""
     script = [{"speaker": "ナレーション", "voice": NARRATOR_VOICE, "text": OPENING}]
-    voices = sorted(record.get("voices") or [], key=lambda v: -int(v.get("anger_level") or 0))
-    for i, v in enumerate(voices[:MAX_AGENT_LINES]):
-        body = v.get("pseudo_citizen_voice") or v.get("remark") or ""
-        if not body:
-            continue
-        label = _short_label(v.get("label", ""))
+    for i, line in enumerate(agent_lines(record)):
         script.append({
-            "speaker": f"AI・{label}",
+            "speaker": f"AI・{line['label']}",
             "voice": AGENT_VOICES[i % len(AGENT_VOICES)],
-            "text": _clip(f"AIの{label}担当です。{body}"),
+            "text": f"AIの{line['label']}担当です。{line['body']}",
         })
     summary = record.get("summary")
     if summary:

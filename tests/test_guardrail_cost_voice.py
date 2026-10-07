@@ -161,3 +161,29 @@ def test_voice_panel_endpoint_returns_wav(monkeypatch):
     res = client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"]})
     assert res.status_code == 200 and res.headers["content-type"] == "audio/wav"
     assert res.content[:4] == b"RIFF"
+
+
+def test_agent_lines_match_spoken_script_and_are_exposed_on_analyze():
+    lines = voice_panel.agent_lines(RECORD)
+    script = voice_panel.build_script(RECORD)
+    spoken = [l["text"] for l in script if l["speaker"].startswith("AI・") and "統合" not in l["speaker"]]
+    # 画面に出す一言と、読み上げる本文が一致する
+    assert [f"AIの{l['label']}担当です。{l['body']}" for l in lines] == spoken
+    assert all(len(t) <= voice_panel.MAX_LINE_CHARS for t in spoken)
+
+    res = client.post("/api/news-agent/analyze", data={
+        "title": "アジア大会が閉幕 警備と交通規制", "link": "http://example.com/pl/1", "summary": "警察官が多数動員", "region": "名古屋市",
+    })
+    assert res.status_code == 200
+    body = res.json()
+    assert body["panel_script"] and all(l["label"] and l["body"] for l in body["panel_script"])
+    assert "panel_script" not in news_reactions.get_record(body["news_id"])  # 保存はしない
+
+
+def test_clip_cuts_at_sentence_boundary():
+    text = "最初の文です。" * 30
+    clipped = voice_panel._clip(text, 40)
+    assert len(clipped) <= 40 and clipped.endswith("。") and "…" not in clipped
+    assert voice_panel._clip("短い文。", 40) == "短い文。"
+    assert voice_panel._clip("句点のない" * 20, 40).endswith("…")
+    assert voice_panel._clip("すごい！" * 30, 40).endswith("！")
