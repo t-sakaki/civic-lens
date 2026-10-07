@@ -914,11 +914,12 @@ async def news_voice_panel(news_id: str = Form(...)):
     except Exception as e:
         print(f"[news-agent/voice-panel] 音声合成に失敗: {e}")
         raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
-    headers = {"Cache-Control": "private, max-age=3600"}
+    headers = {"Cache-Control": "private, max-age=3600", **voice_archive.download_headers(f"civic-lens-{news_id}")}
     # 記録は開示請求の有無にかかわらず常に残す（既定は非公開。公開は運営者の承認が必要）
     try:
         entry = await asyncio.to_thread(voice_archive.save, news_id, record, wav)
         headers["X-Voice-Archive-Id"] = entry["archive_id"]
+        headers.update(voice_archive.download_headers(voice_archive.slug(entry)))
     except Exception as e:
         print(f"[news-agent/voice-panel] 音声アーカイブへの記録に失敗: {e}")
     return Response(content=wav, media_type="audio/wav", headers=headers)
@@ -967,7 +968,10 @@ async def api_voice_archive_audio(archive_id: str, x_admin_token: Optional[str] 
     wav = await asyncio.to_thread(voice_archive.read_audio, entry)
     if wav is None:
         raise HTTPException(status_code=404, detail="音声ファイルが見つかりません")
-    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
+    return Response(
+        content=wav, media_type="audio/wav",
+        headers={"Cache-Control": "public, max-age=86400", **voice_archive.download_headers(voice_archive.slug(entry))},
+    )
 
 
 @app.get("/voices/feed.xml")

@@ -125,3 +125,19 @@ def test_publish_is_refused_if_guardrail_violation_remains():
 def test_pages_render():
     assert "AIが生成したフィクション" in client.get("/voices").text
     assert "承認して公開する" in client.get("/admin/voices").text
+
+
+def test_download_filename_is_ascii_slug_of_record_id():
+    res = _generate()
+    aid = res.headers["X-Voice-Archive-Id"]
+    entry = voice_archive.get(aid)
+    name = voice_archive.slug(entry)
+    assert name == f"civic-lens-{entry['generated_at'][:10].replace('-', '')}-{aid}"
+    assert name.isascii() and " " not in name
+    # 音声パネルのレスポンス・アーカイブの音声のどちらも、保存時のファイル名がスラッグになる
+    assert res.headers["X-Voice-Filename"] == f"{name}.wav"
+    assert f'filename="{name}.wav"' in res.headers["content-disposition"]
+    assert res.headers["content-disposition"].startswith("inline")  # 再生は妨げない
+    client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"})
+    pub = client.get(f"/api/voice-archive/{aid}/audio")
+    assert f'filename="{name}.wav"' in pub.headers["content-disposition"]

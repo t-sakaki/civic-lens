@@ -21,6 +21,7 @@ h1 { font-size:1.4rem; margin:0 0 4px }
 .line { margin:8px 0 }
 .who { font-size:.78rem; font-weight:600; color:var(--muted) }
 audio { width:100%; margin-top:8px }
+.dl { display:inline-block; font-size:.8rem; margin-top:4px }
 .hash { color:var(--muted); font-size:.7rem; word-break:break-all; margin-top:10px }
 .empty { color:var(--muted); text-align:center; padding:40px 0 }
 a { color:var(--accent) }
@@ -53,6 +54,9 @@ function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.
       const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
       audio.src = `/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio`;
       card.appendChild(audio);
+      const dl = el('a', 'dl', '⬇ ダウンロード'); dl.href = audio.src;
+      dl.download = `civic-lens-${(it.generated_at || '').slice(0, 10).replace(/-/g, '')}-${it.archive_id}.wav`;
+      card.appendChild(dl);
       for (const l of it.script.slice(1)) {
         const row = el('div', 'line'); row.appendChild(el('div', 'who', l.speaker)); row.appendChild(el('div', null, l.text)); card.appendChild(row);
       }
