@@ -148,3 +148,27 @@ def test_ticker_endpoint_returns_agent_remarks_for_input_placeholder(monkeypatch
     # 同じ地域は短時間キャッシュされ、ニュースを再取得しない
     client.get("/api/news-agent/ticker", params={"region": "名古屋市"})
     assert _Collector.calls == 1
+
+
+def test_proposals_are_merged_into_one_per_authority():
+    voices = [{"theme": "sdg16"}, {"theme": "sdg11"}, {"theme": "sdg1"}]
+    raw = [
+        {"target_authority_key": "anjo-city", "documents": ["契約書", "仕様書"], "reason": "警備費の内訳が不明です。", "supporting_themes": ["sdg16"]},
+        {"target_authority_key": "nagoya-city", "documents": ["議事録"], "reason": "意思決定の経緯を確認します。", "supporting_themes": ["sdg1"]},
+        # 同じ機関に、別の担当のエージェントが別の文書・理由で提案した → 1件に集約される
+        {"target_authority_key": "anjo-city", "documents": ["仕様書", "支出負担行為決議書"], "reason": "交通規制の費用を確認します。", "supporting_themes": ["sdg11", "sdg16"]},
+    ]
+    merged = naa._normalize_proposals(raw, voices, None, "警備と交通規制", "安城市")
+    assert [p["target_authority_key"] for p in merged] == ["anjo-city", "nagoya-city"]  # 初出順を保つ
+    anjo = merged[0]
+    assert anjo["documents"] == ["契約書", "仕様書", "支出負担行為決議書"]  # 重複を除いて合算
+    assert anjo["supporting_themes"] == ["sdg16", "sdg11"]  # 担当エージェントを合算
+    assert "警備費の内訳が不明です。" in anjo["reason"] and "交通規制の費用を確認します。" in anjo["reason"]
+
+
+def test_merged_documents_are_capped():
+    voices = [{"theme": "sdg16"}]
+    raw = [{"target_authority_key": "anjo-city", "documents": [f"文書{i}" for i in range(6)], "reason": "a。", "supporting_themes": []},
+           {"target_authority_key": "anjo-city", "documents": [f"別{i}" for i in range(6)], "reason": "b。", "supporting_themes": []}]
+    merged = naa._normalize_proposals(raw, voices, None, "x", "安城市")
+    assert len(merged) == 1 and len(merged[0]["documents"]) == naa.MAX_DOCUMENTS_PER_PROPOSAL
