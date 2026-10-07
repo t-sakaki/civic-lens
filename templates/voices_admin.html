@@ -79,6 +79,7 @@ function card(it) {
     play.disabled = false;
     if (!r.ok) { setMsg(msg, (await r.json().catch(() => ({}))).detail || '再生できませんでした', 'err'); return; }
     audio.src = URL.createObjectURL(await r.blob()); audio.style.display = 'block'; play.style.display = 'none'; audio.play();
+    const dl = el('a', null, '⬇ ダウンロード'); dl.href = audio.src; dl.download = r.headers.get('X-Voice-Filename') || 'civic-lens-voice.wav'; audio.insertAdjacentElement('afterend', dl);
   });
   c.appendChild(play); c.appendChild(audio);
 

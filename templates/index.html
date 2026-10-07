@@ -3834,6 +3834,16 @@
                     panelAudio.classList.remove('hidden');
                     panelAudio.play().catch(() => {});
                     panelBtn.textContent = '🔊 もう一度聴く';
+                    // ダウンロード時のファイル名は、ランダムなblob名ではなく記録IDのスラッグにする
+                    let dl = bubble.querySelector('.news-voice-download');
+                    if (!dl) {
+                        dl = document.createElement('a');
+                        dl.className = 'news-voice-download text-xs underline text-gray-500 block mb-1';
+                        dl.textContent = '⬇ 音声をダウンロード';
+                        panelAudio.insertAdjacentElement('afterend', dl);
+                    }
+                    dl.href = panelAudio.src;
+                    dl.download = res.headers.get('X-Voice-Filename') || 'civic-lens-voice.wav';
                     if (res.headers.get('X-Voice-Archive-Id') && !bubble.querySelector('.news-voice-archived')) {
                         const note = document.createElement('p');
                         note.className = 'news-voice-archived text-xs text-gray-400 mb-2';

@@ -60,6 +60,21 @@ def archive_id(news_id: str, text_hash: str) -> str:
     return f"{news_id}-{text_hash[:8]}"
 
 
+def slug(entry: dict[str, Any]) -> str:
+    """ダウンロード時のファイル名（拡張子なし）。ASCIIのみ・日付＋記録IDで、記録と1対1に辿れる
+
+    例: civic-lens-20261007-9440b1b73024677e-2f2e1a3c
+    日本語の記事タイトルは文字化け・衝突しやすいのでファイル名には使わない。
+    """
+    date = (entry.get("generated_at") or "")[:10].replace("-", "")
+    return "-".join(p for p in ("civic-lens", date, entry["archive_id"]) if p)
+
+
+def download_headers(name: str) -> dict[str, str]:
+    """再生はそのまま、保存時のファイル名だけをスラッグにする"""
+    return {"Content-Disposition": f'inline; filename="{name}.wav"', "X-Voice-Filename": f"{name}.wav"}
+
+
 # ---- メタデータ（Firestore / ローカルJSON） ----
 
 def _index_path() -> Path:
