@@ -59,3 +59,41 @@ def test_attestation_index_persists_in_firestore(monkeypatch):
     assert wa.get_attestation(rid).uid == r.uid
     assert wa.verify_attestation(rid, content)["verified"]
     assert rid in [x.record_id for x in wa.list_all_attestations()]
+
+
+def test_voice_archive_audio_is_chunked_in_firestore_and_publish_flow(monkeypatch):
+    """音声はOpusにして Firestore に保存（1MiB上限のためチャンク分割）。保存→再読込→公開まで"""
+    import audio_codec
+    import voice_archive
+    import voice_panel
+
+    # 1MiB上限を超える大きさの音声でも、分割して保存し、同じバイト列に復元できる
+    big = os.urandom(2_000_000)
+    aid = "fs-" + uuid.uuid4().hex[:12]
+    ref = voice_archive._store_audio(aid, big, "opus")
+    assert ref == f"firestore:{aid}"
+    assert voice_archive._read_stored({"audio_ref": ref}) == big
+
+    # 実際の保存フロー（WAV → Opus → Firestore）と、Opus/WAVの両形式での読み出し
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x10\x10" * 24000)
+    record = {
+        "source_news": {"title": "t", "link": "http://example.com/fs", "published": None}, "region": "名古屋市",
+        "summary": "警備費の使途が共通の懸念です。", "proposals": [],
+        "voices": [{"theme": "sdg16", "label": "目標16 平和と公正をすべての人に", "anger_level": 8, "pseudo_citizen_voice": "費用が見えません。"}],
+    }
+    entry = voice_archive.save("fs-" + uuid.uuid4().hex[:8], record, buf.getvalue())
+    opus, mime, ext = voice_archive.read_audio(entry)
+    assert opus[:4] == b"OggS" and ext == "opus" and voice_archive._sha256(opus) == entry["audio_sha256"]
+    assert voice_archive.read_audio(entry, "wav")[0][:4] == b"RIFF"
+
+    assert voice_archive.get(entry["archive_id"])["status"] == voice_archive.PRIVATE
+    voice_archive.publish(entry["archive_id"], confirmed=True)
+    assert entry["archive_id"] in [e["archive_id"] for e in voice_archive.list_published()]

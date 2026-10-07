@@ -32,6 +32,19 @@ def _isolated(monkeypatch, tmp_path):
     cost_guard.reset_state()
 
 
+def _wav(seconds=0.5, rate=24000):
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x10\x10" * int(seconds * rate))
+    return buf.getvalue()
+
+
 def _record(news_id="n1", voices=VOICES):
     return news_reactions.record_analysis(
         news_id=news_id, source_news={"title": "アジア大会が閉幕", "link": f"http://example.com/{news_id}", "published": None},
@@ -56,7 +69,10 @@ def test_voice_panel_always_archives_privately_with_provenance():
     assert entry["source_news"]["link"] == "http://example.com/n1"
     assert entry["audio_sha256"] and entry["text_sha256"] and entry["tts_model"]
     assert entry["script"][0]["text"] == voice_panel.OPENING  # 冒頭の免責
-    assert voice_archive.read_audio(entry) == res.content  # 記録された音声が生成したものと一致
+    assert entry["audio_codec"] == "opus" and res.content[:4] == b"OggS"  # 既定はOpus
+    audio, mime, ext = voice_archive.read_audio(entry)
+    assert audio == res.content and ext == "opus" and mime.startswith("audio/ogg")  # 記録された音声が返したものと一致
+    assert entry["audio_sha256"] == voice_archive._sha256(audio)  # ハッシュは保存したOpusファイルのもの
 
 
 def test_same_script_is_archived_once_and_snapshots_are_immutable():
@@ -94,7 +110,7 @@ def test_publish_requires_human_confirmation_then_goes_public():
     assert voice_archive.get(aid)["status"] == voice_archive.PRIVATE
 
     # 運営者は未公開でも音声を確認できる
-    assert client.get(f"/api/voice-archive/{aid}/audio", headers=ADMIN).content[:4] == b"RIFF"
+    assert client.get(f"/api/voice-archive/{aid}/audio", headers=ADMIN).content[:4] == b"OggS"
 
     ok = client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"})
     assert ok.status_code == 200 and ok.json()["status"] == "published"
@@ -102,7 +118,8 @@ def test_publish_requires_human_confirmation_then_goes_public():
     items = client.get("/api/voice-archive").json()["items"]
     assert [i["archive_id"] for i in items] == [aid]
     assert "audio_ref" not in items[0] and items[0]["disclaimer"] == voice_panel.OPENING
-    assert client.get(f"/api/voice-archive/{aid}/audio").content[:4] == b"RIFF"  # 公開後は誰でも再生できる
+    assert client.get(f"/api/voice-archive/{aid}/audio").content[:4] == b"OggS"  # 公開後は誰でも再生できる
+    assert client.get(f"/api/voice-archive/{aid}/audio?format=wav").content[:4] == b"RIFF"  # Opusを再生できない端末向け
     feed = client.get("/voices/feed.xml")
     assert aid in feed.text and "フィクション" in feed.text and feed.headers["content-type"].startswith("application/rss+xml")
 
@@ -113,7 +130,7 @@ def test_publish_requires_human_confirmation_then_goes_public():
 def test_publish_is_refused_if_guardrail_violation_remains():
     bad = [{**VOICES[0], "pseudo_citizen_voice": "訴えれば勝てるはずです。"}]
     rec = _record("bad", bad)
-    entry = voice_archive.save("bad", rec, b"\x01\x00" * 10)
+    entry = voice_archive.save("bad", rec, _wav())
     # ガードレールは生成時に通るが、承認時にも再検査される（台本を直接差し込んで確認）
     entry["script"][1]["text"] = "これは違法です。訴えれば勝てる。"
     voice_archive._put(entry)
@@ -135,9 +152,27 @@ def test_download_filename_is_ascii_slug_of_record_id():
     assert name == f"civic-lens-{entry['generated_at'][:10].replace('-', '')}-{aid}"
     assert name.isascii() and " " not in name
     # 音声パネルのレスポンス・アーカイブの音声のどちらも、保存時のファイル名がスラッグになる
-    assert res.headers["X-Voice-Filename"] == f"{name}.wav"
-    assert f'filename="{name}.wav"' in res.headers["content-disposition"]
+    assert res.headers["X-Voice-Filename"] == f"{name}.opus"
+    assert f'filename="{name}.opus"' in res.headers["content-disposition"]
     assert res.headers["content-disposition"].startswith("inline")  # 再生は妨げない
     client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"})
     pub = client.get(f"/api/voice-archive/{aid}/audio")
-    assert f'filename="{name}.wav"' in pub.headers["content-disposition"]
+    assert f'filename="{name}.opus"' in pub.headers["content-disposition"]
+    wav = client.get(f"/api/voice-archive/{aid}/audio?format=wav")
+    assert f'filename="{name}.wav"' in wav.headers["content-disposition"]
+
+
+def test_voice_panel_can_return_wav_for_browsers_without_opus():
+    rec = _record("wavfmt")
+    res = client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"], "format": "wav"})
+    assert res.status_code == 200 and res.content[:4] == b"RIFF" and res.headers["content-type"] == "audio/wav"
+    assert res.headers["X-Voice-Filename"].endswith(".wav")
+    assert voice_archive.get(res.headers["X-Voice-Archive-Id"])["audio_codec"] == "opus"  # 記録は常にOpus
+
+
+def test_audio_is_split_into_firestore_sized_chunks():
+    data = bytes(range(256)) * 10_000  # 約2.5MB
+    chunks = voice_archive.split_chunks(data)
+    assert all(len(c) <= voice_archive.CHUNK_BYTES for c in chunks) and len(chunks) > 1
+    assert b"".join(chunks) == data and voice_archive.split_chunks(b"") == [b""]
+    assert voice_archive.CHUNK_BYTES < 1024 * 1024  # Firestoreの1ドキュメント上限(1MiB)未満

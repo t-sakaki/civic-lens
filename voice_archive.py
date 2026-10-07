@@ -8,9 +8,11 @@
 - 各スナップショットは不変（台本のハッシュごとにID）。あとで再分析されても、公開済みの内容は変わらない
 - 出典（ニュースURL）・生成日時・モデル・音声と台本のハッシュを一緒に残し、「いつ誰が何を言ったことにしたか」を検証可能にする
 
-保存先:
-  音声本体 : Cloud Storage（VOICE_ARCHIVE_BUCKET）。未設定なら VOICE_ARCHIVE_DIR（既定 /tmp/civic_lens_voice_archive）
-  メタデータ: Firestore（voice_archive）。認証情報のない開発環境のみローカルJSON
+保存先（課金リソースを増やさないため、バケットは使わず Firestore の無料枠に収める）:
+  音声本体 : Opus 24kbps（audio_codec.py）にして Firestore の voice_archive_audio にチャンク分割して保存
+             （90秒で約270KB。1ドキュメント1MiBの上限を超える長さは分割）
+  メタデータ: Firestore の voice_archive
+  認証情報のない開発環境のみ、どちらもローカル（VOICE_ARCHIVE_DIR。既定 /tmp/civic_lens_voice_archive）
 """
 from __future__ import annotations
 
@@ -22,11 +24,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import audio_codec
 import guardrail
 import voice_panel
 from storage_backend import use_firestore
 
 COLLECTION = "voice_archive"
+AUDIO_COLLECTION = "voice_archive_audio"
+CHUNK_BYTES = 700_000  # Firestoreの1ドキュメントは1MiBまで。余裕を見て分割する
 PRIVATE = "private"
 PUBLISHED = "published"
 
@@ -70,9 +75,9 @@ def slug(entry: dict[str, Any]) -> str:
     return "-".join(p for p in ("civic-lens", date, entry["archive_id"]) if p)
 
 
-def download_headers(name: str) -> dict[str, str]:
+def download_headers(name: str, ext: str = "opus") -> dict[str, str]:
     """再生はそのまま、保存時のファイル名だけをスラッグにする"""
-    return {"Content-Disposition": f'inline; filename="{name}.wav"', "X-Voice-Filename": f"{name}.wav"}
+    return {"Content-Disposition": f'inline; filename="{name}.{ext}"', "X-Voice-Filename": f"{name}.{ext}"}
 
 
 # ---- メタデータ（Firestore / ローカルJSON） ----
@@ -119,42 +124,61 @@ def _all() -> list[dict[str, Any]]:
     return sorted(entries, key=lambda e: e.get("generated_at", ""), reverse=True)
 
 
-# ---- 音声本体（Cloud Storage / ローカル） ----
+# ---- 音声本体（Firestore / ローカル） ----
 
-def _bucket_name() -> str:
-    return os.getenv("VOICE_ARCHIVE_BUCKET", "").strip()
+def split_chunks(data: bytes, size: int = CHUNK_BYTES) -> list[bytes]:
+    return [data[i : i + size] for i in range(0, len(data), size)] or [b""]
 
 
-def _store_audio(aid: str, wav: bytes) -> str:
-    bucket = _bucket_name()
-    if bucket:
-        from google.cloud import storage
+def _store_audio(aid: str, audio: bytes, ext: str) -> str:
+    if use_firestore():
+        from firebase_client import get_firestore_client
 
-        storage.Client().bucket(bucket).blob(f"voices/{aid}.wav").upload_from_string(wav, content_type="audio/wav")
-        return f"gs://{bucket}/voices/{aid}.wav"
+        db = get_firestore_client()
+        batch = db.batch()
+        for seq, chunk in enumerate(split_chunks(audio)):
+            batch.set(db.collection(AUDIO_COLLECTION).document(f"{aid}_{seq:03d}"), {"archive_id": aid, "seq": seq, "data": chunk})
+        batch.commit()
+        return f"firestore:{aid}"
     _DIR.mkdir(parents=True, exist_ok=True)
-    (_DIR / f"{aid}.wav").write_bytes(wav)
-    return f"local:{aid}.wav"
+    (_DIR / f"{aid}.{ext}").write_bytes(audio)
+    return f"local:{aid}.{ext}"
 
 
-def read_audio(entry: dict[str, Any]) -> Optional[bytes]:
+def _read_stored(entry: dict[str, Any]) -> Optional[bytes]:
     ref = entry.get("audio_ref", "")
-    if ref.startswith("gs://"):
-        from google.cloud import storage
+    if ref.startswith("firestore:"):
+        from firebase_client import get_firestore_client
 
-        bucket, _, name = ref[5:].partition("/")
-        blob = storage.Client().bucket(bucket).blob(name)
-        return blob.download_as_bytes() if blob.exists() else None
+        aid = ref[len("firestore:"):]
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        docs = get_firestore_client().collection(AUDIO_COLLECTION).where(filter=FieldFilter("archive_id", "==", aid)).stream()
+        chunks = sorted((d.to_dict() for d in docs), key=lambda c: c["seq"])
+        return b"".join(bytes(c["data"]) for c in chunks) if chunks else None
     if ref.startswith("local:"):
         path = _DIR / ref[6:]
         return path.read_bytes() if path.exists() else None
     return None
 
 
+def read_audio(entry: dict[str, Any], fmt: Optional[str] = None) -> Optional[tuple[bytes, str, str]]:
+    """保存した音声を (バイト列, MIME, 拡張子) で返す。fmt="wav" なら、Opusを再生できない端末向けにWAVへ戻す"""
+    audio = _read_stored(entry)
+    if audio is None:
+        return None
+    stored = entry.get("audio_codec", "wav")
+    if stored == "opus" and fmt == "wav":
+        return audio_codec.opus_to_wav(audio), audio_codec.WAV_MIME, "wav"
+    if stored == "opus":
+        return audio, audio_codec.OPUS_MIME, "opus"
+    return audio, audio_codec.WAV_MIME, "wav"
+
+
 # ---- 記録・承認 ----
 
 def save(news_id: str, record: dict[str, Any], wav: bytes) -> dict[str, Any]:
-    """音声パネルの音声を記録する（非公開）。同じ台本なら再保存せず既存の記録を返す"""
+    """音声パネルの音声（WAV）をOpusに圧縮して記録する（非公開）。同じ台本なら再保存せず既存の記録を返す"""
     script = voice_panel.build_script(record)
     aid = archive_id(news_id, script_hash(script))
     with _LOCK:
@@ -162,6 +186,7 @@ def save(news_id: str, record: dict[str, Any], wav: bytes) -> dict[str, Any]:
         if existing:
             return existing
         src = record.get("source_news") or {}
+        audio = audio_codec.wav_to_opus(wav)
         entry = {
             "archive_id": aid,
             "news_id": news_id,
@@ -171,9 +196,10 @@ def save(news_id: str, record: dict[str, Any], wav: bytes) -> dict[str, Any]:
             "summary": record.get("summary"),
             "script": [{"speaker": l["speaker"], "text": l["text"]} for l in script],
             "text_sha256": script_hash(script),
-            "audio_sha256": _sha256(wav),
-            "audio_bytes": len(wav),
-            "audio_ref": _store_audio(aid, wav),
+            "audio_sha256": _sha256(audio),  # 保存した（配信する）Opusファイルのハッシュ
+            "audio_bytes": len(audio),
+            "audio_codec": "opus",
+            "audio_ref": _store_audio(aid, audio, "opus"),
             "tts_model": voice_panel._tts_model(),
             "disclaimer": voice_panel.OPENING,
             "generated_at": _now(),
@@ -236,6 +262,7 @@ def public_view(entry: dict[str, Any]) -> dict[str, Any]:
         "generated_at": entry.get("generated_at"),
         "published_at": entry.get("published_at"),
         "audio_sha256": entry.get("audio_sha256"),
+        "audio_codec": entry.get("audio_codec", "wav"),
         "text_sha256": entry.get("text_sha256"),
         "tts_model": entry.get("tts_model"),
     }

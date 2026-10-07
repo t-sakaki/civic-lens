@@ -895,8 +895,10 @@ async def analyze_news_item(
 
 
 @app.post("/api/news-agent/voice-panel", dependencies=[Depends(rate_limit)])
-async def news_voice_panel(news_id: str = Form(...)):
-    """分析済みニュースの、名乗り出たSDGsエージェントたちの議論をエージェントごとに違う声で読み上げた音声（WAV）を返す。
+async def news_voice_panel(news_id: str = Form(...), format: str = Form("opus")):
+    """分析済みニュースの、名乗り出たSDGsエージェントたちの議論をエージェントごとに違う声で読み上げた音声を返す。
+
+    既定はOpus（24kbps・Ogg）。Opusを再生できない端末（Safari等）は format=wav でWAVを受け取る。
 
     冒頭で「AI生成のフィクションであり実在の市民の声ではない」ことを必ず読み上げる（voice_panel.OPENING）。
     TTSが使えない・日次上限に達した場合は 503 を返し、画面側はテキスト表示のままにする。
@@ -914,14 +916,18 @@ async def news_voice_panel(news_id: str = Form(...)):
     except Exception as e:
         print(f"[news-agent/voice-panel] 音声合成に失敗: {e}")
         raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
-    headers = {"Cache-Control": "private, max-age=3600", **voice_archive.download_headers(f"civic-lens-{news_id}")}
-    # 記録は開示請求の有無にかかわらず常に残す（既定は非公開。公開は運営者の承認が必要）
+    # 記録は開示請求の有無にかかわらず常に残す（既定は非公開。公開は運営者の承認が必要）。記録はOpusに圧縮して保存される
+    fmt = "wav" if format == "wav" else "opus"
     try:
         entry = await asyncio.to_thread(voice_archive.save, news_id, record, wav)
-        headers["X-Voice-Archive-Id"] = entry["archive_id"]
-        headers.update(voice_archive.download_headers(voice_archive.slug(entry)))
+        audio, mime, ext = await asyncio.to_thread(voice_archive.read_audio, entry, fmt)
+        headers = {"Cache-Control": "private, max-age=3600", "X-Voice-Archive-Id": entry["archive_id"],
+                   **voice_archive.download_headers(voice_archive.slug(entry), ext)}
+        return Response(content=audio, media_type=mime, headers=headers)
     except Exception as e:
+        # 記録に失敗しても、聴くことはできるようにWAVのまま返す
         print(f"[news-agent/voice-panel] 音声アーカイブへの記録に失敗: {e}")
+    headers = {"Cache-Control": "private, max-age=3600", **voice_archive.download_headers(f"civic-lens-{news_id}", "wav")}
     return Response(content=wav, media_type="audio/wav", headers=headers)
 
 
@@ -958,19 +964,22 @@ async def api_voice_archive():
 
 
 @app.get("/api/voice-archive/{archive_id}/audio")
-async def api_voice_archive_audio(archive_id: str, x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+async def api_voice_archive_audio(
+    archive_id: str, format: Optional[str] = None, x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")
+):
     """公開済みの音声は誰でも再生できる。未公開の音声は運営者のみ（承認前の確認用）"""
     entry = voice_archive.get(archive_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="見つかりません")
     if entry.get("status") != voice_archive.PUBLISHED:
         _require_archive_admin(x_admin_token)
-    wav = await asyncio.to_thread(voice_archive.read_audio, entry)
-    if wav is None:
+    result = await asyncio.to_thread(voice_archive.read_audio, entry, format)
+    if result is None:
         raise HTTPException(status_code=404, detail="音声ファイルが見つかりません")
+    audio, mime, ext = result
     return Response(
-        content=wav, media_type="audio/wav",
-        headers={"Cache-Control": "public, max-age=86400", **voice_archive.download_headers(voice_archive.slug(entry))},
+        content=audio, media_type=mime,
+        headers={"Cache-Control": "public, max-age=86400", **voice_archive.download_headers(voice_archive.slug(entry), ext)},
     )
 
 
@@ -992,7 +1001,7 @@ async def voices_feed(request: Request):
             f"<description>{escape(desc)}</description>"
             f"<guid isPermaLink=\"false\">{escape(e['archive_id'])}</guid>"
             f"<pubDate>{format_datetime(pub)}</pubDate>"
-            f"<enclosure url=\"{escape(base)}/api/voice-archive/{escape(e['archive_id'])}/audio\" length=\"{int(e.get('audio_bytes') or 0)}\" type=\"audio/wav\"/>"
+            f"<enclosure url=\"{escape(base)}/api/voice-archive/{escape(e['archive_id'])}/audio\" length=\"{int(e.get('audio_bytes') or 0)}\" type=\"{'audio/ogg' if e.get('audio_codec') == 'opus' else 'audio/wav'}\"/>"
             "</item>"
         )
     xml = (
