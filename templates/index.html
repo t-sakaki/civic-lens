@@ -3793,6 +3793,11 @@
                 <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
                 ${voicesHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
+                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
+                </div>
+                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
                 <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
                 ${proposalsHtml}
                 <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
@@ -3801,30 +3806,6 @@
             `;
             renderNewsReactions(bubble.querySelector('.news-reactions'), record.news_id, record.reactions);
             renderNewsShareButtons(bubble, record.news_id, record);
-            bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
-                    selectNewsProposal(record, idx, region, btn);
-                });
-            });
-        }
-
-        // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
-        async function selectNewsProposal(record, index, region, btn) {
-            const original = btn.textContent;
-                <div class="flex items-center gap-2 flex-wrap mb-2">
-                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
-                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
-                </div>
-                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
-            btn.disabled = true;
-            btn.textContent = '🔄 開示請求を準備しています…';
-            try {
-                const formData = new FormData();
-                formData.append('news_id', record.news_id);
-                formData.append('proposal_index', String(index));
-                if (region) formData.append('region', region);
-                const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
             const panelBtn = bubble.querySelector('.news-voice-panel-btn');
             const panelAudio = bubble.querySelector('.news-voice-panel-audio');
             panelBtn.addEventListener('click', async () => {
@@ -3848,6 +3829,25 @@
                     panelBtn.disabled = false;
                 }
             });
+            bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
+                    selectNewsProposal(record, idx, region, btn);
+                });
+            });
+        }
+
+        // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
+        async function selectNewsProposal(record, index, region, btn) {
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '🔄 開示請求を準備しています…';
+            try {
+                const formData = new FormData();
+                formData.append('news_id', record.news_id);
+                formData.append('proposal_index', String(index));
+                if (region) formData.append('region', region);
+                const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);
