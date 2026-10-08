@@ -8,6 +8,9 @@ EAS GraphQLインデクサから直接読み出し、集計する。
 ウォレットが署名・送信する（サーバーは代理署名しない・送金も仲介しない）。
 サーバー側はチェーン上の事実を集計して返すだけで、別データベースは持たない。
 
+JPYCでの投げ銭は、EAS（Base）とは別のチェーン（JPYC_CHAIN_ID、既定はPolygon Amoy）で
+送金し、応援attestationだけをBaseに記録する。トークンアドレスで通貨を識別する。
+
 投げ銭attestationのスキーマ:
     address token     - トークンコントラクトアドレス（ゼロアドレス = ETH）
     address referrer   - 紹介者のアドレス（なければゼロアドレス）
@@ -41,7 +44,15 @@ def _known_tokens() -> Dict[str, tuple]:
     usdc = os.getenv("USDC_CONTRACT_ADDRESS")
     if usdc:
         tokens[Web3.to_checksum_address(usdc)] = ("USDC", 6)
+    jpyc = os.getenv("JPYC_CONTRACT_ADDRESS")
+    if jpyc:
+        tokens[Web3.to_checksum_address(jpyc)] = ("JPYC", jpyc_decimals())
     return tokens
+
+
+def jpyc_decimals() -> int:
+    """JPYCのdecimals。公式ドキュメントで確認のうえ必要なら JPYC_DECIMALS で上書きする。"""
+    return int(os.getenv("JPYC_DECIMALS", "18"))
 
 
 def _short_addr(addr: str) -> str:

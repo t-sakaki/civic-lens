@@ -96,7 +96,7 @@ from ledger_reactions import (
     verify_wallet_signature, wallet_reactor_id,
 )
 from ledger_extensions import fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_SUMMARY_BYTES
-from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
+from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid, jpyc_decimals
 from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
@@ -1468,6 +1468,11 @@ async def api_ledger_tips_config():
         "tip_schema_uid": tip_schema,
         "network": meta["network"],
         "usdc_address": os.getenv("USDC_CONTRACT_ADDRESS", ""),
+        "jpyc": {
+            "address": os.getenv("JPYC_CONTRACT_ADDRESS", ""),
+            "chain_id": int(os.getenv("JPYC_CHAIN_ID", "80002")),
+            "decimals": jpyc_decimals(),
+        },
     }
 
 
