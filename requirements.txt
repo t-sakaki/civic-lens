@@ -32,3 +32,4 @@ tweepy>=4.14.0          # X (Twitter) 投稿用。X Developer Portalでのアプ
 
 # 音声のOpus圧縮（アーカイブをFirestoreの無料枠に収める。ffmpeg内蔵のwheel）
 av>=14.0.0
+pywebpush>=2.0.0       # ニュースの見張りのブラウザ通知（Web Push）

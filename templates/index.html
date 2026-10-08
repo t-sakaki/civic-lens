@@ -1626,6 +1626,13 @@
         .has-messages .sdg-board .sdg-stage-title { font-size: 0.75rem; text-align: left; }
         .has-messages .sdg-board .sdg-stage-grid { grid-template-columns: repeat(17, 1fr); gap: 0.2rem; margin-top: 0.35rem; }
         @media (max-width: 520px) { .has-messages .sdg-board .sdg-stage-grid { grid-template-columns: repeat(9, 1fr); } }
+        .sdg-watch { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.7rem; }
+        .sdg-watch-btn { font-size: 0.78rem; font-weight: 700; padding: 0.4rem 0.8rem; border-radius: 0.5rem; border: 1px solid var(--chat-border-strong); background: rgba(56, 189, 248, 0.12); color: var(--chat-text); cursor: pointer; }
+        .sdg-watch-btn:hover { background: rgba(56, 189, 248, 0.22); }
+        .sdg-watch-btn.is-on { background: rgba(34, 197, 94, 0.18); }
+        .sdg-watch-btn:disabled { opacity: 0.6; cursor: default; }
+        .sdg-watch-note { font-size: 0.7rem; color: var(--chat-muted); flex: 1 1 14rem; text-align: left; }
+        .has-messages .sdg-board .sdg-watch-note { display: none; }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
         @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
@@ -1884,6 +1891,10 @@
         <section id="sdgBoard" class="sdg-stage sdg-board" aria-label="ニュースに怒るAIエージェント">
             <div class="sdg-stage-title">🤖 ニュースに怒るAIエージェント17体<span id="sdgBoardRegion" class="sdg-board-region"></span><small>SDGs の目標ごとに、地域のニュースを読んで名乗り出ます。点灯したアイコンを押すと、そのエージェントが怒っているニュースが見られます</small></div>
             <div id="sdgStageGrid" class="sdg-stage-grid"></div>
+            <div id="sdgWatchRow" class="sdg-watch hidden">
+                <button type="button" id="sdgWatchBtn" class="sdg-watch-btn">🔔 エージェントに見張らせる</button>
+                <span id="sdgWatchNote" class="sdg-watch-note"></span>
+            </div>
             <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
             <div id="sdgBoardPanel" class="sdg-board-panel hidden"></div>
             <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
@@ -3980,6 +3991,98 @@
                 console.warn('自律ブリーフィングに失敗:', err.message);
             }
         }
+
+        // ---- ニュースの見張り（ブラウザ通知 / Web Push）----
+        // オンにすると、タブを閉じていてもエージェントが地域のニュースを見張り、怒りの強いものを通知する。
+        // 必ずオプトイン。ボタン1つでいつでも解除できる。通知は「AI生成・実在の市民の声ではない」と明記される。
+        const WATCH_REGION_KEY = 'cl_watch_region';
+        const watchState = { cfg: null, reg: null, sub: null };
+
+        function urlBase64ToUint8Array(b64) {
+            const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+            const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+            return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+        }
+
+        function renderWatch() {
+            const btn = document.getElementById('sdgWatchBtn');
+            const note = document.getElementById('sdgWatchNote');
+            const cfg = watchState.cfg;
+            if (!btn || !cfg) return;
+            const on = !!watchState.sub;
+            btn.classList.toggle('is-on', on);
+            btn.textContent = on ? '🔔 見張り中（解除する）' : '🔔 エージェントに見張らせる';
+            let region = '';
+            try { region = localStorage.getItem(WATCH_REGION_KEY) || ''; } catch (_) {}
+            const rule = `怒りレベル${cfg.notify_threshold}以上を、1日${cfg.daily_cap}件まで。${cfg.quiet_hours}は通知しません。`;
+            const ios = /iPhone|iPad/.test(navigator.userAgent) && !window.navigator.standalone;
+            note.textContent = on
+                ? `${region ? region + 'のニュースを' : ''}見張っています。${rule}`
+                : `オンにすると、閉じていても怒りの強いニュースを通知します（いつでも解除できます）。${ios ? ' iPhoneはホーム画面に追加すると届きます。' : ''}`;
+        }
+
+        async function initWatch() {
+            const row = document.getElementById('sdgWatchRow');
+            if (!row) return;
+            if (!('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)) return;
+            try {
+                const res = await fetch('/api/push/config');
+                const cfg = await res.json();
+                if (!cfg.enabled) return;
+                watchState.cfg = cfg;
+                watchState.reg = await navigator.serviceWorker.register('/sw.js');
+                watchState.sub = await watchState.reg.pushManager.getSubscription();
+                row.classList.remove('hidden');
+                renderWatch();
+            } catch (e) {
+                console.warn('見張りの初期化に失敗:', e.message);
+                return;
+            }
+            document.getElementById('sdgWatchBtn').addEventListener('click', toggleWatch);
+        }
+
+        async function toggleWatch() {
+            const btn = document.getElementById('sdgWatchBtn');
+            const note = document.getElementById('sdgWatchNote');
+            btn.disabled = true;
+            try {
+                if (watchState.sub) {
+                    const endpoint = watchState.sub.endpoint;
+                    await watchState.sub.unsubscribe();
+                    await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint }) });
+                    watchState.sub = null;
+                    try { localStorage.removeItem(WATCH_REGION_KEY); } catch (_) {}
+                } else {
+                    const region = getNewsRegion();
+                    if (!region) { note.textContent = '見張る地域が決まってから押してください（対象機関を選ぶと決まります）。'; return; }
+                    const perm = await Notification.requestPermission();
+                    if (perm !== 'granted') { note.textContent = 'ブラウザの通知が許可されませんでした。許可すると見張りを始められます。'; return; }
+                    const sub = await watchState.reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(watchState.cfg.public_key),
+                    });
+                    const res = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), region }) });
+                    if (!res.ok) { await sub.unsubscribe(); throw new Error(`HTTP ${res.status}`); }
+                    watchState.sub = sub;
+                    try { localStorage.setItem(WATCH_REGION_KEY, region); } catch (_) {}
+                }
+                renderWatch();
+            } catch (e) {
+                note.textContent = `見張りを切り替えられませんでした: ${e.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        initWatch();
+
+        // 通知から開いたとき: 通知されたニュースの検討を（保存済みなら再分析せず）再生する
+        (function openFromNotification() {
+            const q = new URLSearchParams(location.search);
+            const link = q.get('watch_link');
+            if (!link) return;
+            history.replaceState(null, '', location.pathname);
+            setTimeout(() => analyzeNewsItemInChat({ title: q.get('watch_title') || '通知されたニュース', link, summary: '' }), 1500);
+        })();
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
 

@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
 import voice_panel
 import voice_archive
+import news_watch
 from cost_guard import rate_limit
 from pydantic import BaseModel
 
@@ -1174,6 +1175,15 @@ async def select_disclosure_proposal(
     )
 
 
+def _require_scheduler_secret(scheduler_secret: Optional[str]) -> None:
+    """Cloud Schedulerからの定期実行だけを通す。未設定のときは誰でも費用を使わせられるため、開放せず拒否する"""
+    expected = os.getenv("NEWS_AGENT_SCHEDULER_SECRET", "")
+    if not expected:
+        raise HTTPException(503, "定期実行の認証が未設定です（NEWS_AGENT_SCHEDULER_SECRET）")
+    if not scheduler_secret or not hmac.compare_digest(scheduler_secret, expected):
+        raise HTTPException(401, "スケジューラ認証に失敗しました。")
+
+
 # Cloud Scheduler等から定期実行され、ユーザー操作を待たずに自律的にニュースをスキャンし
 # 「未読の怒りカード」を貯めておくためのエンドポイント。審査基準「自律性・エージェントらしさ」
 # （AGENTS.md参照）に対応するループ構造の起点。
@@ -1196,9 +1206,7 @@ async def autonomous_scan_news(
       各エージェントが記事を読んで自分の出番か判断し、名乗り出た（themesで許可された）エージェントの声を
       ニュース1件にまとめて統合分析する。
     """
-    expected_secret = os.getenv("NEWS_AGENT_SCHEDULER_SECRET")
-    if expected_secret and scheduler_secret != expected_secret:
-        raise HTTPException(401, "スケジューラ認証に失敗しました。")
+    _require_scheduler_secret(scheduler_secret)
 
     region_list = [r.strip() for r in regions.split(",") if r.strip()]
     allowed_themes = {t.strip() for t in themes.split(",") if t.strip()} if themes else set(NEWS_THEMES)
@@ -1248,6 +1256,156 @@ async def autonomous_scan_news(
                 errors.append({"region": region, "error": str(e)})
 
     return {"created_count": len(created), "created": created, "errors": errors}
+
+
+# ---- ニュースの見張り（Web Push）----
+# 購読した地域のニュースをエージェントが監視し、怒りの強いニュースをブラウザ通知で知らせる。
+# 通知はオプトイン・1日の上限・夜間停止つき（news_watch.py）。Cloud Schedulerが /api/push/watch を定期的に呼ぶ。
+
+WATCH_MAX_NEWS = 6
+
+
+class PushSubscribeRequest(BaseModel):
+    subscription: Dict[str, Any]
+    region: str
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str
+
+
+@app.get("/sw.js")
+async def service_worker():
+    """通知を受け取るService Worker。サイト全体を対象にするため、ルートで配信する"""
+    return FileResponse(
+        STATIC_DIR / "sw.js", media_type="text/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/api/push/config")
+async def push_config():
+    return {
+        "enabled": news_watch.push_enabled(),
+        "public_key": news_watch.vapid_public_key(),
+        "notify_threshold": news_watch.notify_threshold(),
+        "daily_cap": news_watch.daily_cap(),
+        "quiet_hours": f"{news_watch.QUIET_START_HOUR}時〜{news_watch.QUIET_END_HOUR}時",
+    }
+
+
+@app.post("/api/push/subscribe", dependencies=[Depends(rate_limit)])
+async def push_subscribe(req: PushSubscribeRequest):
+    if not news_watch.push_enabled():
+        raise HTTPException(503, "通知は現在利用できません")
+    if not req.region.strip():
+        raise HTTPException(400, "見張る地域が決まっていません")
+    try:
+        sub = await asyncio.to_thread(news_watch.subscribe, req.subscription, req.region)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "region": sub["region"]}
+
+
+@app.post("/api/push/unsubscribe", dependencies=[Depends(rate_limit)])
+async def push_unsubscribe(req: PushUnsubscribeRequest):
+    removed = await asyncio.to_thread(news_watch.unsubscribe, req.endpoint)
+    return {"ok": True, "removed": removed}
+
+
+def _ensure_watch_record(item, region: str) -> Dict[str, Any]:
+    """通知の先で見せる検討（記録）を用意する。分析済みならそれを使い、再分析しない"""
+    news_id = make_news_id(item.link)
+    existing = get_record(news_id)
+    if existing:
+        return existing
+    news_text = item.as_text()
+    appearances = _get_appearances(news_id, news_text, region)
+    result = _multi_agent_analysis(news_id, news_text, region, None, appearances)
+    return record_analysis(
+        news_id=news_id,
+        source_news={"title": item.title, "link": item.link, "published": item.published},
+        disclaimer=PSEUDO_VOICE_DISCLAIMER,
+        anger_analysis=None,
+        theme="multi",
+        region=region,
+        autonomous=True,
+        voices=result["voices"],
+        proposals=result["proposals"],
+        summary=result["summary"],
+        overall_anger_level=result["anger_level"],
+        **_voices_to_record_fields(result["voices"]),
+    )
+
+
+def _run_watch(now=None) -> Dict[str, Any]:
+    """購読された地域のニュースを見張り、怒りの強いニュースを購読者へ通知する（1回の実行で1購読に最大1通）"""
+    from datetime import timezone as _tz
+    now = now or datetime.now(_tz.utc)
+    summary = {"regions": 0, "sent": 0, "gone": 0, "errors": 0, "quiet": news_watch.in_quiet_hours(now)}
+    if summary["quiet"]:
+        return summary  # 夜間は監視も通知もしない（費用も使わない）
+    by_region: Dict[str, List[Dict[str, Any]]] = {}
+    for sub in news_watch.list_subscriptions():
+        by_region.setdefault(sub["region"], []).append(sub)
+    collector = get_news_collector_agent()
+    threshold = news_watch.notify_threshold()
+    for region, group in by_region.items():
+        summary["regions"] += 1
+        try:
+            items = collector.fetch_news(region, max_items=WATCH_MAX_NEWS)
+        except Exception as e:
+            print(f"[watch] ニュース取得に失敗 {region}: {e}")
+            summary["errors"] += 1
+            continue
+        candidates = []
+        for item in items:
+            nid = make_news_id(item.link)
+            try:
+                apps = _get_appearances(nid, item.as_text(), region)
+            except Exception as e:
+                print(f"[watch] 登場判定に失敗: {e}")
+                continue
+            if not apps:
+                continue
+            top = max(apps, key=lambda a: int(a.get("anger_level") or 0))
+            if int(top.get("anger_level") or 0) >= threshold:
+                candidates.append((int(top["anger_level"]), item, nid, top))
+        candidates.sort(key=lambda c: -c[0])
+        ensured: Dict[str, bool] = {}
+        for sub in group:
+            for level, item, nid, top in candidates:
+                if not news_watch.can_notify(sub, nid, now):
+                    continue
+                if nid not in ensured:
+                    try:
+                        _ensure_watch_record(item, region)
+                        ensured[nid] = True
+                    except Exception as e:
+                        print(f"[watch] 検討の用意に失敗: {e}")
+                        ensured[nid] = False
+                if not ensured[nid]:
+                    continue
+                payload = news_watch.build_payload(item.title, item.link, top["label"], top["remark"], level)
+                status = news_watch.send(sub, payload)
+                if status == "sent":
+                    news_watch.mark_notified(sub, nid, now)
+                    summary["sent"] += 1
+                elif status == "gone":
+                    summary["gone"] += 1
+                else:
+                    summary["errors"] += 1
+                break
+    return summary
+
+
+@app.post("/api/push/watch")
+async def push_watch(scheduler_secret: Optional[str] = Header(None, alias="X-Scheduler-Secret")):
+    """Cloud Schedulerから定期実行される。購読された地域のニュースを見張って通知する"""
+    _require_scheduler_secret(scheduler_secret)
+    if not news_watch.push_enabled():
+        raise HTTPException(503, "通知は現在利用できません")
+    return await asyncio.to_thread(_run_watch)
 
 
 @app.get("/api/news-agent/unread-count")

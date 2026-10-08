@@ -110,14 +110,17 @@ def test_autonomous_scan_stores_one_record_per_news(monkeypatch, news):
 
     monkeypatch.setattr(app_module, "get_news_collector_agent", lambda: _Collector())
     monkeypatch.setattr(app_module, "ANGER_LEVEL_AUTOSCAN_THRESHOLD", 1)
-    res = client.post("/api/news-agent/autonomous-scan", params={"regions": "名古屋市"})
+    # 定期実行の認証は必須（未設定のときは開放せず拒否する）
+    monkeypatch.setenv("NEWS_AGENT_SCHEDULER_SECRET", "sched-secret")
+    hdr = {"X-Scheduler-Secret": "sched-secret"}
+    res = client.post("/api/news-agent/autonomous-scan", params={"regions": "名古屋市"}, headers=hdr)
     assert res.status_code == 200
     body = res.json()
     assert body["created_count"] == 1 and not body["errors"]
     rec = body["created"][0]
     assert rec["autonomous"] is True and rec["read"] is False and len(rec["voices"]) >= 2
     # 同じ記事は再スキャンしない
-    again = client.post("/api/news-agent/autonomous-scan", params={"regions": "名古屋市"}).json()
+    again = client.post("/api/news-agent/autonomous-scan", params={"regions": "名古屋市"}, headers=hdr).json()
     assert again["created_count"] == 0
 
 
