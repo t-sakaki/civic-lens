@@ -98,7 +98,7 @@ from ledger_reactions import (
     get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES,
     verify_wallet_signature, wallet_reactor_id,
 )
-from ledger_extensions import fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_SUMMARY_BYTES
+from ledger_extensions import fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_BYTES
 from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
 from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
@@ -1787,7 +1787,7 @@ async def api_ledger_extensions_config():
         "extension_schema_uid": schema_uid,
         "network": meta["network"],
         "kinds": list(EXTENSION_KINDS),
-        "max_reason_summary_bytes": MAX_REASON_SUMMARY_BYTES,
+        "max_reason_bytes": MAX_REASON_BYTES,
     }
 
 

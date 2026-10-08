@@ -9,13 +9,14 @@
     string  kind          - 「期間延長」または「特例延長」
     uint256 decisionDate   - 延長決定の日（UNIX秒）
     uint256 newDeadline    - 延長後の決定期限（UNIX秒。通知書に記載された日）
-    string  reasonSummary  - 通知書記載の延長理由の要約（個人情報・職員名を含めない）
+    string  reason         - 通知書に記載された延長の理由（原文のまま。要約・言い換え・追記をしない）
     bytes32 noticeHash     - 通知書全文のSHA-256ハッシュ（全文そのものは載せない）
 refUID で、対象の開示請求 attestation（EAS_SCHEMA_UID）に紐づく。
 
 オンチェーンは削除できないため、通知書の全文・請求者や職員の氏名は載せない。
-公開するのは日付・機関の行為・個人情報を除いた理由の要約・ハッシュだけにとどめる。
-延長理由の要約は通知書の記載の転記であり、AIによる評価は含めない。
+公開するのは日付・機関の行為（通知書記載の理由の原文）・ハッシュだけにとどめる。
+理由は正確さのため通知書の記載をそのまま転記し、要約・言い換え・AIによる評価を含めない。
+長すぎる、または個人情報を含む場合は、一部を省略せず理由欄を空にして通知書ハッシュだけを記録する。
 """
 from __future__ import annotations
 
@@ -34,11 +35,11 @@ JST = timezone(timedelta(hours=9))
 ZERO_BYTES32 = "0x" + "00" * 32
 
 EXTENSION_SCHEMA_RAW = (
-    "string kind, uint256 decisionDate, uint256 newDeadline, string reasonSummary, bytes32 noticeHash"
+    "string kind, uint256 decisionDate, uint256 newDeadline, string reason, bytes32 noticeHash"
 )
 EXTENSION_KINDS = ("期間延長", "特例延長")
-# 理由の要約の上限（UTF-8バイト数。日本語約200文字）
-MAX_REASON_SUMMARY_BYTES = 600
+# 理由（通知書の原文）の上限（UTF-8バイト数。日本語約660文字）。超える場合は省略せず空欄にする
+MAX_REASON_BYTES = 2000
 
 _CACHE_TTL_SECONDS = 60
 _cache: Dict[str, Any] = {"at": 0.0, "by_request": None}
@@ -97,7 +98,7 @@ def _parse(att: Dict[str, Any], chain_id: int, request_entry: Optional[Dict[str,
         "kind": kind,
         "decision_date": decision_date.isoformat(),
         "new_deadline": new_deadline.isoformat(),
-        "reason_summary": reason,
+        "reason": reason,
         "notice_hash": "0x" + notice_hash.hex(),
         "recorder": recorder,
         "by_requester": by_requester,

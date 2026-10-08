@@ -60,6 +60,8 @@ def test_extension_is_read_and_linked_to_request(monkeypatch):
     assert x["by_requester"] is True and not x["exceeds_ordinance_limit"]
     assert x["inaction_review_from"] == "2026-11-08"
     assert x["notice_hash"] == "0x" + "11" * 32
+    assert x["reason"] == "対象文書が大量のため", "理由は通知書の原文をそのまま返す"
+    assert "reason_summary" not in x
 
 
 def test_third_party_record_is_flagged_and_not_used_as_current(monkeypatch):
@@ -108,3 +110,7 @@ def test_api_ledger_survives_without_extension_schema(monkeypatch):
     body = TestClient(appmod.app).get("/api/ledger").json()
     assert body["entries"][0]["extensions"] == []
     assert TestClient(appmod.app).get("/api/ledger/extensions/config").status_code == 503
+
+
+def test_schema_field_is_reason_not_summary():
+    assert "string reason," in le.EXTENSION_SCHEMA_RAW and "reasonSummary" not in le.EXTENSION_SCHEMA_RAW

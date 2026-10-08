@@ -68,9 +68,9 @@
         <section class="cl-card rounded-lg p-5 mt-8" id="extensionSection">
             <h2 class="font-bold mb-1 flex items-center gap-2">📅 延長決定を記録する</h2>
             <p class="text-xs text-gray-400 mb-3 leading-relaxed">
-                行政機関から決定期間の延長通知が届いたとき、その<strong>日付と理由の要約</strong>をオンチェーンに記録します。
+                行政機関から決定期間の延長通知が届いたとき、その<strong>日付と、通知書に書かれた理由の原文</strong>をオンチェーンに記録します。
                 通知書の全文は載せず、ハッシュだけを記録します。<strong>請求者・職員の氏名や連絡先は書かないでください</strong>（記録は削除できません）。
-                署名は<strong>あなた自身のウォレット</strong>で行い、Civic Lens は代理署名しません。理由の要約は通知書の記載の転記にとどめてください。
+                署名は<strong>あなた自身のウォレット</strong>で行い、Civic Lens は代理署名しません。理由は正確さのため<strong>通知書の文言をそのまま</strong>転記し、要約・言い換えはしないでください。長すぎる場合や個人情報を含む場合は、省略せず理由欄を空にして、通知書ハッシュだけを記録できます。
             </p>
             <form id="extForm" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div class="sm:col-span-2">
@@ -94,8 +94,8 @@
                     <input type="file" id="extNoticeFile" accept=".txt,.pdf,.png,.jpg,.jpeg,application/pdf,text/plain,image/*" class="text-xs" required>
                 </div>
                 <div class="sm:col-span-2">
-                    <label class="block text-xs text-gray-400 mb-1">通知書記載の延長理由（要約・個人情報を含めない）</label>
-                    <textarea id="extReason" rows="3" class="w-full rounded px-2.5 py-1.5 text-sm" placeholder="例：対象文書が大量で、検索・内容確認に日数を要するため"></textarea>
+                    <label class="block text-xs text-gray-400 mb-1">通知書に記載された延長の理由（原文のまま・任意）</label>
+                    <textarea id="extReason" rows="3" class="w-full rounded px-2.5 py-1.5 text-sm" placeholder="通知書の「延長の理由」欄の文言をそのまま貼り付け"></textarea>
                 </div>
                 <div class="sm:col-span-2">
                     <button type="submit" class="cl-btn rounded px-4 py-2">📅 自分のウォレットで署名して記録する</button>
@@ -207,7 +207,7 @@
                           : x.by_requester === false ? '<span class="rounded-full px-2 py-0.5 text-red-300" style="border:1px solid currentColor">第三者の記録（請求者本人のものではありません）</span>'
                           : '<span class="cl-badge rounded-full px-2 py-0.5">記録者の照合不可</span>'}
                     </div>
-                    <p class="whitespace-pre-wrap">通知書記載の理由（要約）：${escapeHtml(x.reason_summary || '（記載なし）')}</p>
+                    <p class="whitespace-pre-wrap">通知書記載の理由（原文）：${escapeHtml(x.reason || '（記録なし。通知書ハッシュのみ）')}</p>
                     ${x.exceeds_ordinance_limit && e.deadline ? `<p class="mt-1" style="color: var(--cl-amber)">条例上の延長上限（目安 ${formatDate(e.deadline.extended_deadline)}）を超える日付が記録されています。通知書の記載（特例延長の有無など）をご確認ください。</p>` : ''}
                     <p class="mt-1 text-gray-400">期限を過ぎても決定がない場合、審査請求（不作為）を検討できるのは ${formatDate(x.inaction_review_from)} 以降の目安です。
                         <a class="cl-link" href="${escapeHtml(x.explorer_url)}" target="_blank" rel="noopener noreferrer">記録を見る ↗</a></p>
@@ -509,15 +509,15 @@
                 const decision = jstMidnightUnix(document.getElementById('extDecisionDate').value);
                 const newDeadline = jstMidnightUnix(document.getElementById('extNewDeadline').value);
                 if (newDeadline < decision) throw new Error('延長後の期限が延長決定の日より前になっています');
-                if (new TextEncoder().encode(reason).length > extConfig.max_reason_summary_bytes) throw new Error('理由の要約が長すぎます（約200文字まで）');
+                if (new TextEncoder().encode(reason).length > extConfig.max_reason_bytes) throw new Error('理由が長すぎます。一部を省くと正確でなくなるため、理由欄は空にして通知書ハッシュだけを記録してください');
 
                 // 公開前に個人情報らしき記述を確認する（記録は削除できないため）
                 const scan = await (await fetch('/api/web3/attestation/scan-pii', { method: 'POST', body: new URLSearchParams({ text: reason }) })).json();
                 if (scan.warnings.length) {
                     const list = scan.warnings.map(w => `${w.type}: ${w.match}`).join('\n');
-                    if (!confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。このまま記録しますか？`)) throw new Error('記録を中止しました');
+                    if (!confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。理由を書き換えると原文と異なってしまうため、個人情報を含む場合は理由欄を空にして通知書ハッシュだけを記録することをお勧めします。このまま記録しますか？`)) throw new Error('記録を中止しました');
                 }
-                if (!confirm('記録は削除できません。通知書の全文は載せず、日付・理由の要約・ハッシュだけを、あなたのウォレット署名で公開します。よろしいですか？')) throw new Error('記録を中止しました');
+                if (!confirm('記録は削除できません。通知書の全文は載せず、日付・理由の原文・ハッシュだけを、あなたのウォレット署名で公開します。よろしいですか？')) throw new Error('記録を中止しました');
 
                 const file = document.getElementById('extNoticeFile').files[0];
                 const noticeHash = ethers.sha256(new Uint8Array(await file.arrayBuffer()));
