@@ -176,3 +176,25 @@ def test_audio_is_split_into_firestore_sized_chunks():
     assert all(len(c) <= voice_archive.CHUNK_BYTES for c in chunks) and len(chunks) > 1
     assert b"".join(chunks) == data and voice_archive.split_chunks(b"") == [b""]
     assert voice_archive.CHUNK_BYTES < 1024 * 1024  # Firestoreの1ドキュメント上限(1MiB)未満
+
+
+def test_missing_audio_blocks_publish_and_is_repaired_by_regenerating():
+    first = _generate()
+    aid = first.headers["X-Voice-Archive-Id"]
+    entry = voice_archive.get(aid)
+    # 旧版のように、記録は残っているが音声ファイルが消えた状態を再現
+    (voice_archive._DIR / entry["audio_ref"].removeprefix("local:")).unlink()
+    assert voice_archive.read_audio(entry) is None
+
+    res = client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"})
+    assert res.status_code == 409 and "音声ファイルが見つかりません" in res.json()["detail"]
+    assert voice_archive.get(aid)["status"] == voice_archive.PRIVATE
+
+    # 同じ台本で音声を作り直すと、同じ記録IDのまま音声が保存し直される（復旧）
+    voice_panel._cache.clear()
+    again = _generate()
+    assert again.headers["X-Voice-Archive-Id"] == aid
+    assert voice_archive.read_audio(voice_archive.get(aid))[0] == again.content
+    assert len(voice_archive.list_all()) == 1
+    assert voice_archive.get(aid)["generated_at"] == entry["generated_at"]  # 記録の日時は変わらない
+    assert client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"}).status_code == 200
