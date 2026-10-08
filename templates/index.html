@@ -1587,7 +1587,7 @@
         .sdg-stage-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 0.4rem; margin-top: 0.7rem; }
         @media (max-width: 520px) { .sdg-stage-grid { grid-template-columns: repeat(6, 1fr); } }
         .sdg-stage-btn { position: relative; padding: 0; border: 0; background: none; cursor: pointer; opacity: 0.35; transition: opacity 0.3s, transform 0.3s; line-height: 0; }
-        .sdg-stage-btn img { width: 100%; height: auto; display: block; }
+        .sdg-stage-btn img { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
         .sdg-stage-btn.is-up { opacity: 1; animation: sdgStageUp 2.4s ease-in-out infinite; }
         .sdg-stage-btn.is-up::after { content: attr(data-lvl); position: absolute; right: -4px; top: -6px; min-width: 1.15rem; padding: 0 0.25rem; border-radius: 999px; background: #b91c1c; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
         .sdg-stage-btn.is-selected { transform: scale(1.12); opacity: 1; z-index: 1; }
@@ -1608,6 +1608,24 @@
         @media (max-width: 520px) { .sdg-mini-board { grid-template-columns: repeat(9, 1fr); } }
         .sdg-mini { cursor: default; }
         .sdg-mini.is-up::after { display: none; }
+        /* SDGs怒りボード（常設）。会話が始まったら説明を畳んでコンパクトにする */
+        .sdg-board { margin: 0.5rem auto 0.75rem; flex: none; }
+        .sdg-board-region { margin-left: 0.5rem; font-size: 0.72rem; font-weight: 600; color: var(--chat-accent, #38bdf8); }
+        .sdg-board-panel { margin-top: 0.7rem; padding: 0.6rem 0.7rem; border-radius: 0.6rem; border: 1px solid var(--chat-border-strong); background: rgba(148, 163, 184, 0.08); text-align: left; font-size: 0.8rem; }
+        .sdg-board-panel .panel-head { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; margin-bottom: 0.4rem; }
+        .sdg-board-panel .panel-row { padding: 0.45rem 0; border-top: 1px dashed var(--chat-border); }
+        .sdg-board-panel .panel-row:first-of-type { border-top: none; }
+        .sdg-board-panel .panel-title { font-size: 0.7rem; color: var(--chat-muted); }
+        .sdg-board-panel .panel-act { margin-top: 0.3rem; font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 0.4rem; background: #0f172a; color: #fff; border: 1px solid var(--chat-border-strong); cursor: pointer; }
+        .sdg-board-panel .panel-act:hover { background: #1e293b; }
+        .sdg-stage-btn.is-picked { transform: scale(1.1); z-index: 1; outline: 2px solid #38bdf8; outline-offset: 1px; }
+        .has-messages .sdg-board { padding: 0.45rem 0.5rem; }
+        .has-messages .sdg-board .sdg-stage-title small,
+        .has-messages .sdg-board .sdg-stage-voice,
+        .has-messages .sdg-board .sdg-stage-note { display: none; }
+        .has-messages .sdg-board .sdg-stage-title { font-size: 0.75rem; text-align: left; }
+        .has-messages .sdg-board .sdg-stage-grid { grid-template-columns: repeat(17, 1fr); gap: 0.2rem; margin-top: 0.35rem; }
+        @media (max-width: 520px) { .has-messages .sdg-board .sdg-stage-grid { grid-template-columns: repeat(9, 1fr); } }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
         @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
@@ -1862,21 +1880,22 @@
 
         <div id="chatSplitGrid">
         <div id="chatLeftPane">
+        <!-- SDGs怒りボード: Civic Lens の主役。会話が始まっても常に表示し、17体のSDGsエージェントが地域のニュースを読んで名乗り出る様子を見せる -->
+        <section id="sdgBoard" class="sdg-stage sdg-board" aria-label="ニュースに怒るAIエージェント">
+            <div class="sdg-stage-title">🤖 ニュースに怒るAIエージェント17体<span id="sdgBoardRegion" class="sdg-board-region"></span><small>SDGs の目標ごとに、地域のニュースを読んで名乗り出ます。点灯したアイコンを押すと、そのエージェントが怒っているニュースが見られます</small></div>
+            <div id="sdgStageGrid" class="sdg-stage-grid"></div>
+            <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
+            <div id="sdgBoardPanel" class="sdg-board-panel hidden"></div>
+            <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
+        </section>
         <div id="chatTimeline" class="chat-timeline">
             <div id="chatWelcome" class="chat-welcome">
                 <div class="chat-welcome-mark" aria-hidden="true">🔍</div>
                 <h2 id="mainQuestionHeading">何に怒りを感じていますか？</h2>
                 <p>思ったことをそのまま書くか、下の候補や ＋ から選んでください</p>
                 <!-- 審査員・初見のユーザーが5秒で「何をするエージェントか」を掴めるよう、処理の流れを示す -->
-                <!-- ニュースに怒るAIエージェント17体。記事を読んで名乗り出たエージェントのSDGsアイコンが点灯する -->
-                <section id="sdgStage" class="sdg-stage" aria-label="ニュースに怒るAIエージェント">
-                    <div class="sdg-stage-title">🤖 ニュースに怒るAIエージェント17体<small>SDGs の目標ごとに、地域のニュースを読んで名乗り出ます</small></div>
-                    <div id="sdgStageGrid" class="sdg-stage-grid"></div>
-                    <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
-                    <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
-                    <!-- 地域が決まると、エージェントが自律的に最も怒りの強いニュースを統合分析してここに出す（請求・投稿の判断は本人） -->
-                    <div id="sdgBriefing" class="sdg-briefing hidden"></div>
-                </section>
+                <!-- 地域が決まると、エージェントが自律的に最も怒りの強いニュースを統合分析してここに出す（請求・投稿の判断は本人） -->
+                <div id="sdgBriefing" class="sdg-briefing hidden"></div>
                 <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
                     <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
                     <li><span class="flow-icon" aria-hidden="true">🤖</span><span><b>AIが特定</b><small>機関・条例・行政文書</small></span></li>
@@ -3725,6 +3744,8 @@
                     };
                 });
                 updateSdgStage(data.items || []);
+                const regionEl = document.getElementById('sdgBoardRegion');
+                if (regionEl) regionEl.textContent = `📍 ${region}`;
                 autoBriefing(data.items || [], region);
                 if (!angerPromptItems.length) angerPromptRegion = null;  // 空なら次回また試す
             } catch (err) {
@@ -3746,15 +3767,38 @@
                 btn.className = 'sdg-stage-btn';
                 btn.dataset.sdg = String(n);
                 btn.setAttribute('aria-label', `SDGs 目標${n}のエージェント`);
-                btn.innerHTML = `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" loading="lazy">`;
-                btn.addEventListener('click', () => {
-                    const mine = sdgStage.items.filter(it => it.theme === `sdg${n}`);
-                    if (!mine.length) return;
-                    sdgStage.selected = n;
-                    showSdgStageItem(mine[0]);
-                });
+                btn.innerHTML = `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="290" height="290">`;
+                btn.addEventListener('click', () => toggleSdgBoardPanel(n));
                 grid.appendChild(btn);
             }
+        }
+
+        // 点灯したアイコンを押すと、そのエージェントが怒っているニュースを一覧し、そこから検討を始められる
+        function toggleSdgBoardPanel(n) {
+            const panel = document.getElementById('sdgBoardPanel');
+            const grid = document.getElementById('sdgStageGrid');
+            if (sdgStage.selected === n) {  // もう一度押すと閉じる
+                sdgStage.selected = null;
+                panel.classList.add('hidden');
+                grid.querySelectorAll('.is-picked').forEach(el => el.classList.remove('is-picked'));
+                return;
+            }
+            sdgStage.selected = n;
+            grid.querySelectorAll('.sdg-stage-btn').forEach(el => el.classList.toggle('is-picked', Number(el.dataset.sdg) === n));
+            const mine = sdgStage.items.filter(it => it.theme === `sdg${n}`).sort((a, b) => Number(b.anger_level || 0) - Number(a.anger_level || 0));
+            const head = `<div class="panel-head"><img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="32" height="32"><span>SDG${n} のエージェント（AI）</span></div>`;
+            if (!mine.length) {
+                panel.innerHTML = head + '<div class="panel-title">このエージェントは、今の地域のニュースでは名乗り出ていません。</div>';
+            } else {
+                panel.innerHTML = head + mine.map((it, i) => `
+                    <div class="panel-row">
+                        <div class="panel-title">📰 ${escapeHtml(it.title)}</div>
+                        <div>😡 怒り${escapeHtml(String(it.anger_level ?? '-'))}　${escapeHtml(it.remark)}</div>
+                        <button type="button" class="panel-act" data-i="${i}">🧠 エージェントたちでこのニュースを検討する</button>
+                    </div>`).join('');
+                panel.querySelectorAll('.panel-act').forEach(btn => btn.addEventListener('click', () => analyzeNewsItemInChat(mine[Number(btn.dataset.i)])));
+            }
+            panel.classList.remove('hidden');
         }
 
         function showSdgStageItem(it) {
