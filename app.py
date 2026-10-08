@@ -1817,7 +1817,11 @@ async def api_ledger_record_extension(
     本人が確認して acknowledge_warnings=true で再送した場合のみ記録する（記録は削除できない）。
     """
     if not current_user:
-        raise HTTPException(401, "代理署名で記録するにはログインが必要です")
+        raise HTTPException(
+            401,
+            "代理署名で記録するには、Civic Lens にログインしている必要があります"
+            "（ウォレットの接続とは別です）。トップページからログインし、請求を発行したときと同じアカウントで、この画面を開き直してください。",
+        )
     try:
         entry = get_ledger_entry(uid)
         extension_schema_uid()  # 未設定なら LedgerNotConfigured（503）
