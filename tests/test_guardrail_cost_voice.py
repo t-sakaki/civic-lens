@@ -149,7 +149,7 @@ def test_voice_panel_endpoint_404_and_503():
     assert client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"]}).status_code == 503
 
 
-def test_voice_panel_endpoint_returns_wav(monkeypatch):
+def test_voice_panel_endpoint_returns_opus_by_default_and_wav_on_request(monkeypatch):
     monkeypatch.setattr(agent.CivicLensAgent, "genai_client", property(lambda self: object()))
     monkeypatch.setattr(voice_panel, "_synthesize_line", lambda c, v, t: b"\x01\x00" * 50)
     rec = news_reactions.record_analysis(
@@ -158,9 +158,12 @@ def test_voice_panel_endpoint_returns_wav(monkeypatch):
         voices=RECORD["voices"], proposals=RECORD["proposals"], summary=RECORD["summary"],
         overall_anger_level=7, key_points=["k"], pseudo_citizen_voice="v",
     )
+    # 既定はOpus（小さい）。Opusを再生できない端末向けには format=wav でWAVを返す
     res = client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"]})
-    assert res.status_code == 200 and res.headers["content-type"] == "audio/wav"
-    assert res.content[:4] == b"RIFF"
+    assert res.status_code == 200 and res.headers["content-type"].startswith("audio/ogg")
+    assert res.content[:4] == b"OggS"
+    wav = client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"], "format": "wav"})
+    assert wav.status_code == 200 and wav.headers["content-type"] == "audio/wav" and wav.content[:4] == b"RIFF"
 
 
 def test_agent_lines_match_spoken_script_and_are_exposed_on_analyze():

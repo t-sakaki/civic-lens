@@ -31,3 +31,15 @@ def _never_touch_real_firebase(monkeypatch):
         pytest.skip("Firebase Emulator が必要です（FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST）。本番には接続しません")
 
     monkeypatch.setattr(firebase_client, "get_app", _skip)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_voice_archive_dir(monkeypatch, tmp_path_factory):
+    """音声アーカイブのローカル保存先を、テストごとの一時フォルダに固定する。
+
+    固定しないと、実際の /tmp/civic_lens_voice_archive に書き込み、前回の実行の記録が残って
+    テストの結果が変わる（Firestoreを使うテストでは使われない）。
+    """
+    import voice_archive
+
+    monkeypatch.setattr(voice_archive, "_DIR", tmp_path_factory.mktemp("voice_archive"))

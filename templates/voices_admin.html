@@ -20,6 +20,8 @@ button.primary { background:var(--accent); color:#fff; border-color:var(--accent
 button:disabled { opacity:.5; cursor:default }
 .badge { font-size:.75rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line) }
 .badge.pub { color:var(--ok); border-color:var(--ok) }
+.badge.warn { color:var(--bad); border-color:var(--bad) }
+button.danger { color:var(--bad); border-color:var(--bad) }
 .meta { color:var(--muted); font-size:.8rem; margin:4px 0 8px }
 .who { font-size:.78rem; font-weight:600; color:var(--muted) }
 .line { margin:6px 0 }
@@ -67,6 +69,7 @@ function card(it) {
   const head = el('div', 'row');
   head.appendChild(el('strong', null, src.title || '無題'));
   head.appendChild(el('span', 'badge' + (it.status === 'published' ? ' pub' : ''), it.status === 'published' ? '公開中' : '非公開'));
+  if (it.audio_available === false) head.appendChild(el('span', 'badge warn', '音声なし'));
   c.appendChild(head);
   const meta = el('div', 'meta', [it.region, (it.generated_at || '').slice(0, 16).replace('T', ' ')].filter(Boolean).join(' ・ ') + ' ・ 出典: ');
   if (src.link) { const a = el('a', null, src.link); a.href = src.link; a.target = '_blank'; a.rel = 'noopener noreferrer'; meta.appendChild(a); }
@@ -98,7 +101,7 @@ function card(it) {
     lab.appendChild(cb); lab.appendChild(el('span', null, '出典の記事と照らして、事実の断定・個人の特定・法的助言がなく、論点や疑問の形に収まっていることを確認した'));
     c.appendChild(lab);
     const b = el('button', 'primary', '承認して公開する'); b.disabled = true;
-    cb.addEventListener('change', () => { b.disabled = !cb.checked; });
+    cb.addEventListener('change', () => { b.disabled = !cb.checked || it.audio_available === false; });
     b.addEventListener('click', async () => {
       const fd = new FormData(); fd.append('confirmed', 'true');
       const r = await fetch(`/api/voice-archive/admin/${encodeURIComponent(it.archive_id)}/publish`, { method: 'POST', headers: headers(), body: fd });
@@ -106,6 +109,16 @@ function card(it) {
     });
     c.appendChild(b);
   }
+  if (it.status !== 'published') {
+    const del = el('button', 'danger', '削除'); del.style.marginLeft = '8px';
+    del.addEventListener('click', async () => {
+      if (!confirm('この記録と音声を完全に削除します。元に戻せません。よろしいですか？')) return;
+      const r = await fetch(`/api/voice-archive/admin/${encodeURIComponent(it.archive_id)}`, { method: 'DELETE', headers: headers() });
+      if (r.ok) load(); else setMsg(msg, (await r.json().catch(() => ({}))).detail || '削除に失敗しました', 'err');
+    });
+    c.appendChild(del);
+  }
+  if (it.audio_available === false) c.appendChild(el('div', 'msg err', '音声ファイルが失われています（公開はできません）。不要なら削除してください。'));
   c.appendChild(msg);
   return c;
 }
