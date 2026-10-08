@@ -1,5 +1,6 @@
 """ガードレール監視・費用ガード・音声パネル（Gemini/TTS通信なし）"""
 import io
+import json
 import wave
 
 import pytest
@@ -137,6 +138,17 @@ def test_synthesize_panel_concatenates_wav_and_caches(monkeypatch):
     assert len(calls) == n  # キャッシュ済みなら再合成しない
 
 
+def test_panel_timing_has_speaker_ranges(monkeypatch):
+    monkeypatch.setattr(voice_panel, "_synthesize_line", lambda c, v, t: b"\x01\x00" * 100)
+    wav = voice_panel.synthesize_panel(object(), "n9", RECORD)
+    timing = voice_panel.panel_timing(RECORD, wav)
+    assert timing[0]["speaker"] == "ナレーション"
+    assert timing[0]["start"] == 0.0
+    for a, b in zip(timing, timing[1:]):
+        assert a["start"] < a["end"] and b["start"] >= a["end"]
+    assert len(timing) == len(voice_panel.build_script(RECORD))
+
+
 def test_voice_panel_endpoint_404_and_503():
     assert client.post("/api/news-agent/voice-panel", data={"news_id": "nope"}).status_code == 404
     rec = news_reactions.record_analysis(
@@ -161,3 +173,4 @@ def test_voice_panel_endpoint_returns_wav(monkeypatch):
     res = client.post("/api/news-agent/voice-panel", data={"news_id": rec["news_id"]})
     assert res.status_code == 200 and res.headers["content-type"] == "audio/wav"
     assert res.content[:4] == b"RIFF"
+    assert json.loads(res.headers["x-panel-timing"])[0]["speaker"] == "ナレーション"

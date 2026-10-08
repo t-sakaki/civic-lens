@@ -231,6 +231,41 @@
             vertical-align: text-bottom;
             animation: agentBlink 1s steps(1) infinite;
         }
+        /* --- 音声パネル: SDGsエージェントの簡易アイコン・表情（怒りレベル3段階・一目でAIと分かる意匠。公式ロゴは使わず色のみ参照） --- */
+        .vp-agent-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid var(--sdg-color, #64748b);
+            color: var(--sdg-color, #64748b);
+            background: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            opacity: 0.55;
+            transition: opacity 0.25s, transform 0.25s, box-shadow 0.25s;
+        }
+        .vp-agent.vp-speaking .vp-agent-icon {
+            opacity: 1;
+            transform: scale(1.15);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--sdg-color) 30%, transparent);
+            animation: vpPulse 1s ease-in-out infinite;
+        }
+        @keyframes vpPulse {
+            50% { transform: scale(1.15) translateY(-1px); }
+        }
+        .vp-anger-high .vp-agent-icon { border-width: 3px; }
+        .vp-anger-high.vp-speaking .vp-agent-icon { animation: vpPulse 0.7s ease-in-out infinite, vpShake 0.15s linear infinite; }
+        .vp-anger-low .vp-agent-icon { opacity: 0.35; }
+        .vp-anger-low.vp-speaking .vp-agent-icon { opacity: 0.8; }
+        @keyframes vpShake {
+            0%, 100% { margin-left: 0; } 50% { margin-left: 1px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .vp-agent.vp-speaking .vp-agent-icon, .vp-anger-high.vp-speaking .vp-agent-icon { animation: none; }
+        }
         @keyframes agentBlink {
             50% { opacity: 0; }
         }
@@ -3764,6 +3799,20 @@
             return String(label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
         }
 
+        const SDG_COLORS = {
+            1: '#E5243B', 2: '#DDA63A', 3: '#4C9F38', 4: '#C5192D', 5: '#FF3A21',
+            6: '#26BDE2', 7: '#FCC30B', 8: '#A21942', 9: '#FD6925', 10: '#DD1367',
+            11: '#FD9D24', 12: '#BF8B2E', 13: '#3F7E44', 14: '#0A97D9', 15: '#56C02B',
+            16: '#00689D', 17: '#19486A',
+        };
+        // 音声台本の話者名（voice_panel._short_label と同じ規則: 「目標N 」を除いたもの）
+        const speakerOf = (label) => 'AI・' + (String(label || '').replace(/^目標\d+\s*/, '').trim() || '行政監視');
+        function agentIconHtml(label) {
+            const m = String(label || '').match(/^目標(\d+)/);
+            const n = m ? Number(m[1]) : 0;
+            return `<span class="vp-agent-icon" style="--sdg-color:${SDG_COLORS[n] || '#64748b'}">${m ? 'SDG' + n : '監視'}</span>`;
+        }
+
         function renderNewsSynthesis(bubble, record, region) {
             const voices = record.voices || [];
             const proposals = record.proposals || [];
@@ -3793,6 +3842,12 @@
                 <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
                 ${voicesHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
+                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
+                </div>
+                <div class="news-voice-panel-agents flex items-center gap-3 flex-wrap mb-2 hidden"></div>
+                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
                 <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
                 ${proposalsHtml}
                 <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
@@ -3801,32 +3856,30 @@
             `;
             renderNewsReactions(bubble.querySelector('.news-reactions'), record.news_id, record.reactions);
             renderNewsShareButtons(bubble, record.news_id, record);
-            bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
-                    selectNewsProposal(record, idx, region, btn);
-                });
-            });
-        }
-
-        // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
-        async function selectNewsProposal(record, index, region, btn) {
-            const original = btn.textContent;
-                <div class="flex items-center gap-2 flex-wrap mb-2">
-                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
-                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
-                </div>
-                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
-            btn.disabled = true;
-            btn.textContent = '🔄 開示請求を準備しています…';
-            try {
-                const formData = new FormData();
-                formData.append('news_id', record.news_id);
-                formData.append('proposal_index', String(index));
-                if (region) formData.append('region', region);
-                const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
             const panelBtn = bubble.querySelector('.news-voice-panel-btn');
             const panelAudio = bubble.querySelector('.news-voice-panel-audio');
+            const agentsRow = bubble.querySelector('.news-voice-panel-agents');
+            let panelTiming = [];
+            // 発話中の話者を点灯。免責（ナレーション）中は全員グレーのまま「AI生成」表示を見せる
+            const highlightSpeaker = () => {
+                const t = panelTiming.find(x => panelAudio.currentTime >= x.start && panelAudio.currentTime < x.end);
+                agentsRow.querySelectorAll('.vp-agent').forEach(el => el.classList.toggle('vp-speaking', !!t && el.dataset.speaker === t.speaker));
+            };
+            panelAudio.addEventListener('timeupdate', highlightSpeaker);
+            panelAudio.addEventListener('ended', highlightSpeaker);
+            const renderSpeakerIcons = (timing) => {
+                const speakers = new Set(timing.map(x => x.speaker));
+                const items = voices.filter(v => speakers.has(speakerOf(v.label))).map(v => {
+                    const lvl = Number(v.anger_level || 0);
+                    const angerCls = lvl >= 7 ? 'vp-anger-high' : (lvl <= 3 ? 'vp-anger-low' : '');
+                    return `<span class="vp-agent flex items-center gap-1 ${angerCls}" data-speaker="${escapeHtml(speakerOf(v.label))}">${agentIconHtml(v.label)}<span class="text-xs text-gray-500">${escapeHtml(shortAgentLabel(v.label))}</span></span>`;
+                });
+                if (speakers.has('AI・統合エージェント')) {
+                    items.push(`<span class="vp-agent flex items-center gap-1" data-speaker="AI・統合エージェント">${agentIconHtml('')}<span class="text-xs text-gray-500">統合</span></span>`);
+                }
+                agentsRow.innerHTML = items.join('') + '<span class="text-xs text-gray-400">🤖 AI生成の議論（フィクション・実在の市民の声ではありません）</span>';
+                agentsRow.classList.remove('hidden');
+            };
             panelBtn.addEventListener('click', async () => {
                 panelBtn.disabled = true;
                 panelBtn.textContent = '🔊 音声を生成中…';
@@ -3838,7 +3891,9 @@
                         const err = await res.json().catch(() => ({}));
                         throw new Error(err.detail || '音声を生成できませんでした');
                     }
+                    try { panelTiming = JSON.parse(res.headers.get('X-Panel-Timing') || '[]'); } catch (_) { panelTiming = []; }
                     panelAudio.src = URL.createObjectURL(await res.blob());
+                    if (panelTiming.length) renderSpeakerIcons(panelTiming); else agentsRow.classList.add('hidden');
                     panelAudio.classList.remove('hidden');
                     panelAudio.play().catch(() => {});
                     panelBtn.textContent = '🔊 もう一度聴く';
@@ -3848,6 +3903,25 @@
                     panelBtn.disabled = false;
                 }
             });
+            bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
+                    selectNewsProposal(record, idx, region, btn);
+                });
+            });
+        }
+
+        // 提案を1つ選ぶと、その対象・文書で開示請求の詳細分析を行い、右ペインに接続する
+        async function selectNewsProposal(record, index, region, btn) {
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '🔄 開示請求を準備しています…';
+            try {
+                const formData = new FormData();
+                formData.append('news_id', record.news_id);
+                formData.append('proposal_index', String(index));
+                if (region) formData.append('region', region);
+                const res = await fetchWithRetry('/api/news-agent/select-proposal', { method: 'POST', body: formData }, 2);
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.detail || `HTTP ${res.status}`);

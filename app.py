@@ -3,6 +3,7 @@
 市民の怒りを情報公開に変換するエンドポイント
 """
 import asyncio
+import json
 import time
 import os
 import re
@@ -912,7 +913,9 @@ async def news_voice_panel(news_id: str = Form(...)):
     except Exception as e:
         print(f"[news-agent/voice-panel] 音声合成に失敗: {e}")
         raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
-    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600"})
+    # 本文はWAVのまま（blob再生を壊さない）。話者ハイライト用の発話区間はヘッダで渡す（ASCIIエスケープ）
+    timing = json.dumps(voice_panel.panel_timing(record, wav), ensure_ascii=True, separators=(",", ":"))
+    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600", "X-Panel-Timing": timing})
 
 
 @app.post("/api/news-agent/select-proposal", dependencies=[Depends(rate_limit)])
