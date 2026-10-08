@@ -1595,6 +1595,9 @@
         .sdg-stage-voice { min-height: 2.6rem; margin-top: 0.7rem; font-size: 0.8rem; line-height: 1.5; color: var(--chat-text); text-align: left; }
         .sdg-stage-voice .who { font-weight: 700; margin-right: 0.35rem; }
         .sdg-stage-voice .src { display: block; font-size: 0.68rem; color: var(--chat-muted); }
+        .sdg-briefing { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--chat-border-strong); text-align: left; font-size: 0.85rem; }
+        .sdg-briefing .chat-bubble-label { display: none; }
+        .sdg-briefing .briefing-head { font-size: 0.75rem; font-weight: 700; color: var(--chat-muted); margin-bottom: 0.5rem; }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
         @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
@@ -1861,6 +1864,8 @@
                     <div id="sdgStageGrid" class="sdg-stage-grid"></div>
                     <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
                     <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
+                    <!-- 地域が決まると、エージェントが自律的に最も怒りの強いニュースを統合分析してここに出す（請求・投稿の判断は本人） -->
+                    <div id="sdgBriefing" class="sdg-briefing hidden"></div>
                 </section>
                 <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
                     <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
@@ -3710,6 +3715,7 @@
                     };
                 });
                 updateSdgStage(data.items || []);
+                autoBriefing(data.items || [], region);
                 if (!angerPromptItems.length) angerPromptRegion = null;  // 空なら次回また試す
             } catch (err) {
                 console.warn('ニュースへの怒りの取得に失敗:', err.message);
@@ -3770,6 +3776,41 @@
             }, 6000);
         }
         initSdgStage();
+
+        // 自律ブリーフィング: ユーザーの操作を待たず、地域のニュースで最も怒りの強い1件を統合分析して最初の画面に出す。
+        // 分析・音声の準備までは自律で行うが、開示請求の提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
+        const autoBriefed = new Set();
+
+        async function autoBriefing(items, region) {
+            const box = document.getElementById('sdgBriefing');
+            if (!box || !items.length) return;
+            if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) return;  // 既に会話中なら邪魔しない
+            const top = items.reduce((a, b) => (Number(b.anger_level || 0) > Number(a.anger_level || 0) ? b : a));
+            if (autoBriefed.has(top.link)) return;
+            autoBriefed.add(top.link);
+            box.classList.remove('hidden');
+            box.innerHTML = `<div class="briefing-head">🤖 エージェントが自律的に分析中…</div><div class="text-xs">📰 ${escapeHtml(top.title)}</div><div class="text-xs mt-1" style="color:var(--chat-muted)">各エージェントが声を挙げ、統合エージェントが開示請求の対象を検討しています（数十秒）</div>`;
+            try {
+                const fd = new FormData();
+                fd.append('title', top.title);
+                fd.append('link', top.link);
+                fd.append('summary', top.summary || '');
+                if (top.published) fd.append('published', top.published);
+                if (region) fd.append('region', region);
+                const key = document.getElementById('targetAuthority').value;
+                if (key) fd.append('authority_key', key);
+                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: fd }, 1);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const record = await res.json();
+                if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) { box.classList.add('hidden'); return; }
+                renderNewsSynthesis(box, record, region, { prefetchVoice: true });
+                box.insertAdjacentHTML('afterbegin', '<div class="briefing-head">🤖 エージェントが自律的に分析しました（開示請求するかは、あなたが決めます）</div>');
+            } catch (err) {
+                autoBriefed.delete(top.link);
+                box.classList.add('hidden');
+                console.warn('自律ブリーフィングに失敗:', err.message);
+            }
+        }
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
 
@@ -3907,7 +3948,7 @@
             return `<span class="vp-agent-icon" style="--sdg-color:${color}">${label === '' ? '統合' : '監視'}</span>`;
         }
 
-        function renderNewsSynthesis(bubble, record, region) {
+        function renderNewsSynthesis(bubble, record, region, options = {}) {
             const voices = record.voices || [];
             const proposals = record.proposals || [];
             const voicesHtml = voices.map(v => `
@@ -3974,7 +4015,10 @@
                 agentsRow.innerHTML = items.join('') + '<span class="text-xs text-gray-400">🤖 AI生成の議論（フィクション・実在の市民の声ではありません）</span>';
                 agentsRow.classList.remove('hidden');
             };
-            panelBtn.addEventListener('click', async () => {
+            // 音声は取得済みなら即再生。未取得なら取得してから再生する。
+            // prefetch=true（自動ブリーフィング）では、ユーザーの操作を待たずに裏で取得だけ済ませておく
+            let panelReady = false;
+            const loadPanel = async ({ play }) => {
                 panelBtn.disabled = true;
                 panelBtn.textContent = '🔊 音声を生成中…';
                 try {
@@ -3989,14 +4033,25 @@
                     panelAudio.src = URL.createObjectURL(await res.blob());
                     if (panelTiming.length) renderSpeakerIcons(panelTiming); else agentsRow.classList.add('hidden');
                     panelAudio.classList.remove('hidden');
-                    panelAudio.play().catch(() => {});
-                    panelBtn.textContent = '🔊 もう一度聴く';
+                    panelReady = true;
+                    if (play) panelAudio.play().catch(() => {});
+                    panelBtn.textContent = play ? '🔊 もう一度聴く' : '▶ エージェントたちの議論を再生（準備できました）';
                 } catch (e) {
                     panelBtn.textContent = '🔊 ' + (e.message || '音声を生成できませんでした');
                 } finally {
                     panelBtn.disabled = false;
                 }
+            };
+            panelBtn.addEventListener('click', () => {
+                if (panelReady) {
+                    panelAudio.currentTime = 0;
+                    panelAudio.play().catch(() => {});
+                    panelBtn.textContent = '🔊 もう一度聴く';
+                } else {
+                    loadPanel({ play: true });
+                }
             });
+            if (options.prefetchVoice) loadPanel({ play: false });
             bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = Number(btn.closest('[data-proposal]').dataset.proposal);

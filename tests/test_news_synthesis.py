@@ -148,3 +148,11 @@ def test_ticker_endpoint_returns_agent_remarks_for_input_placeholder(monkeypatch
     # 同じ地域は短時間キャッシュされ、ニュースを再取得しない
     client.get("/api/news-agent/ticker", params={"region": "名古屋市"})
     assert _Collector.calls == 1
+
+
+def test_analyze_reuses_saved_record_without_reanalysis(news, monkeypatch):
+    first = client.post("/api/news-agent/analyze", data=news).json()
+    # 2回目は再分析せず保存済みの記録を返す（自律ブリーフィングが何度呼んでもGemini費用が増えない）
+    monkeypatch.setattr(app_module, "_multi_agent_analysis", lambda *a, **k: pytest.fail("再分析してはいけない"))
+    second = client.post("/api/news-agent/analyze", data=news).json()
+    assert second["news_id"] == first["news_id"] and second["summary"] == first["summary"]

@@ -874,6 +874,10 @@ async def analyze_news_item(
     """
     news_text = "\n".join([p for p in [title, summary] if p])
     news_id = make_news_id(link)
+    # 分析済みの記事は再分析せず、保存済みの記録を返す（自律ブリーフィング等で何度呼ばれてもGemini費用が増えない）
+    existing = get_record(news_id)
+    if existing and existing.get("voices") and existing.get("proposals"):
+        return existing
     result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, authority_key)
     record = record_analysis(
         news_id=news_id,
