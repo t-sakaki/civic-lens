@@ -3350,6 +3350,16 @@
             if (isStartMenuOpen()) renderStartMenu();
         }
 
+        // 現在地からこれより遠い収録済み機関は、「その他の機関」に常時は並べず検索で出す
+        const FAR_AUTHORITY_KM = 100;
+        function haversineKm(lat1, lon1, lat2, lon2) {
+            const rad = Math.PI / 180;
+            const dLat = (lat2 - lat1) * rad;
+            const dLon = (lon2 - lon1) * rad;
+            const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+            return 6371 * 2 * Math.asin(Math.sqrt(h));
+        }
+
         function makeStartTile({ icon, label, sub, badge, search, selected, onClick }) {
             const tile = document.createElement('button');
             tile.type = 'button';
@@ -3572,18 +3582,27 @@
             const authorityGrid = document.getElementById('startMenuAuthorityGrid');
             authorityGrid.innerHTML = '';
             const categoryOrder = ['自治体', '警察', '裁判所', '履歴'];
+            // 現在地が分かっているときは近い順に並べ、遠く離れた収録済み機関は検索したときだけ出す
+            const loc = nearbyState.location;
+            const hasLoc = !!loc && loc.lat != null && loc.lon != null;
+            const distanceTo = (a) => (hasLoc && a.lat != null && a.lon != null)
+                ? haversineKm(loc.lat, loc.lon, a.lat, a.lon) : null;
             [...allAuthorities]
                 .filter(a => !nearbyKeys.has(a.key))
-                .sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category))
-                .forEach(a => {
-                    authorityGrid.appendChild(makeStartTile({
+                .map(a => ({ a, d: distanceTo(a) }))
+                .sort((x, y) => (x.d ?? Infinity) - (y.d ?? Infinity)
+                    || categoryOrder.indexOf(x.a.category) - categoryOrder.indexOf(y.a.category))
+                .forEach(({ a, d }) => {
+                    const tile = makeStartTile({
                         icon: authorityIcon(a),
                         label: a.name,
                         sub: a.type + autoTagFor(a),
                         search: `${a.name} ${a.type} ${a.category} ${authorityRegion(a)}`,
                         selected: a.key === selectedKey,
                         onClick: () => chooseAuthorityFromMenu(a),
-                    }));
+                    });
+                    if (d !== null && d > FAR_AUTHORITY_KM && a.key !== selectedKey) tile.dataset.far = '1';
+                    authorityGrid.appendChild(tile);
                 });
 
             const current = currentAuthority();
@@ -3599,7 +3618,7 @@
             plusMenuPopover.querySelectorAll('.start-menu-section').forEach(section => {
                 let sectionVisible = 0;
                 section.querySelectorAll('.start-tile, .start-news-entry').forEach(el => {
-                    const hit = !q || el.dataset.search.toLowerCase().includes(q);
+                    const hit = q ? el.dataset.search.toLowerCase().includes(q) : !el.dataset.far;
                     el.classList.toggle('hidden', !hit);
                     if (hit) sectionVisible++;
                 });

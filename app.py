@@ -251,6 +251,8 @@ async def get_authorities():
                 "name": info.authority,
                 "type": info.authority_type,
                 "category": info.category,
+                "lat": info.office.lat,
+                "lon": info.office.lon,
             }
             for key, info in AUTHORITIES.items()
         ]
