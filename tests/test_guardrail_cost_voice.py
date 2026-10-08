@@ -127,6 +127,12 @@ def test_build_script_starts_with_disclaimer_and_caps_agents():
     assert script[-1]["speaker"] == "AI・統合エージェント" and "判断はあなた自身" in script[-1]["text"]
 
 
+def test_integrator_reads_documents_and_keeps_closing():
+    rec = {**RECORD, "proposals": [{"target_authority": "愛知県警察本部", "documents": ["警備費の支出関係書類", "委託契約書"]}]}
+    last = voice_panel.build_script(rec)[-1]["text"]
+    assert "警備費の支出関係書類" in last and last.endswith("判断はあなた自身が行ってください。")
+
+
 def test_synthesize_panel_concatenates_wav_and_caches(monkeypatch):
     calls = []
     monkeypatch.setattr(voice_panel, "_synthesize_line", lambda c, v, t: calls.append(v) or b"\x01\x00" * 100)

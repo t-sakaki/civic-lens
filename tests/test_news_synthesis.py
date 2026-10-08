@@ -156,3 +156,25 @@ def test_analyze_reuses_saved_record_without_reanalysis(news, monkeypatch):
     monkeypatch.setattr(app_module, "_multi_agent_analysis", lambda *a, **k: pytest.fail("再分析してはいけない"))
     second = client.post("/api/news-agent/analyze", data=news).json()
     assert second["news_id"] == first["news_id"] and second["summary"] == first["summary"]
+
+
+def test_analyze_stream_emits_process_in_order_and_replays(news):
+    import json as _json
+
+    def events():
+        res = client.post("/api/news-agent/analyze-stream", data=news)
+        assert res.status_code == 200
+        return [_json.loads(l) for l in res.text.splitlines() if l.strip()]
+
+    evs = events()
+    types = [e["type"] for e in evs]
+    # 記事を読む → 名乗り出る → 各エージェントの声 → 統合 → 完了、の順
+    assert types[0] == "reading" and types[1] == "appear"
+    assert types[-2:] == ["integrating", "done"]
+    assert types.count("voice") == len(evs[1]["appearances"]) >= 1
+    record = evs[-1]["record"]
+    assert record["proposals"] and record["summary"]
+    # 2回目は保存済みの記録を同じ順序で再生する（再分析しない）
+    again = events()
+    assert [e["type"] for e in again] == types
+    assert again[-1].get("replay") is True and again[-1]["record"]["news_id"] == record["news_id"]

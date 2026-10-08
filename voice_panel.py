@@ -25,6 +25,8 @@ TTS_MODEL_DEFAULT = "gemini-2.5-flash-preview-tts"
 SAMPLE_RATE = 24000  # Gemini TTS は 24kHz / 16bit / モノラルの生PCMを返す
 MAX_AGENT_LINES = 3
 MAX_LINE_CHARS = 140
+INTEGRATOR_MAX_CHARS = 200
+INTEGRATOR_CLOSING = "判断はあなた自身が行ってください。"
 GAP_MS = 350  # 行（話者）間の無音
 NARRATOR_VOICE = "Zephyr"
 INTEGRATOR_VOICE = "Charon"
@@ -40,9 +42,9 @@ def _short_label(label: str) -> str:
     return re.sub(r"^目標\d+\s*", "", str(label or "").strip()) or "行政監視"
 
 
-def _clip(text: str) -> str:
+def _clip(text: str, limit: int = MAX_LINE_CHARS) -> str:
     text = re.sub(r"\s+", " ", text or "").strip()
-    return text if len(text) <= MAX_LINE_CHARS else text[: MAX_LINE_CHARS - 1] + "…"
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def build_script(record: dict[str, Any]) -> list[dict[str, str]]:
@@ -62,11 +64,17 @@ def build_script(record: dict[str, Any]) -> list[dict[str, str]]:
     summary = record.get("summary")
     if summary:
         proposals = record.get("proposals") or []
-        tail = f"開示請求の対象は、{proposals[0].get('target_authority')}が候補です。" if proposals and proposals[0].get("target_authority") else ""
+        tail = ""
+        if proposals and proposals[0].get("target_authority"):
+            docs = "、".join(str(d) for d in (proposals[0].get("documents") or [])[:2])
+            tail = f"開示請求の対象は、{proposals[0].get('target_authority')}が候補です。"
+            if docs:
+                tail += f"請求する行政文書の候補は、{docs}です。"
         script.append({
             "speaker": "AI・統合エージェント",
             "voice": INTEGRATOR_VOICE,
-            "text": _clip(f"統合エージェントの所見です。{summary}{tail}判断はあなた自身が行ってください。"),
+            # 末尾の「判断は本人」は必ず読み上げる。長くなった本文側だけを切り詰める
+            "text": _clip(f"統合エージェントの所見です。{summary}{tail}", INTEGRATOR_MAX_CHARS) + INTEGRATOR_CLOSING,
         })
     return script
 
