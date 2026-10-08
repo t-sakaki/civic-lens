@@ -1580,6 +1580,29 @@
             display: none;
         }
 
+        /* --- ウェルカムの「ニュースに怒るAIエージェント」ステージ（SDGs公式アイコン・無改変） --- */
+        .sdg-stage { max-width: 46rem; margin: 1.5rem auto 0; padding: 0.9rem 0.75rem 0.7rem; border-radius: 0.9rem; border: 1px solid var(--chat-border); background: var(--chat-hover); }
+        .sdg-stage-title { font-size: 0.85rem; font-weight: 700; color: var(--chat-text); text-align: center; }
+        .sdg-stage-title small { display: block; font-weight: 400; font-size: 0.7rem; color: var(--chat-muted); margin-top: 0.15rem; }
+        .sdg-stage-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 0.4rem; margin-top: 0.7rem; }
+        @media (max-width: 520px) { .sdg-stage-grid { grid-template-columns: repeat(6, 1fr); } }
+        .sdg-stage-btn { position: relative; padding: 0; border: 0; background: none; cursor: pointer; opacity: 0.35; transition: opacity 0.3s, transform 0.3s; line-height: 0; }
+        .sdg-stage-btn img { width: 100%; height: auto; display: block; }
+        .sdg-stage-btn.is-up { opacity: 1; animation: sdgStageUp 2.4s ease-in-out infinite; }
+        .sdg-stage-btn.is-up::after { content: attr(data-lvl); position: absolute; right: -4px; top: -6px; min-width: 1.15rem; padding: 0 0.25rem; border-radius: 999px; background: #b91c1c; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
+        .sdg-stage-btn.is-selected { transform: scale(1.12); opacity: 1; z-index: 1; }
+        @keyframes sdgStageUp { 50% { transform: translateY(-2px); } }
+        .sdg-stage-voice { min-height: 2.6rem; margin-top: 0.7rem; font-size: 0.8rem; line-height: 1.5; color: var(--chat-text); text-align: left; }
+        .sdg-stage-voice .who { font-weight: 700; margin-right: 0.35rem; }
+        .sdg-stage-voice .src { display: block; font-size: 0.68rem; color: var(--chat-muted); }
+        .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
+        @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
+        /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
+        .vp-agent-icon.vp-sdg-img { border: none; border-radius: 0; padding: 0; background: none; object-fit: contain; width: 44px; height: 44px; }
+        .vp-voice-hero { border: 1px solid var(--sdg-hero, #cbd5e1); border-radius: 0.75rem; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(148, 163, 184, 0.08); }
+        .vp-voice-hero .news-voice-panel-btn { display: block; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 0.7rem 1rem; border-radius: 0.6rem; background: #0f172a; color: #fff; border: none; }
+        .vp-voice-hero .news-voice-panel-btn:hover { background: #1e293b; }
+        .vp-voice-hero .news-voice-panel-btn:disabled { opacity: 0.7; }
         /* --- ウェルカムの処理フロー（4ステップ） --- */
         .chat-welcome h2 { word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
         .chat-welcome-flow {
@@ -1832,6 +1855,13 @@
                 <h2 id="mainQuestionHeading">何に怒りを感じていますか？</h2>
                 <p>思ったことをそのまま書くか、下の候補や ＋ から選んでください</p>
                 <!-- 審査員・初見のユーザーが5秒で「何をするエージェントか」を掴めるよう、処理の流れを示す -->
+                <!-- ニュースに怒るAIエージェント17体。記事を読んで名乗り出たエージェントのSDGsアイコンが点灯する -->
+                <section id="sdgStage" class="sdg-stage" aria-label="ニュースに怒るAIエージェント">
+                    <div class="sdg-stage-title">🤖 ニュースに怒るAIエージェント17体<small>SDGs の目標ごとに、地域のニュースを読んで名乗り出ます</small></div>
+                    <div id="sdgStageGrid" class="sdg-stage-grid"></div>
+                    <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
+                    <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
+                </section>
                 <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
                     <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
                     <li><span class="flow-icon" aria-hidden="true">🤖</span><span><b>AIが特定</b><small>機関・条例・行政文書</small></span></li>
@@ -3679,12 +3709,67 @@
                         isNews: true,
                     };
                 });
+                updateSdgStage(data.items || []);
                 if (!angerPromptItems.length) angerPromptRegion = null;  // 空なら次回また試す
             } catch (err) {
                 console.warn('ニュースへの怒りの取得に失敗:', err.message);
                 angerPromptRegion = null;
             }
         }
+
+        // ウェルカムの「ニュースに怒るAIエージェント」ステージ: 17体のSDGs公式アイコンを並べ、
+        // 記事を読んで名乗り出た（tickerに声を上げた）エージェントを点灯させて一言を流す
+        const sdgStage = { items: [], timer: null, index: 0, selected: null };
+
+        function initSdgStage() {
+            const grid = document.getElementById('sdgStageGrid');
+            if (!grid) return;
+            for (let n = 1; n <= 17; n++) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'sdg-stage-btn';
+                btn.dataset.sdg = String(n);
+                btn.setAttribute('aria-label', `SDGs 目標${n}のエージェント`);
+                btn.innerHTML = `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" loading="lazy">`;
+                btn.addEventListener('click', () => {
+                    const mine = sdgStage.items.filter(it => it.theme === `sdg${n}`);
+                    if (!mine.length) return;
+                    sdgStage.selected = n;
+                    showSdgStageItem(mine[0]);
+                });
+                grid.appendChild(btn);
+            }
+        }
+
+        function showSdgStageItem(it) {
+            const box = document.getElementById('sdgStageVoice');
+            const n = sdgNumber(it.label);
+            document.querySelectorAll('.sdg-stage-btn').forEach(b => b.classList.toggle('is-selected', Number(b.dataset.sdg) === n));
+            const who = String(it.label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
+            box.innerHTML = `<span class="who">😡 ${escapeHtml(who)}のエージェント（AI）</span>${escapeHtml(it.remark)}<span class="src">📰 ${escapeHtml(it.title)}</span>`;
+        }
+
+        function updateSdgStage(items) {
+            sdgStage.items = items;
+            const byTheme = {};
+            items.forEach(it => { byTheme[it.theme] = Math.max(byTheme[it.theme] || 0, Number(it.anger_level || 0)); });
+            document.querySelectorAll('.sdg-stage-btn').forEach(b => {
+                const lvl = byTheme[`sdg${b.dataset.sdg}`];
+                b.classList.toggle('is-up', !!lvl);
+                if (lvl) b.dataset.lvl = String(lvl); else delete b.dataset.lvl;
+            });
+            clearInterval(sdgStage.timer);
+            const withSdg = items.filter(it => sdgNumber(it.label));
+            if (!withSdg.length) return;
+            sdgStage.index = 0;
+            showSdgStageItem(withSdg[0]);
+            sdgStage.timer = setInterval(() => {
+                if (document.hidden) return;
+                sdgStage.index = (sdgStage.index + 1) % withSdg.length;
+                showSdgStageItem(withSdg[sdgStage.index]);
+            }, 6000);
+        }
+        initSdgStage();
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
 
@@ -3807,10 +3892,19 @@
         };
         // 音声台本の話者名（voice_panel._short_label と同じ規則: 「目標N 」を除いたもの）
         const speakerOf = (label) => 'AI・' + (String(label || '').replace(/^目標\d+\s*/, '').trim() || '行政監視');
-        function agentIconHtml(label) {
+        // 国連広報センター公式の日本語版SDGsアイコン（無改変）。目標以外（監視・統合）は汎用バッジ
+        function sdgNumber(label) {
             const m = String(label || '').match(/^目標(\d+)/);
-            const n = m ? Number(m[1]) : 0;
-            return `<span class="vp-agent-icon" style="--sdg-color:${SDG_COLORS[n] || '#64748b'}">${m ? 'SDG' + n : '監視'}</span>`;
+            return m ? Number(m[1]) : 0;
+        }
+        function sdgIconSrc(n) { return `/static/sdgs/${String(n).padStart(2, '0')}.png`; }
+        function agentIconHtml(label) {
+            const n = sdgNumber(label);
+            const color = SDG_COLORS[n] || '#64748b';
+            if (n >= 1 && n <= 17) {
+                return `<img class="vp-agent-icon vp-sdg-img" src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" style="--sdg-color:${color}">`;
+            }
+            return `<span class="vp-agent-icon" style="--sdg-color:${color}">${label === '' ? '統合' : '監視'}</span>`;
         }
 
         function renderNewsSynthesis(bubble, record, region) {
@@ -3818,7 +3912,7 @@
             const proposals = record.proposals || [];
             const voicesHtml = voices.map(v => `
                 <div class="border rounded-md p-2 mb-2">
-                    <div class="text-xs font-semibold mb-1">😡 ${escapeHtml(shortAgentLabel(v.label))}</div>
+                    <div class="text-xs font-semibold mb-1 flex items-center gap-2">${sdgNumber(v.label) ? `<img src="${sdgIconSrc(sdgNumber(v.label))}" alt="SDGs 目標${sdgNumber(v.label)}" width="28" height="28">` : '😡'}<span>${escapeHtml(shortAgentLabel(v.label))}</span></div>
                     <ul class="list-disc list-inside text-xs text-gray-600 mb-1">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
                     <p class="text-sm">${escapeHtml(v.pseudo_citizen_voice || '')}</p>
                 </div>`).join('');
@@ -3837,17 +3931,17 @@
                 </div>`).join('');
             bubble.innerHTML = `
                 <span class="chat-bubble-label">🔍 Civic Lens</span>
+                <div class="vp-voice-hero">
+                    <button type="button" class="news-voice-panel-btn">🔊 エージェントたちの議論を音声で聴く</button>
+                    <div class="news-voice-panel-agents flex items-center gap-3 flex-wrap mt-2 hidden"></div>
+                    <audio class="news-voice-panel-audio w-full mt-2 hidden" controls></audio>
+                    <p class="text-xs text-gray-400 mt-2">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'} ／ 冒頭でAI生成のフィクションであることを読み上げます</p>
+                </div>
                 <div class="text-xs text-gray-500 mb-1">🧭 統合エージェントの所見（怒りレベル ${escapeHtml(String(record.overall_anger_level ?? '-'))}/10）</div>
                 <p class="text-sm mb-2">${escapeHtml(record.summary || '')}</p>
                 <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
                 ${voicesHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
-                <div class="flex items-center gap-2 flex-wrap mb-2">
-                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
-                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
-                </div>
-                <div class="news-voice-panel-agents flex items-center gap-3 flex-wrap mb-2 hidden"></div>
-                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
                 <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
                 ${proposalsHtml}
                 <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
