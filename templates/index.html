@@ -3825,6 +3825,8 @@
                 try {
                     const fd = new FormData();
                     fd.append('news_id', record.news_id);
+                    // 既定はOpus（小さい）。Opusを再生できない端末（Safari等）にはWAVを返してもらう
+                    fd.append('format', document.createElement('audio').canPlayType('audio/ogg; codecs=opus') ? 'opus' : 'wav');
                     const res = await fetchWithRetry('/api/news-agent/voice-panel', { method: 'POST', body: fd }, 1);
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
@@ -3843,7 +3845,7 @@
                         panelAudio.insertAdjacentElement('afterend', dl);
                     }
                     dl.href = panelAudio.src;
-                    dl.download = res.headers.get('X-Voice-Filename') || 'civic-lens-voice.wav';
+                    dl.download = res.headers.get('X-Voice-Filename') || 'civic-lens-voice.opus';
                     if (res.headers.get('X-Voice-Archive-Id') && !bubble.querySelector('.news-voice-archived')) {
                         const note = document.createElement('p');
                         note.className = 'news-voice-archived text-xs text-gray-400 mb-2';

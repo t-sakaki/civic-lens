@@ -29,3 +29,6 @@ web3>=6.20.0
 # SNSシェア機能（疑似市民の声のX.com / Blueskyシェア）
 atproto>=0.0.55        # Bluesky (AT Protocol) 投稿用
 tweepy>=4.14.0          # X (Twitter) 投稿用。X Developer Portalでのアプリ登録が別途必要
+
+# 音声のOpus圧縮（アーカイブをFirestoreの無料枠に収める。ffmpeg内蔵のwheel）
+av>=14.0.0

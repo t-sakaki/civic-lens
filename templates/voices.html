@@ -35,6 +35,9 @@ a { color:var(--accent) }
   <div id="list"><p class="empty">読み込み中…</p></div>
 </main>
 <script>
+// Opusを再生できない端末（Safari等）にはWAVを配信してもらう
+const CAN_OPUS = !!document.createElement('audio').canPlayType('audio/ogg; codecs=opus');
+const FMT = CAN_OPUS ? 'opus' : 'wav';
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 (async () => {
   const list = document.getElementById('list');
@@ -52,10 +55,10 @@ function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.
       if (src.link) { const a = el('a', null, '元のニュース記事'); a.href = src.link; a.target = '_blank'; a.rel = 'noopener noreferrer'; meta.appendChild(a); }
       card.appendChild(meta);
       const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
-      audio.src = `/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio`;
+      audio.src = `/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio?format=${FMT}`;
       card.appendChild(audio);
       const dl = el('a', 'dl', '⬇ ダウンロード'); dl.href = audio.src;
-      dl.download = `civic-lens-${(it.generated_at || '').slice(0, 10).replace(/-/g, '')}-${it.archive_id}.wav`;
+      dl.download = `civic-lens-${(it.generated_at || '').slice(0, 10).replace(/-/g, '')}-${it.archive_id}.${FMT === 'opus' ? 'opus' : 'wav'}`;
       card.appendChild(dl);
       for (const l of it.script.slice(1)) {
         const row = el('div', 'line'); row.appendChild(el('div', 'who', l.speaker)); row.appendChild(el('div', null, l.text)); card.appendChild(row);

@@ -44,6 +44,7 @@ a { color:var(--accent) }
   <div id="list"></div>
 </main>
 <script>
+const FMT = document.createElement('audio').canPlayType('audio/ogg; codecs=opus') ? 'opus' : 'wav';
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 const tokenInput = document.getElementById('token');
 const topMsg = document.getElementById('top-msg');
@@ -75,11 +76,11 @@ function card(it) {
   const play = el('button', null, '▶ 確認用に再生');
   play.addEventListener('click', async () => {
     play.disabled = true;
-    const r = await fetch(`/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio`, { headers: headers() });
+    const r = await fetch(`/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio?format=${FMT}`, { headers: headers() });
     play.disabled = false;
     if (!r.ok) { setMsg(msg, (await r.json().catch(() => ({}))).detail || '再生できませんでした', 'err'); return; }
     audio.src = URL.createObjectURL(await r.blob()); audio.style.display = 'block'; play.style.display = 'none'; audio.play();
-    const dl = el('a', null, '⬇ ダウンロード'); dl.href = audio.src; dl.download = r.headers.get('X-Voice-Filename') || 'civic-lens-voice.wav'; audio.insertAdjacentElement('afterend', dl);
+    const dl = el('a', null, '⬇ ダウンロード'); dl.href = audio.src; dl.download = r.headers.get('X-Voice-Filename') || 'civic-lens-voice.opus'; audio.insertAdjacentElement('afterend', dl);
   });
   c.appendChild(play); c.appendChild(audio);
 
