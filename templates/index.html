@@ -231,6 +231,41 @@
             vertical-align: text-bottom;
             animation: agentBlink 1s steps(1) infinite;
         }
+        /* --- 音声パネル: SDGsエージェントの簡易アイコン・表情（怒りレベル3段階・一目でAIと分かる意匠。公式ロゴは使わず色のみ参照） --- */
+        .vp-agent-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid var(--sdg-color, #64748b);
+            color: var(--sdg-color, #64748b);
+            background: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            opacity: 0.55;
+            transition: opacity 0.25s, transform 0.25s, box-shadow 0.25s;
+        }
+        .vp-agent.vp-speaking .vp-agent-icon {
+            opacity: 1;
+            transform: scale(1.15);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--sdg-color) 30%, transparent);
+            animation: vpPulse 1s ease-in-out infinite;
+        }
+        @keyframes vpPulse {
+            50% { transform: scale(1.15) translateY(-1px); }
+        }
+        .vp-anger-high .vp-agent-icon { border-width: 3px; }
+        .vp-anger-high.vp-speaking .vp-agent-icon { animation: vpPulse 0.7s ease-in-out infinite, vpShake 0.15s linear infinite; }
+        .vp-anger-low .vp-agent-icon { opacity: 0.35; }
+        .vp-anger-low.vp-speaking .vp-agent-icon { opacity: 0.8; }
+        @keyframes vpShake {
+            0%, 100% { margin-left: 0; } 50% { margin-left: 1px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .vp-agent.vp-speaking .vp-agent-icon, .vp-anger-high.vp-speaking .vp-agent-icon { animation: none; }
+        }
         @keyframes agentBlink {
             50% { opacity: 0; }
         }
@@ -1545,6 +1580,38 @@
             display: none;
         }
 
+        /* --- ウェルカムの「ニュースに怒るAIエージェント」ステージ（SDGs公式アイコン・無改変） --- */
+        .sdg-stage { max-width: 46rem; margin: 1.5rem auto 0; padding: 0.9rem 0.75rem 0.7rem; border-radius: 0.9rem; border: 1px solid var(--chat-border); background: var(--chat-hover); }
+        .sdg-stage-title { font-size: 0.85rem; font-weight: 700; color: var(--chat-text); text-align: center; }
+        .sdg-stage-title small { display: block; font-weight: 400; font-size: 0.7rem; color: var(--chat-muted); margin-top: 0.15rem; }
+        .sdg-stage-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 0.4rem; margin-top: 0.7rem; }
+        @media (max-width: 520px) { .sdg-stage-grid { grid-template-columns: repeat(6, 1fr); } }
+        .sdg-stage-btn { position: relative; padding: 0; border: 0; background: none; cursor: pointer; opacity: 0.35; transition: opacity 0.3s, transform 0.3s; line-height: 0; }
+        .sdg-stage-btn img { width: 100%; height: auto; display: block; }
+        .sdg-stage-btn.is-up { opacity: 1; animation: sdgStageUp 2.4s ease-in-out infinite; }
+        .sdg-stage-btn.is-up::after { content: attr(data-lvl); position: absolute; right: -4px; top: -6px; min-width: 1.15rem; padding: 0 0.25rem; border-radius: 999px; background: #b91c1c; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
+        .sdg-stage-btn.is-selected { transform: scale(1.12); opacity: 1; z-index: 1; }
+        @keyframes sdgStageUp { 50% { transform: translateY(-2px); } }
+        .sdg-stage-voice { min-height: 2.6rem; margin-top: 0.7rem; font-size: 0.8rem; line-height: 1.5; color: var(--chat-text); text-align: left; }
+        .sdg-stage-voice .who { font-weight: 700; margin-right: 0.35rem; }
+        .sdg-stage-voice .src { display: block; font-size: 0.68rem; color: var(--chat-muted); }
+        .sdg-briefing { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--chat-border-strong); text-align: left; font-size: 0.85rem; }
+        .sdg-briefing .chat-bubble-label { display: none; }
+        .sdg-briefing .briefing-head { font-size: 0.75rem; font-weight: 700; color: var(--chat-muted); margin-bottom: 0.5rem; }
+        .briefing-log-title { cursor: pointer; font-size: 0.75rem; font-weight: 700; color: var(--chat-muted); margin-bottom: 0.4rem; }
+        .briefing-log { list-style: none; margin: 0 0 0.5rem; padding: 0; }
+        .briefing-step { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.8rem; line-height: 1.5; padding: 0.25rem 0; opacity: 0; animation: agentLineIn 0.4s ease forwards; }
+        .briefing-step img { flex: none; margin-top: 0.1rem; }
+        .briefing-auto { display: block; font-size: 0.72rem; color: var(--chat-muted); margin: 0.2rem 0 0.6rem; cursor: pointer; }
+        .sdg-stage-btn.is-writing { opacity: 1; animation: sdgStageUp 0.9s ease-in-out infinite; outline: 2px solid #f59e0b; outline-offset: 1px; }
+        .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
+        @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
+        /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
+        .vp-agent-icon.vp-sdg-img { border: none; border-radius: 0; padding: 0; background: none; object-fit: contain; width: 44px; height: 44px; }
+        .vp-voice-hero { border: 1px solid var(--sdg-hero, #cbd5e1); border-radius: 0.75rem; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(148, 163, 184, 0.08); }
+        .vp-voice-hero .news-voice-panel-btn { display: block; width: 100%; font-size: 0.95rem; font-weight: 700; padding: 0.7rem 1rem; border-radius: 0.6rem; background: #0f172a; color: #fff; border: none; }
+        .vp-voice-hero .news-voice-panel-btn:hover { background: #1e293b; }
+        .vp-voice-hero .news-voice-panel-btn:disabled { opacity: 0.7; }
         /* --- ウェルカムの処理フロー（4ステップ） --- */
         .chat-welcome h2 { word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
         .chat-welcome-flow {
@@ -1797,6 +1864,15 @@
                 <h2 id="mainQuestionHeading">何に怒りを感じていますか？</h2>
                 <p>思ったことをそのまま書くか、下の候補や ＋ から選んでください</p>
                 <!-- 審査員・初見のユーザーが5秒で「何をするエージェントか」を掴めるよう、処理の流れを示す -->
+                <!-- ニュースに怒るAIエージェント17体。記事を読んで名乗り出たエージェントのSDGsアイコンが点灯する -->
+                <section id="sdgStage" class="sdg-stage" aria-label="ニュースに怒るAIエージェント">
+                    <div class="sdg-stage-title">🤖 ニュースに怒るAIエージェント17体<small>SDGs の目標ごとに、地域のニュースを読んで名乗り出ます</small></div>
+                    <div id="sdgStageGrid" class="sdg-stage-grid"></div>
+                    <div id="sdgStageVoice" class="sdg-stage-voice" aria-live="polite">対象地域が決まると、エージェントがニュースを読み始めます…</div>
+                    <p class="sdg-stage-note">※ AIが生成した見解であり、実在の市民の声ではありません。</p>
+                    <!-- 地域が決まると、エージェントが自律的に最も怒りの強いニュースを統合分析してここに出す（請求・投稿の判断は本人） -->
+                    <div id="sdgBriefing" class="sdg-briefing hidden"></div>
+                </section>
                 <ol class="chat-welcome-flow" aria-label="Civic Lens がすること">
                     <li><span class="flow-icon" aria-hidden="true">😡</span><span><b>怒りを書く</b><small>一言でも、写真でも</small></span></li>
                     <li><span class="flow-icon" aria-hidden="true">🤖</span><span><b>AIが特定</b><small>機関・条例・行政文書</small></span></li>
@@ -3644,10 +3720,181 @@
                         isNews: true,
                     };
                 });
+                updateSdgStage(data.items || []);
+                autoBriefing(data.items || [], region);
                 if (!angerPromptItems.length) angerPromptRegion = null;  // 空なら次回また試す
             } catch (err) {
                 console.warn('ニュースへの怒りの取得に失敗:', err.message);
                 angerPromptRegion = null;
+            }
+        }
+
+        // ウェルカムの「ニュースに怒るAIエージェント」ステージ: 17体のSDGs公式アイコンを並べ、
+        // 記事を読んで名乗り出た（tickerに声を上げた）エージェントを点灯させて一言を流す
+        const sdgStage = { items: [], timer: null, index: 0, selected: null };
+
+        function initSdgStage() {
+            const grid = document.getElementById('sdgStageGrid');
+            if (!grid) return;
+            for (let n = 1; n <= 17; n++) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'sdg-stage-btn';
+                btn.dataset.sdg = String(n);
+                btn.setAttribute('aria-label', `SDGs 目標${n}のエージェント`);
+                btn.innerHTML = `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" loading="lazy">`;
+                btn.addEventListener('click', () => {
+                    const mine = sdgStage.items.filter(it => it.theme === `sdg${n}`);
+                    if (!mine.length) return;
+                    sdgStage.selected = n;
+                    showSdgStageItem(mine[0]);
+                });
+                grid.appendChild(btn);
+            }
+        }
+
+        function showSdgStageItem(it) {
+            const box = document.getElementById('sdgStageVoice');
+            const n = sdgNumber(it.label);
+            document.querySelectorAll('.sdg-stage-btn').forEach(b => b.classList.toggle('is-selected', Number(b.dataset.sdg) === n));
+            const who = String(it.label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
+            box.innerHTML = `<span class="who">😡 ${escapeHtml(who)}のエージェント（AI）</span>${escapeHtml(it.remark)}<span class="src">📰 ${escapeHtml(it.title)}</span>`;
+        }
+
+        function updateSdgStage(items) {
+            sdgStage.items = items;
+            const byTheme = {};
+            items.forEach(it => { byTheme[it.theme] = Math.max(byTheme[it.theme] || 0, Number(it.anger_level || 0)); });
+            document.querySelectorAll('.sdg-stage-btn').forEach(b => {
+                const lvl = byTheme[`sdg${b.dataset.sdg}`];
+                b.classList.toggle('is-up', !!lvl);
+                if (lvl) b.dataset.lvl = String(lvl); else delete b.dataset.lvl;
+            });
+            clearInterval(sdgStage.timer);
+            const withSdg = items.filter(it => sdgNumber(it.label));
+            if (!withSdg.length) return;
+            sdgStage.index = 0;
+            showSdgStageItem(withSdg[0]);
+            sdgStage.timer = setInterval(() => {
+                if (document.hidden) return;
+                sdgStage.index = (sdgStage.index + 1) % withSdg.length;
+                showSdgStageItem(withSdg[sdgStage.index]);
+            }, 6000);
+        }
+        initSdgStage();
+
+        // 自律ブリーフィング: ユーザーの操作を待たず、地域のニュースで最も怒りの強い1件をエージェントたちが検討する。
+        // 記事を読む → 名乗り出る → 各エージェントが非同期に声を挙げる（書き終えた順）→ 統合エージェントが
+        // 開示請求する対象の行政文書をまとめる → 読み上げ、の過程を時系列で見せる。
+        // 分析・音声の準備までは自律で行うが、提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
+        const autoBriefed = new Set();
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const AUTO_READ_KEY = 'cl_auto_read';
+        const getAutoRead = () => { try { return localStorage.getItem(AUTO_READ_KEY) !== '0'; } catch (_) { return true; } };
+
+        function markStageWriting(themes, on) {
+            themes.forEach(t => {
+                const n = String(t).replace(/^sdg/, '');
+                document.querySelector(`.sdg-stage-btn[data-sdg="${n}"]`)?.classList.toggle('is-writing', on);
+            });
+        }
+
+        async function autoBriefing(items, region) {
+            const box = document.getElementById('sdgBriefing');
+            if (!box || !items.length) return;
+            if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) return;  // 既に会話中なら邪魔しない
+            const top = items.reduce((a, b) => (Number(b.anger_level || 0) > Number(a.anger_level || 0) ? b : a));
+            if (autoBriefed.has(top.link)) return;
+            autoBriefed.add(top.link);
+            box.classList.remove('hidden');
+            box.innerHTML = `
+                <div class="briefing-head">🤖 エージェントたちが検討しています（開示請求するかは、あなたが決めます）</div>
+                <div class="text-xs mb-2">📰 ${escapeHtml(top.title)}</div>
+                <details class="briefing-log-wrap" open>
+                    <summary class="briefing-log-title">🧠 検討の過程</summary>
+                    <ol class="briefing-log"></ol>
+                </details>
+                <label class="briefing-auto"><input type="checkbox" class="briefing-auto-read"> 🔊 検討が終わったら自動で読み上げる</label>
+                <div class="briefing-result"></div>`;
+            const logWrap = box.querySelector('.briefing-log-wrap');
+            const logEl = box.querySelector('.briefing-log');
+            const resultEl = box.querySelector('.briefing-result');
+            const autoReadEl = box.querySelector('.briefing-auto-read');
+            autoReadEl.checked = getAutoRead();
+            autoReadEl.addEventListener('change', () => { try { localStorage.setItem(AUTO_READ_KEY, autoReadEl.checked ? '1' : '0'); } catch (_) {} });
+            const log = (html) => {
+                const li = document.createElement('li');
+                li.className = 'briefing-step';
+                li.innerHTML = html;
+                logEl.appendChild(li);
+                return li;
+            };
+            let appearedThemes = [];
+            let voiceCount = 0;
+            let record = null;
+            try {
+                const fd = new FormData();
+                fd.append('title', top.title);
+                fd.append('link', top.link);
+                fd.append('summary', top.summary || '');
+                if (top.published) fd.append('published', top.published);
+                if (region) fd.append('region', region);
+                const key = document.getElementById('targetAuthority').value;
+                if (key) fd.append('authority_key', key);
+                const res = await fetch('/api/news-agent/analyze-stream', { method: 'POST', body: fd });
+                if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+                const handle = async (ev) => {
+                    if (ev.replay && ev.type !== 'done') await sleep(450);  // 保存済みの分析は、過程が見えるよう間を置いて再生する
+                    if (ev.type === 'reading') {
+                        log('📖 各エージェントが記事を読んでいます…');
+                    } else if (ev.type === 'appear') {
+                        appearedThemes = (ev.appearances || []).map(a => a.theme);
+                        markStageWriting(appearedThemes, true);
+                        const names = (ev.appearances || []).map(a => escapeHtml(shortAgentLabel(a.label))).join('・');
+                        log(`🙋 ${names || '一般（行政監視）'} のエージェントが名乗り出ました。それぞれ声を書いています…`);
+                    } else if (ev.type === 'voice') {
+                        const v = ev.voice;
+                        voiceCount++;
+                        markStageWriting([v.theme], false);
+                        const n = sdgNumber(v.label);
+                        const icon = n ? `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="22" height="22">` : '😡';
+                        log(`${icon}<span><b>${escapeHtml(shortAgentLabel(v.label))}（AI・怒り${escapeHtml(String(v.anger_level ?? '-'))}）</b> ${escapeHtml(v.pseudo_citizen_voice || v.remark || '')}</span>`);
+                    } else if (ev.type === 'integrating') {
+                        log('🧭 統合エージェントが、声を横断して開示請求する対象の行政文書をまとめています…');
+                    } else if (ev.type === 'done') {
+                        record = ev.record;
+                    } else if (ev.type === 'error') {
+                        throw new Error(ev.message || '分析に失敗しました');
+                    }
+                };
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+                for (;;) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, { stream: true });
+                    let i;
+                    while ((i = buf.indexOf('\n')) >= 0) {
+                        const line = buf.slice(0, i).trim();
+                        buf = buf.slice(i + 1);
+                        if (line) await handle(JSON.parse(line));
+                    }
+                }
+                if (!record) throw new Error('分析結果を受け取れませんでした');
+                markStageWriting(appearedThemes, false);
+                if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) { box.classList.add('hidden'); return; }
+                box.querySelector('.briefing-head').textContent = '🤖 エージェントたちが検討しました（開示請求するかは、あなたが決めます）';
+                logWrap.querySelector('summary').textContent = `🧠 検討の過程（${voiceCount}体が声を挙げました）`;
+                logWrap.open = false;
+                renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked });
+            } catch (err) {
+                markStageWriting(appearedThemes, false);
+                autoBriefed.delete(top.link);
+                box.classList.add('hidden');
+                console.warn('自律ブリーフィングに失敗:', err.message);
             }
         }
 
@@ -3764,16 +4011,44 @@
             return String(label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
         }
 
-        function renderNewsSynthesis(bubble, record, region) {
+        const SDG_COLORS = {
+            1: '#E5243B', 2: '#DDA63A', 3: '#4C9F38', 4: '#C5192D', 5: '#FF3A21',
+            6: '#26BDE2', 7: '#FCC30B', 8: '#A21942', 9: '#FD6925', 10: '#DD1367',
+            11: '#FD9D24', 12: '#BF8B2E', 13: '#3F7E44', 14: '#0A97D9', 15: '#56C02B',
+            16: '#00689D', 17: '#19486A',
+        };
+        // 音声台本の話者名（voice_panel._short_label と同じ規則: 「目標N 」を除いたもの）
+        const speakerOf = (label) => 'AI・' + (String(label || '').replace(/^目標\d+\s*/, '').trim() || '行政監視');
+        // 国連広報センター公式の日本語版SDGsアイコン（無改変）。目標以外（監視・統合）は汎用バッジ
+        function sdgNumber(label) {
+            const m = String(label || '').match(/^目標(\d+)/);
+            return m ? Number(m[1]) : 0;
+        }
+        function sdgIconSrc(n) { return `/static/sdgs/${String(n).padStart(2, '0')}.png`; }
+        function agentIconHtml(label) {
+            const n = sdgNumber(label);
+            const color = SDG_COLORS[n] || '#64748b';
+            if (n >= 1 && n <= 17) {
+                return `<img class="vp-agent-icon vp-sdg-img" src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" style="--sdg-color:${color}">`;
+            }
+            return `<span class="vp-agent-icon" style="--sdg-color:${color}">${label === '' ? '統合' : '監視'}</span>`;
+        }
+
+        function renderNewsSynthesis(bubble, record, region, options = {}) {
             const voices = record.voices || [];
             const proposals = record.proposals || [];
             // 画面の表示は音声パネルの読み上げと同じ「エージェントごとの一言」。論点の詳細は折りたたむ
             const lines = record.panel_script && record.panel_script.length
                 ? record.panel_script
-                : voices.map(v => ({ label: shortAgentLabel(v.label), body: v.pseudo_citizen_voice || '' }));
+                : voices.map(v => ({ theme: v.theme, label: shortAgentLabel(v.label), body: v.pseudo_citizen_voice || '' }));
+            const iconFor = (theme) => {
+                const v = voices.find(x => x.theme === theme);
+                const n = v ? sdgNumber(v.label) : 0;
+                return n ? `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="28" height="28">` : '😡';
+            };
             const voicesHtml = lines.map(l => `
                 <div class="mb-2">
-                    <div class="text-xs font-semibold">😡 ${escapeHtml(l.label)}</div>
+                    <div class="text-xs font-semibold flex items-center gap-2">${iconFor(l.theme)}<span>${escapeHtml(l.label)}</span></div>
                     <p class="text-sm">${escapeHtml(l.body)}</p>
                 </div>`).join('');
             const detailsHtml = voices.some(v => (v.key_points || []).length) ? `
@@ -3798,17 +4073,18 @@
                 </div>`).join('');
             bubble.innerHTML = `
                 <span class="chat-bubble-label">🔍 Civic Lens</span>
+                <div class="vp-voice-hero">
+                    <button type="button" class="news-voice-panel-btn">🔊 エージェントたちの議論を音声で聴く</button>
+                    <div class="news-voice-panel-agents flex items-center gap-3 flex-wrap mt-2 hidden"></div>
+                    <audio class="news-voice-panel-audio w-full mt-2 hidden" controls></audio>
+                    <p class="text-xs text-gray-400 mt-2">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'} ／ 冒頭でAI生成のフィクションであることを読み上げます</p>
+                </div>
                 <div class="text-xs text-gray-500 mb-1">🧭 統合エージェントの所見（怒りレベル ${escapeHtml(String(record.overall_anger_level ?? '-'))}/10）</div>
                 <p class="text-sm mb-2">${escapeHtml(record.summary || '')}</p>
                 <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AI生成）</div>
                 ${voicesHtml}
                 ${detailsHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
-                <div class="flex items-center gap-2 flex-wrap mb-2">
-                    <button type="button" class="news-voice-panel-btn text-xs border px-2.5 py-1.5 rounded-md hover:bg-gray-50">🔊 エージェントたちの議論を音声で聴く</button>
-                    <span class="text-xs text-gray-400">${voices.some(v => v.guardrail && !v.guardrail.passed) ? '🛡️ 一部の声はガードレールで安全な文に差し替えました' : '🛡️ ガードレール検査済み（個人情報・なりすまし・法的助言なし）'}</span>
-                </div>
-                <audio class="news-voice-panel-audio w-full mb-2 hidden" controls></audio>
                 <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
                 ${proposalsHtml}
                 <div class="news-reactions flex items-center gap-2 flex-wrap"></div>
@@ -3819,7 +4095,33 @@
             renderNewsShareButtons(bubble, record.news_id, record);
             const panelBtn = bubble.querySelector('.news-voice-panel-btn');
             const panelAudio = bubble.querySelector('.news-voice-panel-audio');
-            panelBtn.addEventListener('click', async () => {
+            const agentsRow = bubble.querySelector('.news-voice-panel-agents');
+            let panelTiming = [];
+            // 発話中の話者を点灯。免責（ナレーション）中は全員グレーのまま「AI生成」表示を見せる
+            const highlightSpeaker = () => {
+                const t = panelTiming.find(x => panelAudio.currentTime >= x.start && panelAudio.currentTime < x.end);
+                const who = t && t.speaker.startsWith('AI・統合エージェント') ? 'AI・統合エージェント' : (t && t.speaker);
+                agentsRow.querySelectorAll('.vp-agent').forEach(el => el.classList.toggle('vp-speaking', !!t && el.dataset.speaker === who));
+            };
+            panelAudio.addEventListener('timeupdate', highlightSpeaker);
+            panelAudio.addEventListener('ended', highlightSpeaker);
+            const renderSpeakerIcons = (timing) => {
+                const speakers = new Set(timing.map(x => x.speaker));
+                const items = voices.filter(v => speakers.has(speakerOf(v.label))).map(v => {
+                    const lvl = Number(v.anger_level || 0);
+                    const angerCls = lvl >= 7 ? 'vp-anger-high' : (lvl <= 3 ? 'vp-anger-low' : '');
+                    return `<span class="vp-agent flex items-center gap-1 ${angerCls}" data-speaker="${escapeHtml(speakerOf(v.label))}">${agentIconHtml(v.label)}<span class="text-xs text-gray-500">${escapeHtml(shortAgentLabel(v.label))}</span></span>`;
+                });
+                if ([...speakers].some(sp => sp.startsWith('AI・統合エージェント'))) {
+                    items.push(`<span class="vp-agent flex items-center gap-1" data-speaker="AI・統合エージェント">${agentIconHtml('')}<span class="text-xs text-gray-500">統合</span></span>`);
+                }
+                agentsRow.innerHTML = items.join('') + '<span class="text-xs text-gray-400">🤖 AI生成の議論（フィクション・実在の市民の声ではありません）</span>';
+                agentsRow.classList.remove('hidden');
+            };
+            // 音声は取得済みなら即再生。未取得なら取得してから再生する。
+            // prefetch=true（自動ブリーフィング）では、ユーザーの操作を待たずに裏で取得だけ済ませておく
+            let panelReady = false;
+            const loadPanel = async ({ play }) => {
                 panelBtn.disabled = true;
                 panelBtn.textContent = '🔊 音声を生成中…';
                 try {
@@ -3832,10 +4134,13 @@
                         const err = await res.json().catch(() => ({}));
                         throw new Error(err.detail || '音声を生成できませんでした');
                     }
+                    try { panelTiming = JSON.parse(res.headers.get('X-Panel-Timing') || '[]'); } catch (_) { panelTiming = []; }
                     panelAudio.src = URL.createObjectURL(await res.blob());
+                    if (panelTiming.length) renderSpeakerIcons(panelTiming); else agentsRow.classList.add('hidden');
                     panelAudio.classList.remove('hidden');
-                    panelAudio.play().catch(() => {});
-                    panelBtn.textContent = '🔊 もう一度聴く';
+                    panelReady = true;
+                    const readyLabel = '▶ エージェントたちの議論を再生（準備できました）';
+                    panelBtn.textContent = readyLabel;
                     // ダウンロード時のファイル名は、ランダムなblob名ではなく記録IDのスラッグにする
                     let dl = bubble.querySelector('.news-voice-download');
                     if (!dl) {
@@ -3852,12 +4157,26 @@
                         note.textContent = '🗂️ この音声は非公開で記録しました。運営者が内容を確認して承認したものだけが、公開アーカイブに載ります。';
                         panelAudio.insertAdjacentElement('afterend', note);
                     }
+                    if (play) {
+                        // 自動読み上げはブラウザに止められることがある。その場合は再生ボタンのまま残す
+                        panelAudio.play().then(() => { panelBtn.textContent = '🔊 もう一度聴く'; }).catch(() => {});
+                    }
                 } catch (e) {
                     panelBtn.textContent = '🔊 ' + (e.message || '音声を生成できませんでした');
                 } finally {
                     panelBtn.disabled = false;
                 }
+            };
+            panelBtn.addEventListener('click', () => {
+                if (panelReady) {
+                    panelAudio.currentTime = 0;
+                    panelAudio.play().catch(() => {});
+                    panelBtn.textContent = '🔊 もう一度聴く';
+                } else {
+                    loadPanel({ play: true });
+                }
             });
+            if (options.prefetchVoice) loadPanel({ play: !!options.autoPlay });
             bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = Number(btn.closest('[data-proposal]').dataset.proposal);

@@ -25,6 +25,7 @@ TTS_MODEL_DEFAULT = "gemini-2.5-flash-preview-tts"
 SAMPLE_RATE = 24000  # Gemini TTS は 24kHz / 16bit / モノラルの生PCMを返す
 MAX_AGENT_LINES = 3
 MAX_LINE_CHARS = 140
+GAP_MS = 350  # 行（話者）間の無音
 # 統合エージェントは、所見に加えて「開示請求の対象の機関と、請求する文書」を読み上げる。これがCivic Lensの成果物
 MAX_PROPOSAL_LINES = 3  # 提案は機関ごとに1件（news_anger_agent.MAX_PROPOSALS と同じ）
 MAX_DOCS_SPOKEN = 5  # 1提案で読み上げる文書の数（残りは「ほか◯件」）。全文書は画面に表示される
@@ -147,7 +148,7 @@ def _synthesize_line(client: Any, voice: str, text: str) -> bytes:
     return response.candidates[0].content.parts[0].inline_data.data
 
 
-def _to_wav(pcm_chunks: list[bytes], gap_ms: int = 350) -> bytes:
+def _to_wav(pcm_chunks: list[bytes], gap_ms: int = GAP_MS) -> bytes:
     gap = b"\x00\x00" * int(SAMPLE_RATE * gap_ms / 1000)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -156,6 +157,27 @@ def _to_wav(pcm_chunks: list[bytes], gap_ms: int = 350) -> bytes:
         w.setframerate(SAMPLE_RATE)
         w.writeframes(gap.join(pcm_chunks))
     return buf.getvalue()
+
+
+def panel_timing(record: dict[str, Any], wav: bytes) -> list[dict[str, Any]]:
+    """台本の各話者の発話区間（秒）を推定して返す。画面側の話者ハイライトの単一の真実源。
+
+    実WAVの長さから行間の無音（GAP_MS）を除いた発話時間を、各行の文字数で按分する。
+    build_script の構成・スキップ条件を変えても、ここは build_script を呼ぶので追従する。
+    """
+    script = build_script(record)
+    with wave.open(io.BytesIO(wav)) as w:
+        total = w.getnframes() / w.getframerate()
+    gap_s = GAP_MS / 1000
+    speech_total = max(total - gap_s * (len(script) - 1), 0.0)
+    weights = [max(len(line["text"]), 1) for line in script]
+    out: list[dict[str, Any]] = []
+    cursor = 0.0
+    for line, weight in zip(script, weights):
+        speech = speech_total * weight / sum(weights)
+        out.append({"speaker": line["speaker"], "start": round(cursor, 3), "end": round(cursor + speech, 3)})
+        cursor += speech + gap_s
+    return out
 
 
 def synthesize_panel(client: Any, news_id: str, record: dict[str, Any]) -> bytes:

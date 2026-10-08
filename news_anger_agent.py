@@ -354,6 +354,28 @@ def generate_agent_voices(
         return list(pool.map(_one, targets))
 
 
+def iter_agent_voices(news_text: str, region: str | None, appearances: list[dict]):
+    """generate_agent_voices と同じ処理を、完了した順にエージェントの声を1つずつ返すジェネレータにしたもの。
+
+    各エージェントは非同期（スレッド並行）に声を挙げ、先に書き終えたエージェントから順に画面へ流せる。
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    targets = appearances or [
+        {"theme": DEFAULT_THEME, "label": NEWS_THEMES[DEFAULT_THEME]["label"], "remark": "", "anger_level": 5}
+    ]
+    agent = AngerReproductionAgent()
+
+    def _one(a: dict) -> dict:
+        data = agent.generate(news_text, region=region, theme=a["theme"])
+        return guard_voice({**a, "key_points": data["key_points"], "pseudo_citizen_voice": data["pseudo_citizen_voice"]})
+
+    with ThreadPoolExecutor(max_workers=len(targets), thread_name_prefix="anger-voice") as pool:
+        futures = [pool.submit(_one, a) for a in targets]
+        for fut in as_completed(futures):
+            yield fut.result()
+
+
 def _format_voices(voices: list[dict]) -> str:
     blocks = []
     for v in voices:

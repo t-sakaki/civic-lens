@@ -3,6 +3,7 @@
 市民の怒りを情報公開に変換するエンドポイント
 """
 import asyncio
+import json
 import time
 import os
 import re
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Cookie, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
@@ -112,7 +113,7 @@ from auth import (
 )
 from news_collector_agent import get_news_collector_agent
 from news_anger_agent import (
-    select_appearing_agents, generate_agent_voices, propose_disclosure_targets, build_proposal_input,
+    select_appearing_agents, generate_agent_voices, iter_agent_voices, propose_disclosure_targets, build_proposal_input,
     PSEUDO_VOICE_DISCLAIMER, NEWS_THEMES, DEFAULT_THEME,
 )
 from news_reactions import (
@@ -875,6 +876,10 @@ async def analyze_news_item(
     """
     news_text = "\n".join([p for p in [title, summary] if p])
     news_id = make_news_id(link)
+    # 分析済みの記事は再分析せず、保存済みの記録を返す（自律ブリーフィング等で何度呼ばれてもGemini費用が増えない）
+    existing = get_record(news_id)
+    if existing and existing.get("voices") and existing.get("proposals"):
+        return {**existing, "panel_script": voice_panel.agent_lines(existing)}
     result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, authority_key)
     record = record_analysis(
         news_id=news_id,
@@ -892,6 +897,80 @@ async def analyze_news_item(
     )
     # 画面の表示は、音声パネルの読み上げと同じ「エージェントごとの一言」にする（保存はしない）
     return {**record, "panel_script": voice_panel.agent_lines(record)}
+
+
+def _analysis_events(
+    title: str, link: str, summary: str, published: Optional[str], region: Optional[str], authority_key: Optional[str],
+):
+    """ニュース1件の検討過程を、イベント（dict）として順に返す。画面は届いた順に「検討ログ」として流す。
+
+    reading → appear（名乗り出たエージェント）→ voice（各エージェントの声。完了した順）→ integrating → done（記録）。
+    分析済みの記事は、保存済みの記録を同じイベント列として即座に再生する（replay=True。再分析しない）。
+    """
+    news_text = "\n".join([p for p in [title, summary] if p])
+    news_id = make_news_id(link)
+    yield {"type": "reading", "news_id": news_id}
+    existing = get_record(news_id)
+    if existing and existing.get("voices") and existing.get("proposals"):
+        yield {"type": "appear", "replay": True, "appearances": [
+            {k: v.get(k) for k in ("theme", "label", "remark", "anger_level")} for v in existing["voices"]]}
+        for v in existing["voices"]:
+            yield {"type": "voice", "replay": True, "voice": v}
+        yield {"type": "integrating", "replay": True}
+        yield {"type": "done", "replay": True, "record": {**existing, "panel_script": voice_panel.agent_lines(existing)}}
+        return
+    hint = _resolve_hint_key(region, authority_key)
+    appearances = _get_appearances(news_id, news_text, region)
+    yield {"type": "appear", "appearances": appearances}
+    voices: List[Dict[str, Any]] = []
+    for voice in iter_agent_voices(news_text, region, appearances):
+        voices.append(voice)
+        yield {"type": "voice", "voice": voice}
+    yield {"type": "integrating"}
+    proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint)
+    record = record_analysis(
+        news_id=news_id,
+        source_news={"title": title, "link": link, "published": published},
+        disclaimer=PSEUDO_VOICE_DISCLAIMER,
+        anger_analysis=None,
+        theme="multi",
+        region=region,
+        autonomous=False,
+        voices=voices,
+        proposals=proposed["proposals"],
+        summary=proposed["summary"],
+        overall_anger_level=proposed["anger_level"],
+        **_voices_to_record_fields(voices),
+    )
+    yield {"type": "done", "record": {**record, "panel_script": voice_panel.agent_lines(record)}}
+
+
+@app.post("/api/news-agent/analyze-stream", dependencies=[Depends(rate_limit)])
+async def analyze_news_item_stream(
+    title: str = Form(...),
+    link: str = Form(...),
+    summary: str = Form(""),
+    published: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+    authority_key: Optional[str] = Form(None),
+):
+    """/api/news-agent/analyze と同じ分析を、検討の過程ごとに逐次配信する（NDJSON: 1行1イベント）。
+
+    各SDGsエージェントは並行に声を挙げ、書き終えた順に届く。最後に統合エージェントが開示請求の対象
+    （機関・請求する行政文書）をまとめ、記録を返す。請求・投稿の判断は行わない（情報提供のみ）。
+    """
+    def gen():
+        try:
+            for ev in _analysis_events(title, link, summary, published, region, authority_key):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as e:
+            print(f"[news-agent/analyze-stream] 分析に失敗: {e}")
+            yield json.dumps({"type": "error", "message": "分析に失敗しました。もう一度お試しください。"}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(
+        gen(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/news-agent/voice-panel", dependencies=[Depends(rate_limit)])
@@ -918,16 +997,18 @@ async def news_voice_panel(news_id: str = Form(...), format: str = Form("opus"))
         raise HTTPException(status_code=503, detail="音声合成に失敗しました。テキストでご覧ください")
     # 記録は開示請求の有無にかかわらず常に残す（既定は非公開。公開は運営者の承認が必要）。記録はOpusに圧縮して保存される
     fmt = "wav" if format == "wav" else "opus"
+    # 話者ハイライト用の発話区間は、本文（音声）を変えずヘッダで渡す（ASCIIエスケープ）
+    timing = json.dumps(voice_panel.panel_timing(record, wav), ensure_ascii=True, separators=(",", ":"))
     try:
         entry = await asyncio.to_thread(voice_archive.save, news_id, record, wav)
         audio, mime, ext = await asyncio.to_thread(voice_archive.read_audio, entry, fmt)
-        headers = {"Cache-Control": "private, max-age=3600", "X-Voice-Archive-Id": entry["archive_id"],
+        headers = {"Cache-Control": "private, max-age=3600", "X-Panel-Timing": timing, "X-Voice-Archive-Id": entry["archive_id"],
                    **voice_archive.download_headers(voice_archive.slug(entry), ext)}
         return Response(content=audio, media_type=mime, headers=headers)
     except Exception as e:
         # 記録に失敗しても、聴くことはできるようにWAVのまま返す
         print(f"[news-agent/voice-panel] 音声アーカイブへの記録に失敗: {e}")
-    headers = {"Cache-Control": "private, max-age=3600", **voice_archive.download_headers(f"civic-lens-{news_id}", "wav")}
+    headers = {"Cache-Control": "private, max-age=3600", "X-Panel-Timing": timing, **voice_archive.download_headers(f"civic-lens-{news_id}", "wav")}
     return Response(content=wav, media_type="audio/wav", headers=headers)
 
 
