@@ -135,8 +135,11 @@ def submit_attestation_onchain(
     recipient: str,
     encoded_data: bytes,
     revocable: bool = False,
+    ref_uid: str = ZERO_BYTES32,
 ) -> dict:
     """EASコントラクトへ実際にattestトランザクションを送信し、確定結果を返す。
+
+    ref_uid を指定すると、別のattestation（例: 開示請求）に紐づける。既定は参照なし。
 
     呼び出し側が用途ごとのスキーマUID(環境変数から解決済みの値)を渡すこと。
     未解決(None/空)の場合は例外を送出する。
@@ -162,7 +165,7 @@ def submit_attestation_onchain(
             recipient_address,
             0,              # expirationTime: 0 = 無期限
             revocable,
-            ZERO_BYTES32,   # refUID: 参照なし
+            ref_uid,        # refUID: 紐づけ先のattestation（既定はゼロ=参照なし）
             encoded_data,
             0,              # value
         ),

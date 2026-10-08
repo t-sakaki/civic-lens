@@ -193,6 +193,11 @@ def _get_index(uid_or_record_id: str) -> Optional[AttestationIndexEntry]:
     return AttestationIndexEntry(**entry) if entry else None
 
 
+def get_index_entry(uid_or_record_id: str) -> Optional[AttestationIndexEntry]:
+    """索引の1件（発行時の所有者・署名者の種別を含む）。代理署名の対象が本人の請求かの確認に使う。"""
+    return _get_index(uid_or_record_id)
+
+
 def _all_index() -> List[AttestationIndexEntry]:
     if use_firestore():
         from firebase_client import get_firestore_client
