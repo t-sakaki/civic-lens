@@ -4037,12 +4037,27 @@
         function renderNewsSynthesis(bubble, record, region, options = {}) {
             const voices = record.voices || [];
             const proposals = record.proposals || [];
-            const voicesHtml = voices.map(v => `
-                <div class="border rounded-md p-2 mb-2">
-                    <div class="text-xs font-semibold mb-1 flex items-center gap-2">${sdgNumber(v.label) ? `<img src="${sdgIconSrc(sdgNumber(v.label))}" alt="SDGs 目標${sdgNumber(v.label)}" width="28" height="28">` : '😡'}<span>${escapeHtml(shortAgentLabel(v.label))}</span></div>
-                    <ul class="list-disc list-inside text-xs text-gray-600 mb-1">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
-                    <p class="text-sm">${escapeHtml(v.pseudo_citizen_voice || '')}</p>
+            // 画面の表示は音声パネルの読み上げと同じ「エージェントごとの一言」。論点の詳細は折りたたむ
+            const lines = record.panel_script && record.panel_script.length
+                ? record.panel_script
+                : voices.map(v => ({ theme: v.theme, label: shortAgentLabel(v.label), body: v.pseudo_citizen_voice || '' }));
+            const iconFor = (theme) => {
+                const v = voices.find(x => x.theme === theme);
+                const n = v ? sdgNumber(v.label) : 0;
+                return n ? `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="28" height="28">` : '😡';
+            };
+            const voicesHtml = lines.map(l => `
+                <div class="mb-2">
+                    <div class="text-xs font-semibold flex items-center gap-2">${iconFor(l.theme)}<span>${escapeHtml(l.label)}</span></div>
+                    <p class="text-sm">${escapeHtml(l.body)}</p>
                 </div>`).join('');
+            const detailsHtml = voices.some(v => (v.key_points || []).length) ? `
+                <details class="mb-2">
+                    <summary class="text-xs text-gray-500 cursor-pointer">論点の詳細を見る</summary>
+                    ${voices.map(v => `
+                        <div class="text-xs font-semibold mt-1">${escapeHtml(shortAgentLabel(v.label))}</div>
+                        <ul class="list-disc list-inside text-xs text-gray-600">${(v.key_points || []).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`).join('')}
+                </details>` : '';
             const labelOf = (theme) => {
                 const v = voices.find(x => x.theme === theme);
                 return v ? shortAgentLabel(v.label) : theme;
@@ -4066,8 +4081,9 @@
                 </div>
                 <div class="text-xs text-gray-500 mb-1">🧭 統合エージェントの所見（怒りレベル ${escapeHtml(String(record.overall_anger_level ?? '-'))}/10）</div>
                 <p class="text-sm mb-2">${escapeHtml(record.summary || '')}</p>
-                <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AIによる疑似生成）</div>
+                <div class="text-xs text-gray-500 mb-1">🗣️ 怒りのエージェントたちの声（${voices.length}体・AI生成）</div>
                 ${voicesHtml}
+                ${detailsHtml}
                 <p class="text-xs text-gray-400 mb-2">※ ${escapeHtml(record.pseudo_citizen_voice_disclaimer || '')}</p>
                 <div class="text-xs text-gray-500 mb-1">📮 開示請求する対象の提案</div>
                 ${proposalsHtml}
@@ -4084,7 +4100,8 @@
             // 発話中の話者を点灯。免責（ナレーション）中は全員グレーのまま「AI生成」表示を見せる
             const highlightSpeaker = () => {
                 const t = panelTiming.find(x => panelAudio.currentTime >= x.start && panelAudio.currentTime < x.end);
-                agentsRow.querySelectorAll('.vp-agent').forEach(el => el.classList.toggle('vp-speaking', !!t && el.dataset.speaker === t.speaker));
+                const who = t && t.speaker.startsWith('AI・統合エージェント') ? 'AI・統合エージェント' : (t && t.speaker);
+                agentsRow.querySelectorAll('.vp-agent').forEach(el => el.classList.toggle('vp-speaking', !!t && el.dataset.speaker === who));
             };
             panelAudio.addEventListener('timeupdate', highlightSpeaker);
             panelAudio.addEventListener('ended', highlightSpeaker);
@@ -4095,7 +4112,7 @@
                     const angerCls = lvl >= 7 ? 'vp-anger-high' : (lvl <= 3 ? 'vp-anger-low' : '');
                     return `<span class="vp-agent flex items-center gap-1 ${angerCls}" data-speaker="${escapeHtml(speakerOf(v.label))}">${agentIconHtml(v.label)}<span class="text-xs text-gray-500">${escapeHtml(shortAgentLabel(v.label))}</span></span>`;
                 });
-                if (speakers.has('AI・統合エージェント')) {
+                if ([...speakers].some(sp => sp.startsWith('AI・統合エージェント'))) {
                     items.push(`<span class="vp-agent flex items-center gap-1" data-speaker="AI・統合エージェント">${agentIconHtml('')}<span class="text-xs text-gray-500">統合</span></span>`);
                 }
                 agentsRow.innerHTML = items.join('') + '<span class="text-xs text-gray-400">🤖 AI生成の議論（フィクション・実在の市民の声ではありません）</span>';
@@ -4110,6 +4127,8 @@
                 try {
                     const fd = new FormData();
                     fd.append('news_id', record.news_id);
+                    // 既定はOpus（小さい）。Opusを再生できない端末（Safari等）にはWAVを返してもらう
+                    fd.append('format', document.createElement('audio').canPlayType('audio/ogg; codecs=opus') ? 'opus' : 'wav');
                     const res = await fetchWithRetry('/api/news-agent/voice-panel', { method: 'POST', body: fd }, 1);
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
@@ -4122,6 +4141,22 @@
                     panelReady = true;
                     const readyLabel = '▶ エージェントたちの議論を再生（準備できました）';
                     panelBtn.textContent = readyLabel;
+                    // ダウンロード時のファイル名は、ランダムなblob名ではなく記録IDのスラッグにする
+                    let dl = bubble.querySelector('.news-voice-download');
+                    if (!dl) {
+                        dl = document.createElement('a');
+                        dl.className = 'news-voice-download text-xs underline text-gray-500 block mb-1';
+                        dl.textContent = '⬇ 音声をダウンロード';
+                        panelAudio.insertAdjacentElement('afterend', dl);
+                    }
+                    dl.href = panelAudio.src;
+                    dl.download = res.headers.get('X-Voice-Filename') || 'civic-lens-voice.opus';
+                    if (res.headers.get('X-Voice-Archive-Id') && !bubble.querySelector('.news-voice-archived')) {
+                        const note = document.createElement('p');
+                        note.className = 'news-voice-archived text-xs text-gray-400 mb-2';
+                        note.textContent = '🗂️ この音声は非公開で記録しました。運営者が内容を確認して承認したものだけが、公開アーカイブに載ります。';
+                        panelAudio.insertAdjacentElement('afterend', note);
+                    }
                     if (play) {
                         // 自動読み上げはブラウザに止められることがある。その場合は再生ボタンのまま残す
                         panelAudio.play().then(() => { panelBtn.textContent = '🔊 もう一度聴く'; }).catch(() => {});

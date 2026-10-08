@@ -288,6 +288,7 @@ class AngerReproductionAgent:
 # ---------------------------------------------------------------------------
 
 MAX_PROPOSALS = 3
+MAX_DOCUMENTS_PER_PROPOSAL = 8  # 1つの請求に詰め込みすぎると対象が特定できず不開示・補正の原因になる
 _KEY_OPTIONS = (
     "anjo-city, nagoya-city, okazaki-city, toyota-city, gamagori-city, aichi-pref, aichi-assembly, "
     "metropolitan-police, aichi-police, kanagawa-police, osaka-police"
@@ -299,6 +300,8 @@ PROPOSAL_PROMPT = """あなたは情報公開請求の専門家AI（統合エー
 優先順位の高い順に最大{max_proposals}件提案してください。
 
 ルール:
+- 提案は「請求する機関ごとに1件」にまとめる。同じ機関に対する請求は、エージェントの担当（SDGs目標）が違っても1つの提案に集約し、文書を1つのリストにまとめる（同じ機関の提案を複数に分けない）
+- 1つの提案に入れる文書は、請求対象が特定できる具体的なものに絞る（最大8件）。何でも請求する広すぎる内容にしない
 - 複数のエージェントが共通して指摘している論点を優先する
 - 開示請求の対象になりうる具体的な行政文書名（契約書・仕様書・決裁文書・支出関係書類・議事録・検討資料など）を挙げる
 - 記事にない事実は断定せず、「確認のための請求」として書く
@@ -319,8 +322,8 @@ PROPOSAL_PROMPT = """あなたは情報公開請求の専門家AI（統合エー
     {{
       "target_authority_key": "機関キー",
       "documents": ["請求する行政文書名1", "請求する行政文書名2"],
-      "reason": "なぜこの機関のこの文書を請求すべきか（80文字程度）",
-      "supporting_themes": ["この提案を支持するエージェントID 例: sdg13"]
+      "reason": "なぜこの機関のこれらの文書を請求すべきか。複数のエージェントの論点を踏まえて（120文字程度）",
+      "supporting_themes": ["この提案を支持するエージェントIDをすべて 例: sdg13"]
     }}
   ]
 }}
@@ -408,11 +411,34 @@ def _normalize_proposals(raw: list, voices: list[dict], hint_key: str | None, ne
         proposals.append({
             "target_authority_key": key,
             "target_authority": addressee_name(info) if info else key,
-            "documents": docs[:5],
+            "documents": docs,
             "reason": str(item.get("reason", "")),
             "supporting_themes": supporting,
         })
-    return proposals[:MAX_PROPOSALS]
+    return _merge_by_authority(proposals)[:MAX_PROPOSALS]
+
+
+def _merge_by_authority(proposals: list[dict]) -> list[dict]:
+    """同じ機関への提案を1件にまとめる（請求書は機関ごとに1通。担当SDGsが違っても集約する）。
+
+    モデルが指示に反して同じ機関の提案を分けた場合の安全網。優先順位は最初に現れた順を保ち、
+    文書・支持エージェントは重複を除いて合算、理由は重複しない文だけをつなげる。
+    """
+    merged: dict[str, dict] = {}
+    for p in proposals:
+        m = merged.get(p["target_authority_key"])
+        if m is None:
+            merged[p["target_authority_key"]] = {**p, "documents": list(p["documents"]), "supporting_themes": list(p["supporting_themes"])}
+            continue
+        m["documents"] += [d for d in p["documents"] if d not in m["documents"]]
+        m["supporting_themes"] += [t for t in p["supporting_themes"] if t not in m["supporting_themes"]]
+        reason = p.get("reason", "").strip()
+        if reason and reason not in m["reason"]:
+            m["reason"] = (m["reason"].rstrip() + ("" if m["reason"].rstrip().endswith("。") else "。") + reason) if m["reason"] else reason
+    out = list(merged.values())
+    for m in out:
+        m["documents"] = m["documents"][:MAX_DOCUMENTS_PER_PROPOSAL]
+    return out
 
 
 def _propose_disclosure_targets_raw(

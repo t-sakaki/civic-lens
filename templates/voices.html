@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIエージェントの声 | Civic Lens</title>
+<link rel="alternate" type="application/rss+xml" title="Civic Lens — AIエージェントの声" href="/voices/feed.xml">
+<style>
+:root { --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#1d4ed8; --warn:#92400e; --warnbg:#fef3c7; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#111a2e; --text:#e2e8f0; --muted:#94a3b8; --line:#1e293b; --accent:#7aa2ff; --warn:#fcd34d; --warnbg:#3a2a0a; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; line-height:1.6 }
+main { max-width:720px; margin:0 auto; padding:24px 16px 64px }
+h1 { font-size:1.4rem; margin:0 0 4px }
+.sub { color:var(--muted); font-size:.9rem; margin:0 0 16px }
+.notice { background:var(--warnbg); color:var(--warn); border-radius:10px; padding:12px 14px; font-size:.85rem; margin-bottom:20px }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px }
+.card h2 { font-size:1rem; margin:0 0 4px }
+.meta { color:var(--muted); font-size:.8rem; margin-bottom:10px }
+.meta a { color:var(--accent) }
+.line { margin:8px 0 }
+.who { font-size:.78rem; font-weight:600; color:var(--muted) }
+audio { width:100%; margin-top:8px }
+.dl { display:inline-block; font-size:.8rem; margin-top:4px }
+.hash { color:var(--muted); font-size:.7rem; word-break:break-all; margin-top:10px }
+.empty { color:var(--muted); text-align:center; padding:40px 0 }
+a { color:var(--accent) }
+</style>
+</head>
+<body>
+<main>
+  <h1>🗣️ AIエージェントの声</h1>
+  <p class="sub">ニュースを読んだAIエージェントたちの議論です。<a href="/voices/feed.xml">RSSで購読</a> ・ <a href="/">Civic Lens に戻る</a></p>
+  <div class="notice">この音声と文章は、ニュース記事の論点をもとに<strong>AIが生成したフィクション</strong>です。実在の個人・市民の発言ではありません。実在の人物の発言として引用・転載しないでください。運営者が内容を確認したものだけを公開しています。</div>
+  <div id="list"><p class="empty">読み込み中…</p></div>
+</main>
+<script>
+// Opusを再生できない端末（Safari等）にはWAVを配信してもらう
+const CAN_OPUS = !!document.createElement('audio').canPlayType('audio/ogg; codecs=opus');
+const FMT = CAN_OPUS ? 'opus' : 'wav';
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+(async () => {
+  const list = document.getElementById('list');
+  try {
+    const res = await fetch('/api/voice-archive');
+    const data = await res.json();
+    list.textContent = '';
+    if (!data.items.length) { list.appendChild(el('p', 'empty', 'まだ公開された声はありません。')); return; }
+    for (const it of data.items) {
+      const card = el('div', 'card');
+      const src = it.source_news || {};
+      card.appendChild(el('h2', null, src.title || '無題'));
+      const meta = el('div', 'meta');
+      meta.appendChild(document.createTextNode([it.region, (it.published_at || '').slice(0, 10)].filter(Boolean).join(' ・ ') + ' ・ 出典: '));
+      if (src.link) { const a = el('a', null, '元のニュース記事'); a.href = src.link; a.target = '_blank'; a.rel = 'noopener noreferrer'; meta.appendChild(a); }
+      card.appendChild(meta);
+      const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none';
+      audio.src = `/api/voice-archive/${encodeURIComponent(it.archive_id)}/audio?format=${FMT}`;
+      card.appendChild(audio);
+      const dl = el('a', 'dl', '⬇ ダウンロード'); dl.href = audio.src;
+      dl.download = `civic-lens-${(it.generated_at || '').slice(0, 10).replace(/-/g, '')}-${it.archive_id}.${FMT === 'opus' ? 'opus' : 'wav'}`;
+      card.appendChild(dl);
+      for (const l of it.script.slice(1)) {
+        const row = el('div', 'line'); row.appendChild(el('div', 'who', l.speaker)); row.appendChild(el('div', null, l.text)); card.appendChild(row);
+      }
+      card.appendChild(el('div', 'hash', `生成: ${it.tts_model || ''} / 音声SHA-256: ${it.audio_sha256 || ''}`));
+      list.appendChild(card);
+    }
+  } catch (e) { list.textContent = ''; list.appendChild(el('p', 'empty', '読み込めませんでした。')); }
+})();
+</script>
+</body>
+</html>
