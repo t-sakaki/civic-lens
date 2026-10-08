@@ -60,6 +60,7 @@
             </p>
             <p id="ledgerMeta" class="text-xs text-gray-400 mt-2"></p>
             <p id="walletStatus" class="text-xs text-gray-400 mt-1"></p>
+            <p id="loginStatus" class="text-xs text-gray-400 mt-1"></p>
         </header>
 
         <div id="ledgerStatus" class="text-sm text-gray-400">読み込み中...</div>
@@ -74,7 +75,7 @@
                 理由は正確さのため<strong>通知書の文言をそのまま</strong>転記し、要約・言い換えはしないでください。長すぎる場合や個人情報を含む場合は、省略せず理由欄を空にして、通知書ハッシュだけを記録できます。
             </p>
             <p class="text-xs mb-3 leading-relaxed" id="extSignerHint" style="color: var(--cl-amber)"></p>
-            <form id="extForm" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <form id="extForm" autocomplete="off" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div class="sm:col-span-2">
                     <label class="block text-xs text-gray-400 mb-1">対象の開示請求 attestation UID（上の「通知を記録する」で自動入力）</label>
                     <input type="text" id="extRefUid" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs" required>
@@ -84,7 +85,7 @@
                     <select id="extKind" class="w-full rounded px-2.5 py-1.5"><option>期間の延長</option><option>期限の特例</option></select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-400 mb-1">実施機関（通知書の差出人）</label>
+                    <label class="block text-xs text-gray-400 mb-1">実施機関（請求の記録と同じ表記。職員名は書きません）</label>
                     <input type="text" id="extAuthority" placeholder="愛知県知事" class="w-full rounded px-2.5 py-1.5" required>
                 </div>
                 <div>
@@ -339,6 +340,9 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || '読み込みに失敗しました');
                 loggedIn = data.logged_in;
+                document.getElementById('loginStatus').innerHTML = loggedIn
+                    ? '✅ Civic Lens にログイン中（代理署名での記録ができます）'
+                    : 'Civic Lens には未ログインです。ウォレットの接続とは別で、代理署名での記録にはトップページからのログインが必要です。';
                 document.getElementById('ledgerMeta').innerHTML =
                     `ネットワーク：${escapeHtml(data.network)} ／ 記録者（Civic Lens 公証アドレス）：<span class="font-mono">${escapeHtml(data.attester)}</span> ／ ` +
                     `<a class="cl-link" href="${escapeHtml(data.schema_url)}" target="_blank" rel="noopener noreferrer">記録形式（スキーマ）↗</a>`;
@@ -404,7 +408,9 @@
             if (extTargetBtn) {
                 const d = extTargetBtn.dataset;
                 document.getElementById('extRefUid').value = d.extTarget;
-                document.getElementById('extAuthority').value = d.extAuthority || '';
+                const authEl = document.getElementById('extAuthority');
+                authEl.value = d.extAuthority || '';
+                authEl.readOnly = !!d.extAuthority;  // 請求の記録と一致していないと代理署名は拒否される
                 document.getElementById('extLegalBasis').value = d.extBasis || '';
                 setExtSigner(d.extSigner);
                 document.getElementById('extensionSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -553,12 +559,17 @@
                     ? 'この請求は本人のウォレットで署名されています。同じウォレットで署名してください（別のウォレットの記録は「第三者の記録」と表示されます）。'
                     : '';
         }
-        document.getElementById('extKind').addEventListener('change', (ev) => {
-            const special = ev.target.value === '期限の特例';
+        function syncExtKind() {
+            const special = document.getElementById('extKind').value === '期限の特例';
             document.getElementById('extFirstWrap').classList.toggle('hidden', !special);
             document.getElementById('extFirstDeadline').required = special;
             document.getElementById('extFinalLabel').textContent = special ? '残りの決定期限（特例：残りを決定する期限）' : '延長後の決定期限';
-        });
+        }
+        document.getElementById('extKind').addEventListener('change', syncExtKind);
+        // 戻る操作やブラウザの入力復元で、種別だけが変わった状態になっても表示を合わせる
+        window.addEventListener('pageshow', syncExtKind);
+        syncExtKind();
+        document.getElementById('extRefUid').addEventListener('input', () => { document.getElementById('extAuthority').readOnly = false; });
 
         async function readExtForm() {
             const v = (id) => document.getElementById(id).value.trim();
