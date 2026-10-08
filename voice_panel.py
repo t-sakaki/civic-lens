@@ -5,7 +5,7 @@ Gemini TTS のマルチスピーカーは2話者までのため、1行（1話者
 - 冒頭で必ず「AIが生成したフィクションで、実在の市民の声ではない」ことを読み上げる
 - 各エージェントは「AIの○○担当」と名乗る（実在の個人に聞こえる口調・名前を使わない）
 - 読み上げる本文は guardrail 通過後の声のみ
-費用: 1パネルあたり最大 MAX_AGENT_LINES + 2 回のTTS呼び出し。cost_guard の TTS_DAILY_CALL_LIMIT で上限管理し、結果はニュースごとにキャッシュする。
+費用: 1パネルあたり最大 1(免責) + MAX_AGENT_LINES + 1(所見) + MAX_PROPOSAL_LINES 回のTTS呼び出し（最大8回）。cost_guard の TTS_DAILY_CALL_LIMIT で上限管理し、結果はニュースごとにキャッシュする。
 """
 from __future__ import annotations
 
@@ -25,6 +25,11 @@ TTS_MODEL_DEFAULT = "gemini-2.5-flash-preview-tts"
 SAMPLE_RATE = 24000  # Gemini TTS は 24kHz / 16bit / モノラルの生PCMを返す
 MAX_AGENT_LINES = 3
 MAX_LINE_CHARS = 140
+# 統合エージェントは、所見に加えて「開示請求の対象の機関と、請求する文書」を読み上げる。これがCivic Lensの成果物
+MAX_PROPOSAL_LINES = 3  # 提案は機関ごとに1件（news_anger_agent.MAX_PROPOSALS と同じ）
+MAX_DOCS_SPOKEN = 5  # 1提案で読み上げる文書の数（残りは「ほか◯件」）。全文書は画面に表示される
+INTEGRATOR_LINE_CHARS = 360
+CLOSING = "請求するかどうかの判断はあなた自身が行ってください。"
 NARRATOR_VOICE = "Zephyr"
 INTEGRATOR_VOICE = "Charon"
 AGENT_VOICES = ["Kore", "Puck", "Leda", "Orus", "Aoede", "Fenrir"]
@@ -68,6 +73,43 @@ def agent_lines(record: dict[str, Any]) -> list[dict[str, str]]:
     return lines
 
 
+def _spoken_documents(docs: list[str]) -> str:
+    """請求する文書を「1つ目、〇〇。2つ目、〇〇。」と番号つきで読み上げる文にする（多い分は「ほか◯件」）"""
+    shown = [d.strip().rstrip("。") for d in docs[:MAX_DOCS_SPOKEN] if d and d.strip()]
+    text = "".join(f"{i}つ目、{d}。" for i, d in enumerate(shown, 1))
+    rest = len(docs) - len(shown)
+    return text + (f"ほか{rest}件。" if rest > 0 else "")
+
+
+def integrator_lines(record: dict[str, Any]) -> list[dict[str, str]]:
+    """統合エージェントの読み上げ: 所見 → 提案ごと（請求先の機関と、請求する文書）。最後に本人の判断を促す。
+
+    [{"speaker", "text"}]。開示請求の対象と文書の読み上げが、このパネルの核心。
+    """
+    parts: list[tuple[str, str]] = []
+    summary = record.get("summary")
+    if summary:
+        level = record.get("overall_anger_level")
+        anger = f"怒りのレベルは、10段階中{int(level)}です。" if isinstance(level, (int, float)) else ""
+        parts.append(("AI・統合エージェント", f"統合エージェントの所見です。{summary}{anger}"))
+    for i, p in enumerate((record.get("proposals") or [])[:MAX_PROPOSAL_LINES], 1):
+        docs = [d for d in (p.get("documents") or []) if d]
+        if not (p.get("target_authority") and docs):
+            continue
+        supporters = len(p.get("supporting_themes") or [])
+        support = f"{supporters}体のエージェントが、この提案を支持しています。" if supporters else ""
+        parts.append((
+            f"AI・統合エージェント（提案{i}）",
+            f"提案{i}。開示請求の請求先は、{p['target_authority']}です。{support}請求する文書は、{_spoken_documents(docs)}",
+        ))
+    lines = []
+    for n, (speaker, text) in enumerate(parts):
+        last = n == len(parts) - 1
+        limit = INTEGRATOR_LINE_CHARS - (len(CLOSING) if last else 0)
+        lines.append({"speaker": speaker, "text": _clip(text, limit) + (CLOSING if last else "")})
+    return lines
+
+
 def build_script(record: dict[str, Any]) -> list[dict[str, str]]:
     """記録から読み上げ台本を作る: [{"speaker", "voice", "text"}]（先頭は必ず免責の読み上げ）"""
     script = [{"speaker": "ナレーション", "voice": NARRATOR_VOICE, "text": OPENING}]
@@ -77,15 +119,8 @@ def build_script(record: dict[str, Any]) -> list[dict[str, str]]:
             "voice": AGENT_VOICES[i % len(AGENT_VOICES)],
             "text": f"AIの{line['label']}担当です。{line['body']}",
         })
-    summary = record.get("summary")
-    if summary:
-        proposals = record.get("proposals") or []
-        tail = f"開示請求の対象は、{proposals[0].get('target_authority')}が候補です。" if proposals and proposals[0].get("target_authority") else ""
-        script.append({
-            "speaker": "AI・統合エージェント",
-            "voice": INTEGRATOR_VOICE,
-            "text": _clip(f"統合エージェントの所見です。{summary}{tail}判断はあなた自身が行ってください。"),
-        })
+    for line in integrator_lines(record):
+        script.append({"speaker": line["speaker"], "voice": INTEGRATOR_VOICE, "text": line["text"]})
     return script
 
 
