@@ -1035,6 +1035,8 @@ async def api_voice_archive_publish(
         raise HTTPException(status_code=404, detail="見つかりません")
     except voice_archive.NotConfirmed as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except voice_archive.AudioMissing as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except voice_archive.GuardrailViolation as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {"archive_id": archive_id, "status": entry["status"], "published_at": entry["published_at"]}

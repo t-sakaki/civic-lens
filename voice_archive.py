@@ -43,6 +43,10 @@ class NotConfirmed(ValueError):
     """運営者が内容を確認した旨（confirmed）が無いまま公開しようとした"""
 
 
+class AudioMissing(ValueError):
+    """音声ファイルが見つからない記録は公開できない（公開ページが壊れる）"""
+
+
 class GuardrailViolation(ValueError):
     def __init__(self, violations: list[str]):
         super().__init__(f"ガードレールに抵触する内容が残っています: {', '.join(violations)}")
@@ -183,8 +187,9 @@ def save(news_id: str, record: dict[str, Any], wav: bytes) -> dict[str, Any]:
     aid = archive_id(news_id, script_hash(script))
     with _LOCK:
         existing = get(aid)
-        if existing:
+        if existing and _read_stored(existing) is not None:
             return existing
+        # 記録はあるのに音声が無い（一時領域に保存していた旧版の記録など）場合は、音声を保存し直して復旧する
         src = record.get("source_news") or {}
         audio = audio_codec.wav_to_opus(wav)
         entry = {
@@ -203,9 +208,11 @@ def save(news_id: str, record: dict[str, Any], wav: bytes) -> dict[str, Any]:
             "tts_model": voice_panel._tts_model(),
             "disclaimer": voice_panel.OPENING,
             "generated_at": _now(),
-            "status": PRIVATE,
-            "published_at": None,
+            "status": existing["status"] if existing else PRIVATE,
+            "published_at": existing["published_at"] if existing else None,
         }
+        if existing:
+            entry["generated_at"] = existing["generated_at"]
         _put(entry)
         return entry
 
@@ -218,6 +225,8 @@ def publish(aid: str, confirmed: bool) -> dict[str, Any]:
         entry = get(aid)
         if entry is None:
             raise KeyError(aid)
+        if _read_stored(entry) is None:
+            raise AudioMissing("音声ファイルが見つかりません。ニュースの「音声で聴く」で音声を作り直すと復旧します")
         violations: list[str] = []
         for line in entry["script"]:
             if line["text"] == voice_panel.OPENING:
