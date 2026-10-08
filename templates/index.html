@@ -1633,6 +1633,12 @@
         .sdg-watch-btn:disabled { opacity: 0.6; cursor: default; }
         .sdg-watch-note { font-size: 0.7rem; color: var(--chat-muted); flex: 1 1 14rem; text-align: left; }
         .has-messages .sdg-board .sdg-watch-note { display: none; }
+        .tour-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem; font-size: 0.75rem; color: var(--chat-muted); }
+        .tour-status { flex: 1 1 14rem; text-align: left; font-weight: 700; }
+        .tour-toggle { font-size: 0.72rem; padding: 0.25rem 0.65rem; border-radius: 0.45rem; border: 1px solid var(--chat-border-strong); background: rgba(148, 163, 184, 0.12); color: var(--chat-text); cursor: pointer; }
+        .tour-toggle:hover { background: rgba(148, 163, 184, 0.24); }
+        .tour-item { margin-bottom: 0.6rem; }
+        .tour-item-title { cursor: pointer; font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0; }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
         @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
@@ -3734,9 +3740,9 @@
         let angerPromptItems = [];
         let angerPromptRegion = null;
 
-        async function loadAngerPrompts() {
+        async function loadAngerPrompts(force = false) {
             const region = getNewsRegion();
-            if (!region || region === angerPromptRegion) return;
+            if (!region || (!force && region === angerPromptRegion)) return;
             angerPromptRegion = region;
             try {
                 const res = await fetchWithRetry(`/api/news-agent/ticker?${new URLSearchParams({ region, limit: '12' })}`);
@@ -3842,10 +3848,6 @@
         }
         initSdgStage();
 
-        // 自律ブリーフィング: ユーザーの操作を待たず、地域のニュースで最も怒りの強い1件をエージェントたちが検討する。
-        // 記事を読む → 名乗り出る → 各エージェントが非同期に声を挙げる（書き終えた順）→ 統合エージェントが
-        // 開示請求する対象の行政文書をまとめる → 読み上げ、の過程を時系列で見せる。
-        // 分析・音声の準備までは自律で行うが、提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
         const autoBriefed = new Set();
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
         const AUTO_READ_KEY = 'cl_auto_read';
@@ -3872,7 +3874,7 @@
         // 記事を読む → 名乗り出る → 各エージェントが非同期に声を挙げる（書き終えた順）→ 統合エージェントが
         // 開示請求する対象の行政文書をまとめる → 読み上げ、の過程を時系列で見せる。成功すると record を返す。
         // 分析・音声の準備までは自律で行うが、提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
-        async function runDeliberation(box, item, region, { board = false, abortIf = null, globalStage = false } = {}) {
+        async function runDeliberation(box, item, region, { board = false, abortIf = null, globalStage = false, onAudioEnded = null, onVoiceUnavailable = null } = {}) {
             box.innerHTML = `
                 <div class="briefing-head">🤖 エージェントたちが検討しています（開示請求するかは、あなたが決めます）</div>
                 ${board ? miniBoardHtml() : ''}
@@ -3965,7 +3967,7 @@
                 box.querySelector('.briefing-head').textContent = '🤖 エージェントたちが検討しました（開示請求するかは、あなたが決めます）';
                 logWrap.querySelector('summary').textContent = `🧠 検討の過程（${voiceCount}体が声を挙げました）`;
                 logWrap.open = false;
-                renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked });
+                renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked, onAudioEnded, onVoiceUnavailable });
                 return record;
             } catch (err) {
                 mark(appearedThemes, false);
@@ -3973,22 +3975,131 @@
             }
         }
 
-        // 自律ブリーフィング: ユーザーの操作を待たず、地域のニュースで最も怒りの強い1件を最初の画面で検討する
-        async function autoBriefing(items, region) {
+        // 自律巡回（オートパイロット）: ユーザーの操作を待たず、地域のニュースを怒りの強い順に1件ずつ検討する。
+        // 検討 → 読み上げ → 読み上げが終わったら自動で次のニュースへ、と進む。止めるボタンはいつでも押せる。
+        // 1回の訪問で巡回する件数に上限を付け（TOUR_MAX）、一巡したら止まる。新しい怒りのニュースが
+        // 見つかったら、止まっていても自動で再開する。提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
+        const TOUR_MAX = 3;
+        const TOUR_PAUSE_MS = 5000;  // 読み上げが終わってから次のニュースに移るまでの間
+        const TOUR_KEY = 'cl_tour';
+        const tour = { toured: new Set(), queue: [], running: false, count: 0, timer: null, region: null, token: 0 };
+        const tourEnabled = () => { try { return localStorage.getItem(TOUR_KEY) !== '0'; } catch (_) { return true; } };
+        const chatStarted = () => !!document.getElementById('chatLeftPane')?.classList.contains('has-messages');
+
+        function tourBar() {
             const box = document.getElementById('sdgBriefing');
-            if (!box || !items.length) return;
-            const chatStarted = () => !!document.getElementById('chatLeftPane')?.classList.contains('has-messages');
-            if (chatStarted()) return;  // 既に会話中なら邪魔しない
-            const top = items.reduce((a, b) => (Number(b.anger_level || 0) > Number(a.anger_level || 0) ? b : a));
-            if (autoBriefed.has(top.link)) return;
-            autoBriefed.add(top.link);
+            let bar = box.querySelector('.tour-bar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.className = 'tour-bar';
+                bar.innerHTML = '<span class="tour-status"></span><button type="button" class="tour-toggle"></button>';
+                box.prepend(bar);
+                bar.querySelector('.tour-toggle').addEventListener('click', () => {
+                    const on = !tourEnabled();
+                    try { localStorage.setItem(TOUR_KEY, on ? '1' : '0'); } catch (_) {}
+                    if (on) { tour.count = 0; tour.token++; tour.running = false; tourNext(); }
+                    else { stopTour('止めました。再開するには「巡回を再開」を押してください。'); }
+                });
+            }
+            return bar;
+        }
+
+        function setTourStatus(text) {
+            const bar = tourBar();
+            bar.querySelector('.tour-status').textContent = text;
+            bar.querySelector('.tour-toggle').textContent = tourEnabled() ? '⏸ 巡回を止める' : '▶ 巡回を再開';
+        }
+
+        function stopTour(message) {
+            clearTimeout(tour.timer);
+            tour.token++;  // 進行中の検討・読み上げの「次へ」を無効にする
+            tour.running = false;
+            document.querySelectorAll('#sdgBriefing audio').forEach(a => { try { a.pause(); } catch (_) {} });
+            if (message) setTourStatus(`🔁 ${message}`);
+        }
+
+        // ticker（ニュース×エージェント）を、ニュースごとに最も怒りの強い1件へまとめる
+        function tourCandidates(items) {
+            const byLink = new Map();
+            items.forEach(it => {
+                const cur = byLink.get(it.link);
+                if (!cur || Number(it.anger_level || 0) > Number(cur.anger_level || 0)) byLink.set(it.link, it);
+            });
+            return [...byLink.values()].sort((a, b) => Number(b.anger_level || 0) - Number(a.anger_level || 0));
+        }
+
+        async function tourNext() {
+            if (tour.running || !tourEnabled() || chatStarted()) return;
+            const item = tour.queue.find(it => !tour.toured.has(it.link));
+            if (!item || tour.count >= TOUR_MAX) {
+                setTourStatus(tour.count ? `🔁 ${tour.count}件を巡回しました。新しい怒りのニュースが見つかったら、自動で続けます。` : '🔁 巡回するニュースを待っています…');
+                return;
+            }
+            tour.running = true;
+            tour.toured.add(item.link);
+            tour.count++;
+            const token = ++tour.token;
+            const live = () => token === tour.token && tourEnabled() && !chatStarted();
+            const box = document.getElementById('sdgBriefing');
             box.classList.remove('hidden');
+            // 前のニュースは畳んで、これまでに巡回した履歴として残す
+            box.querySelectorAll('.tour-item').forEach(d => { d.open = false; });
+            const wrap = document.createElement('details');
+            wrap.className = 'tour-item';
+            wrap.open = true;
+            wrap.innerHTML = `<summary class="tour-item-title">📰 ${tour.count}件目: ${escapeHtml(item.title)}</summary><div class="tour-item-body"></div>`;
+            box.appendChild(wrap);
+            setTourStatus(`🔁 自動巡回中（${tour.count}/${TOUR_MAX}件目）`);
+            const advance = (why) => {
+                if (!live()) return;
+                tour.running = false;
+                const more = tour.queue.some(it => !tour.toured.has(it.link)) && tour.count < TOUR_MAX;
+                if (!more) { tourNext(); return; }
+                let left = Math.round(TOUR_PAUSE_MS / 1000);
+                const tick = () => {
+                    if (!live()) return;
+                    if (left <= 0) { tourNext(); return; }
+                    setTourStatus(`➡ ${why} ${left}秒後に、次のニュースへ進みます`);
+                    left--;
+                    tour.timer = setTimeout(tick, 1000);
+                };
+                tick();
+            };
             try {
-                await runDeliberation(box, top, region, { abortIf: chatStarted, globalStage: true });
+                await runDeliberation(wrap.querySelector('.tour-item-body'), item, tour.region, {
+                    abortIf: chatStarted, globalStage: true,
+                    onAudioEnded: () => advance('読み上げが終わりました。'),
+                    onVoiceUnavailable: () => advance('音声は利用できませんでした。'),
+                });
+                if (live()) setTourStatus(`🔁 読み上げ中（${tour.count}/${TOUR_MAX}件目）。終わると自動で次へ進みます`);
+                // ブラウザに自動再生を止められたときは、再生すれば巡回が続くことを知らせる
+                const audio = wrap.querySelector('audio');
+                setTimeout(() => {
+                    if (live() && audio && audio.paused && !audio.ended && tour.running) setTourStatus('▶ 再生ボタンを押すと、読み上げのあと自動で次のニュースへ進みます');
+                }, 3000);
             } catch (err) {
-                autoBriefed.delete(top.link);
-                box.classList.add('hidden');
-                console.warn('自律ブリーフィングに失敗:', err.message);
+                console.warn('自動巡回の検討に失敗:', err.message);
+                tour.toured.add(item.link);
+                wrap.remove();
+                tour.running = false;
+                if (live()) tour.timer = setTimeout(tourNext, 1500);
+            }
+        }
+
+        // tickerのニュースを受け取る。止まっていれば、新しい怒りのニュースがあるとき自動で再開する
+        function autoBriefing(items, region) {
+            const box = document.getElementById('sdgBriefing');
+            if (!box || !items.length || chatStarted()) return;
+            tour.region = region;
+            const fresh = tourCandidates(items).filter(it => !tour.toured.has(it.link));
+            tour.queue = tourCandidates(items);
+            box.classList.remove('hidden');
+            if (!tourEnabled()) { setTourStatus('🔁 自動巡回は止めています。'); return; }
+            if (!tour.running && fresh.length) {
+                if (tour.count >= TOUR_MAX) tour.count = TOUR_MAX - 1;  // 新しいニュースが見つかったら、もう1件だけ続ける
+                tourNext();
+            } else if (!tour.running) {
+                tourNext();
             }
         }
 
@@ -4083,6 +4194,9 @@
             history.replaceState(null, '', location.pathname);
             setTimeout(() => analyzeNewsItemInChat({ title: q.get('watch_title') || '通知されたニュース', link, summary: '' }), 1500);
         })();
+
+        // 開いている間も、新しい怒りのニュースを探し続ける（10分おき。見つかれば自動巡回が続きを始める）
+        setInterval(() => { if (!document.hidden && !chatStarted()) loadAngerPrompts(true); }, 10 * 60 * 1000);
 
         const NEWS_REACTION_EMOJI = { heart: '❤️', angry: '😡', shock: '😳' };
 
@@ -4362,7 +4476,11 @@
                     loadPanel({ play: true });
                 }
             });
-            if (options.prefetchVoice) loadPanel({ play: !!options.autoPlay });
+            // 読み上げが終わったら、呼び出し側（自動巡回）が次の作業に進める
+            if (options.onAudioEnded) panelAudio.addEventListener('ended', options.onAudioEnded);
+            if (options.prefetchVoice) {
+                loadPanel({ play: !!options.autoPlay }).then(() => { if (!panelReady && options.onVoiceUnavailable) options.onVoiceUnavailable(); });
+            }
             bubble.querySelectorAll('.news-proposal-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = Number(btn.closest('[data-proposal]').dataset.proposal);
@@ -4406,6 +4524,7 @@
         // ニュース1件について、登場したSDGsエージェントの声をまとめ、開示請求の対象を提案して
         // チャットのやり取りとして表示する
         async function analyzeNewsItemInChat(item) {
+            stopTour();  // ユーザーが自分で動き始めたら、自動巡回は止めて読み上げも止める
             addChatBubble('user', `📰 「${item.title}」のニュースについて、怒りのエージェントたちの声をまとめて、開示請求すべき対象を提案して`);
             const assistantBubble = addChatBubble('assistant', '🔄 エージェントたちが記事を読み始めます…');
 
