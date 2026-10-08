@@ -97,3 +97,28 @@ def test_voice_archive_audio_is_chunked_in_firestore_and_publish_flow(monkeypatc
     assert voice_archive.get(entry["archive_id"])["status"] == voice_archive.PRIVATE
     voice_archive.publish(entry["archive_id"], confirmed=True)
     assert entry["archive_id"] in [e["archive_id"] for e in voice_archive.list_published()]
+
+
+def test_voice_archive_delete_removes_record_and_all_audio_chunks_in_firestore():
+    import voice_archive
+
+    aid = "fs-del-" + uuid.uuid4().hex[:10]
+    audio = os.urandom(1_800_000)  # 3チャンクに分割される
+    entry = {
+        "archive_id": aid, "news_id": "n", "source_news": {}, "script": [{"speaker": "s", "text": "t"}],
+        "audio_ref": voice_archive._store_audio(aid, audio, "opus"), "audio_codec": "opus",
+        "generated_at": "2026-10-08T00:00:00+00:00", "status": voice_archive.PRIVATE, "published_at": None,
+    }
+    voice_archive._put(entry)
+    assert voice_archive.audio_exists(entry) and voice_archive._read_stored(entry) == audio
+
+    voice_archive.delete(aid)
+    assert voice_archive.get(aid) is None
+    assert not voice_archive.audio_exists(entry) and voice_archive._read_stored(entry) is None  # チャンクも全て消えた
+
+    # 公開中は削除できない
+    entry2 = {**entry, "archive_id": aid + "p", "audio_ref": voice_archive._store_audio(aid + "p", b"x" * 10, "opus"), "status": voice_archive.PUBLISHED}
+    voice_archive._put(entry2)
+    with pytest.raises(voice_archive.StillPublished):
+        voice_archive.delete(entry2["archive_id"])
+    assert voice_archive.get(entry2["archive_id"]) is not None

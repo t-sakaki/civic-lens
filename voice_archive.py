@@ -43,6 +43,10 @@ class NotConfirmed(ValueError):
     """運営者が内容を確認した旨（confirmed）が無いまま公開しようとした"""
 
 
+class StillPublished(ValueError):
+    """公開中の記録は削除できない（先に非公開に戻す）"""
+
+
 class AudioMissing(ValueError):
     """音声ファイルが見つからない記録は公開できない（公開ページが壊れる）"""
 
@@ -166,6 +170,33 @@ def _read_stored(entry: dict[str, Any]) -> Optional[bytes]:
     return None
 
 
+def audio_exists(entry: dict[str, Any]) -> bool:
+    """音声が読み出せる状態か。承認画面の一覧用に、本体を読まず存在だけを調べる（Firestoreはseqだけ取得）"""
+    ref = entry.get("audio_ref", "")
+    if ref.startswith("firestore:"):
+        from firebase_client import get_firestore_client
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        q = get_firestore_client().collection(AUDIO_COLLECTION).where(filter=FieldFilter("archive_id", "==", ref[len("firestore:"):]))
+        return any(True for _ in q.select(["seq"]).limit(1).stream())
+    if ref.startswith("local:"):
+        return (_DIR / ref[6:]).exists()
+    return False
+
+
+def _delete_audio(entry: dict[str, Any]) -> None:
+    ref = entry.get("audio_ref", "")
+    if ref.startswith("firestore:"):
+        from firebase_client import get_firestore_client
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        db = get_firestore_client()
+        for d in db.collection(AUDIO_COLLECTION).where(filter=FieldFilter("archive_id", "==", ref[len("firestore:"):])).select(["seq"]).stream():
+            d.reference.delete()
+    elif ref.startswith("local:"):
+        (_DIR / ref[6:]).unlink(missing_ok=True)
+
+
 def read_audio(entry: dict[str, Any], fmt: Optional[str] = None) -> Optional[tuple[bytes, str, str]]:
     """保存した音声を (バイト列, MIME, 拡張子) で返す。fmt="wav" なら、Opusを再生できない端末向けにWAVへ戻す"""
     audio = _read_stored(entry)
@@ -249,6 +280,26 @@ def unpublish(aid: str) -> dict[str, Any]:
         entry = {**entry, "status": PRIVATE, "published_at": None}
         _put(entry)
         return entry
+
+
+def delete(aid: str) -> None:
+    """記録と音声を完全に削除する（元に戻せない）。公開中のものは、先に非公開に戻す必要がある"""
+    with _LOCK:
+        entry = get(aid)
+        if entry is None:
+            raise KeyError(aid)
+        if entry.get("status") == PUBLISHED:
+            raise StillPublished("公開中の記録は削除できません。先に「非公開に戻す」を押してください")
+        _delete_audio(entry)
+        if use_firestore():
+            from firebase_client import get_firestore_client
+
+            get_firestore_client().collection(COLLECTION).document(aid).delete()
+        else:
+            data = _load_index()
+            data.pop(aid, None)
+            _DIR.mkdir(parents=True, exist_ok=True)
+            _index_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def list_published(limit: int = 50) -> list[dict[str, Any]]:

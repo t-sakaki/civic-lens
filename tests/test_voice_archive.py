@@ -198,3 +198,38 @@ def test_missing_audio_blocks_publish_and_is_repaired_by_regenerating():
     assert len(voice_archive.list_all()) == 1
     assert voice_archive.get(aid)["generated_at"] == entry["generated_at"]  # 記録の日時は変わらない
     assert client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"}).status_code == 200
+
+
+def test_admin_can_delete_record_and_audio_but_not_while_published():
+    aid = _generate().headers["X-Voice-Archive-Id"]
+    entry = voice_archive.get(aid)
+    audio_file = voice_archive._DIR / entry["audio_ref"].removeprefix("local:")
+    assert audio_file.exists()
+
+    # 認証が必要
+    assert client.delete(f"/api/voice-archive/admin/{aid}").status_code == 401
+    assert client.delete(f"/api/voice-archive/admin/{aid}", headers={"X-Admin-Token": "wrong"}).status_code == 401
+    assert voice_archive.get(aid) is not None
+
+    # 公開中は削除できない
+    client.post(f"/api/voice-archive/admin/{aid}/publish", headers=ADMIN, data={"confirmed": "true"})
+    assert client.delete(f"/api/voice-archive/admin/{aid}", headers=ADMIN).status_code == 409
+    assert voice_archive.get(aid) is not None and audio_file.exists()
+
+    # 非公開に戻せば削除でき、記録も音声も消える
+    client.post(f"/api/voice-archive/admin/{aid}/unpublish", headers=ADMIN)
+    assert client.delete(f"/api/voice-archive/admin/{aid}", headers=ADMIN).json() == {"archive_id": aid, "deleted": True}
+    assert voice_archive.get(aid) is None and not audio_file.exists()
+    assert client.get("/api/voice-archive/admin/list", headers=ADMIN).json()["items"] == []
+    assert client.delete(f"/api/voice-archive/admin/{aid}", headers=ADMIN).status_code == 404
+
+
+def test_admin_list_flags_records_whose_audio_is_lost():
+    ok = _generate("keep").headers["X-Voice-Archive-Id"]
+    lost = _generate("lost").headers["X-Voice-Archive-Id"]
+    (voice_archive._DIR / voice_archive.get(lost)["audio_ref"].removeprefix("local:")).unlink()
+    items = {i["archive_id"]: i for i in client.get("/api/voice-archive/admin/list", headers=ADMIN).json()["items"]}
+    assert items[ok]["audio_available"] is True and items[lost]["audio_available"] is False
+    # 音声が失われた記録は削除できる（公開は拒否される）
+    assert client.post(f"/api/voice-archive/admin/{lost}/publish", headers=ADMIN, data={"confirmed": "true"}).status_code == 409
+    assert client.delete(f"/api/voice-archive/admin/{lost}", headers=ADMIN).status_code == 200

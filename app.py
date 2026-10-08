@@ -1018,7 +1018,9 @@ async def voices_feed(request: Request):
 @app.get("/api/voice-archive/admin/list")
 async def api_voice_archive_admin_list(x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
     _require_archive_admin(x_admin_token)
-    return {"items": [{**voice_archive.public_view(e), "status": e.get("status")} for e in voice_archive.list_all()]}
+    entries = voice_archive.list_all()
+    exists = await asyncio.gather(*[asyncio.to_thread(voice_archive.audio_exists, e) for e in entries])
+    return {"items": [{**voice_archive.public_view(e), "status": e.get("status"), "audio_available": ok} for e, ok in zip(entries, exists)]}
 
 
 @app.post("/api/voice-archive/admin/{archive_id}/publish")
@@ -1040,6 +1042,19 @@ async def api_voice_archive_publish(
     except voice_archive.GuardrailViolation as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {"archive_id": archive_id, "status": entry["status"], "published_at": entry["published_at"]}
+
+
+@app.delete("/api/voice-archive/admin/{archive_id}")
+async def api_voice_archive_delete(archive_id: str, x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+    """記録と音声を完全に削除する（元に戻せない）。公開中のものは先に非公開に戻す"""
+    _require_archive_admin(x_admin_token)
+    try:
+        await asyncio.to_thread(voice_archive.delete, archive_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    except voice_archive.StillPublished as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"archive_id": archive_id, "deleted": True}
 
 
 @app.post("/api/voice-archive/admin/{archive_id}/unpublish")
