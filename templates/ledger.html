@@ -66,39 +66,62 @@
         <div id="ledgerList" class="space-y-5"></div>
 
         <section class="cl-card rounded-lg p-5 mt-8" id="extensionSection">
-            <h2 class="font-bold mb-1 flex items-center gap-2">📅 延長決定を記録する</h2>
+            <h2 class="font-bold mb-1 flex items-center gap-2">📅 延長・期限の特例の通知を記録する</h2>
             <p class="text-xs text-gray-400 mb-3 leading-relaxed">
-                行政機関から決定期間の延長通知が届いたとき、その<strong>日付と理由の要約</strong>をオンチェーンに記録します。
-                通知書の全文は載せず、ハッシュだけを記録します。<strong>請求者・職員の氏名や連絡先は書かないでください</strong>（記録は削除できません）。
-                署名は<strong>あなた自身のウォレット</strong>で行い、Civic Lens は代理署名しません。理由の要約は通知書の記載の転記にとどめてください。
+                行政機関から決定期間の延長や期限の特例の通知書が届いたとき、その<strong>実施機関・文書番号・日付と、通知書に書かれた理由の原文</strong>をオンチェーンに記録します。
+                通知書の全文は載せず、ハッシュだけを記録します（ファイルはこの端末内でハッシュ化し、送信しません）。
+                <strong>請求者・職員の氏名や連絡先は記録しません</strong>（記録は削除できません）。
+                理由は正確さのため<strong>通知書の文言をそのまま</strong>転記し、要約・言い換えはしないでください。長すぎる場合や個人情報を含む場合は、省略せず理由欄を空にして、通知書ハッシュだけを記録できます。
             </p>
+            <p class="text-xs mb-3 leading-relaxed" id="extSignerHint" style="color: var(--cl-amber)"></p>
             <form id="extForm" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div class="sm:col-span-2">
-                    <label class="block text-xs text-gray-400 mb-1">対象の開示請求 attestation UID（上の「延長決定を記録する」で自動入力）</label>
+                    <label class="block text-xs text-gray-400 mb-1">対象の開示請求 attestation UID（上の「通知を記録する」で自動入力）</label>
                     <input type="text" id="extRefUid" placeholder="0x..." class="w-full rounded px-2.5 py-1.5 font-mono text-xs" required>
                 </div>
                 <div>
                     <label class="block text-xs text-gray-400 mb-1">種別</label>
-                    <select id="extKind" class="w-full rounded px-2.5 py-1.5"><option>期間延長</option><option>特例延長</option></select>
+                    <select id="extKind" class="w-full rounded px-2.5 py-1.5"><option>期間の延長</option><option>期限の特例</option></select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-400 mb-1">延長決定の日</label>
+                    <label class="block text-xs text-gray-400 mb-1">実施機関（通知書の差出人）</label>
+                    <input type="text" id="extAuthority" placeholder="愛知県知事" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">文書番号（任意）</label>
+                    <input type="text" id="extNoticeNumber" placeholder="例：8子支第1599号" class="w-full rounded px-2.5 py-1.5">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">根拠条例・条項</label>
+                    <input type="text" id="extLegalBasis" placeholder="例：愛知県情報公開条例第13条" class="w-full rounded px-2.5 py-1.5">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">開示請求の日（通知書の記載）</label>
+                    <input type="date" id="extRequestDate" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">通知の日</label>
                     <input type="date" id="extDecisionDate" class="w-full rounded px-2.5 py-1.5" required>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1">延長後の決定期限（通知書の記載）</label>
-                    <input type="date" id="extNewDeadline" class="w-full rounded px-2.5 py-1.5" required>
+                <div id="extFirstWrap" class="hidden">
+                    <label class="block text-xs text-gray-400 mb-1">相当部分の決定期限（特例：先に決定する期限）</label>
+                    <input type="date" id="extFirstDeadline" class="w-full rounded px-2.5 py-1.5">
                 </div>
                 <div>
+                    <label class="block text-xs text-gray-400 mb-1" id="extFinalLabel">延長後の決定期限</label>
+                    <input type="date" id="extFinalDeadline" class="w-full rounded px-2.5 py-1.5" required>
+                </div>
+                <div class="sm:col-span-2">
                     <label class="block text-xs text-gray-400 mb-1">通知書の全文（ハッシュ計算のみ・どこにも送信されません）</label>
                     <input type="file" id="extNoticeFile" accept=".txt,.pdf,.png,.jpg,.jpeg,application/pdf,text/plain,image/*" class="text-xs" required>
                 </div>
                 <div class="sm:col-span-2">
-                    <label class="block text-xs text-gray-400 mb-1">通知書記載の延長理由（要約・個人情報を含めない）</label>
-                    <textarea id="extReason" rows="3" class="w-full rounded px-2.5 py-1.5 text-sm" placeholder="例：対象文書が大量で、検索・内容確認に日数を要するため"></textarea>
+                    <label class="block text-xs text-gray-400 mb-1">通知書に記載された理由（原文のまま・任意）</label>
+                    <textarea id="extReason" rows="3" class="w-full rounded px-2.5 py-1.5 text-sm" placeholder="通知書の「理由」欄の文言をそのまま貼り付け"></textarea>
                 </div>
-                <div class="sm:col-span-2">
-                    <button type="submit" class="cl-btn rounded px-4 py-2">📅 自分のウォレットで署名して記録する</button>
+                <div class="sm:col-span-2 flex flex-wrap gap-2">
+                    <button type="submit" id="extWalletBtn" class="cl-btn rounded px-4 py-2">🦊 自分のウォレットで署名して記録する</button>
+                    <button type="button" id="extServerBtn" class="cl-btn rounded px-4 py-2">🏛️ Civic Lens の代理署名で記録する（請求者本人のみ・要ログイン）</button>
                 </div>
             </form>
             <div id="extResult" class="text-xs mt-2 leading-relaxed"></div>
@@ -198,26 +221,46 @@
 
         function extensionsHtml(e) {
             const list = e.extensions || [];
-            const items = list.map(x => `
+            const badge = (x) => x.by_requester === true
+                ? (x.signed_via === 'official'
+                    ? '<span class="cl-badge-teal rounded-full px-2 py-0.5">Civic Lens 代理署名（請求者本人のログインを確認済み）</span>'
+                    : '<span class="cl-badge-teal rounded-full px-2 py-0.5">請求者本人のウォレット署名</span>')
+                : x.by_requester === false
+                    ? '<span class="rounded-full px-2 py-0.5 text-red-300" style="border:1px solid currentColor">第三者の記録（請求者本人のものではありません）</span>'
+                    : '<span class="cl-badge rounded-full px-2 py-0.5">記録者の照合不可</span>';
+            const amber = (t) => `<p class="mt-1" style="color: var(--cl-amber)">${t}</p>`;
+            const items = list.map(x => {
+                const special = x.kind === '期限の特例';
+                const deadlines = special
+                    ? `相当部分の決定期限 <strong>${formatDate(x.first_deadline)}</strong> ／ 残りの決定期限 <strong>${formatDate(x.final_deadline)}</strong>`
+                    : `延長後の決定期限 <strong>${formatDate(x.final_deadline)}</strong>`;
+                const inaction = special
+                    ? `期限を過ぎても決定がない場合に不作為の審査請求を検討できるのは、相当部分は ${formatDate(x.inaction_review_from.first)} 以降、残りは ${formatDate(x.inaction_review_from.final)} 以降が目安です（特例の場合の扱いは見解が分かれうるため、確認が必要です）。`
+                    : `期限を過ぎても決定がない場合に不作為の審査請求を検討できるのは ${formatDate(x.inaction_review_from.final)} 以降の目安です。`;
+                return `
                 <div class="rounded-md p-3 text-xs leading-relaxed" style="border:1px solid rgba(255,255,255,.12)">
                     <div class="flex flex-wrap items-center gap-2 mb-1">
                         <span class="cl-badge rounded-full px-2 py-0.5 font-semibold">${escapeHtml(x.kind)}</span>
-                        <span class="text-gray-300">決定日 ${formatDate(x.decision_date)} ／ 延長後の期限 <strong>${formatDate(x.new_deadline)}</strong></span>
-                        ${x.by_requester === true ? '<span class="cl-badge-teal rounded-full px-2 py-0.5">請求者本人の記録</span>'
-                          : x.by_requester === false ? '<span class="rounded-full px-2 py-0.5 text-red-300" style="border:1px solid currentColor">第三者の記録（請求者本人のものではありません）</span>'
-                          : '<span class="cl-badge rounded-full px-2 py-0.5">記録者の照合不可</span>'}
+                        ${badge(x)}
                     </div>
-                    <p class="whitespace-pre-wrap">通知書記載の理由（要約）：${escapeHtml(x.reason_summary || '（記載なし）')}</p>
-                    ${x.exceeds_ordinance_limit && e.deadline ? `<p class="mt-1" style="color: var(--cl-amber)">条例上の延長上限（目安 ${formatDate(e.deadline.extended_deadline)}）を超える日付が記録されています。通知書の記載（特例延長の有無など）をご確認ください。</p>` : ''}
-                    <p class="mt-1 text-gray-400">期限を過ぎても決定がない場合、審査請求（不作為）を検討できるのは ${formatDate(x.inaction_review_from)} 以降の目安です。
+                    <p class="text-gray-300">${escapeHtml(x.authority)}${x.notice_number ? ' ／ 文書番号 ' + escapeHtml(x.notice_number) : ''} ／ 通知の日 ${formatDate(x.decision_date)} ／ ${escapeHtml(x.legal_basis)}</p>
+                    <p class="text-gray-300">開示請求の日（通知書記載）${formatDate(x.request_date)} ／ ${deadlines}</p>
+                    <p class="whitespace-pre-wrap mt-1">通知書記載の理由（原文）：${escapeHtml(x.reason || '（記録なし。通知書ハッシュのみ）')}</p>
+                    ${x.authority_matches ? '' : amber('通知書の実施機関が、この請求の記録の実施機関と一致していません。')}
+                    ${x.request_date_differs_from_recorded ? amber(`通知書記載の請求日（${formatDate(x.request_date)}）は、台帳の記録日（${escapeHtml(e.recorded_at_display)}）と異なります。期限は通知書記載の請求日を起点に確認してください。`) : ''}
+                    ${x.exceeds_ordinance_limit && e.deadline ? amber('条例上の延長上限の目安を超える日付が記録されています。通知書の記載（特例の適用など）をご確認ください。') : ''}
+                    <p class="mt-1 text-gray-400">${inaction}
                         <a class="cl-link" href="${escapeHtml(x.explorer_url)}" target="_blank" rel="noopener noreferrer">記録を見る ↗</a></p>
                     <p class="font-mono break-all text-gray-500">通知書ハッシュ: ${escapeHtml(x.notice_hash)}</p>
-                </div>`).join('');
+                </div>`;
+            }).join('');
             return `
                 <div class="border-t border-white/10 pt-3 space-y-2">
-                    <div class="text-xs text-gray-400">延長決定（行政機関の対応）</div>
-                    ${items || '<p class="text-xs text-gray-500">記録された延長決定はありません。</p>'}
-                    <button type="button" class="cl-btn-ghost text-xs rounded-full px-3 py-1.5" data-ext-target="${escapeHtml(e.uid)}">📅 延長決定を記録する</button>
+                    <div class="text-xs text-gray-400">延長・期限の特例（行政機関の通知）</div>
+                    ${items || '<p class="text-xs text-gray-500">記録された通知はありません。</p>'}
+                    <button type="button" class="cl-btn-ghost text-xs rounded-full px-3 py-1.5"
+                        data-ext-target="${escapeHtml(e.uid)}" data-ext-signer="${escapeHtml(e.signer_type)}"
+                        data-ext-authority="${escapeHtml(e.authority)}" data-ext-basis="${escapeHtml(e.legal_basis)}">📅 通知を記録する</button>
                 </div>`;
         }
 
@@ -359,7 +402,11 @@
 
             const extTargetBtn = ev.target.closest('[data-ext-target]');
             if (extTargetBtn) {
-                document.getElementById('extRefUid').value = extTargetBtn.dataset.extTarget;
+                const d = extTargetBtn.dataset;
+                document.getElementById('extRefUid').value = d.extTarget;
+                document.getElementById('extAuthority').value = d.extAuthority || '';
+                document.getElementById('extLegalBasis').value = d.extBasis || '';
+                setExtSigner(d.extSigner);
                 document.getElementById('extensionSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
@@ -488,49 +535,117 @@
             return `<a class="cl-link" href="${intent}" target="_blank" rel="noopener noreferrer">🔥 この応援をSNSでシェアして紹介リンクを広める ↗</a>`;
         }
 
-        // 延長決定の記録 — 署名は常に請求者本人のウォレット。通知書の全文はハッシュだけを記録する。
+        // 延長・期限の特例の通知の記録。通知書の全文は送らず、ハッシュだけを記録する。
+        // 署名は (1) 請求者本人のウォレット、または (2) 請求が Civic Lens の代理署名で記録されたものに限り、
+        // 請求の発行者本人（ログイン中）を確認したうえでの Civic Lens の代理署名。
         let extConfig = null;
-        function jstMidnightUnix(dateStr) { return Math.floor(new Date(dateStr + 'T00:00:00+09:00').getTime() / 1000); }
+        function jstMidnightUnix(dateStr) { return dateStr ? Math.floor(new Date(dateStr + 'T00:00:00+09:00').getTime() / 1000) : 0; }
+
+        function setExtSigner(signer) {
+            const hint = document.getElementById('extSignerHint');
+            const walletBtn = document.getElementById('extWalletBtn');
+            const serverBtn = document.getElementById('extServerBtn');
+            walletBtn.classList.toggle('hidden', signer === 'official');
+            serverBtn.classList.toggle('hidden', signer === 'wallet');
+            hint.textContent = signer === 'official'
+                ? 'この請求は Civic Lens の代理署名で記録されています。請求者本人（請求を発行したログイン中のユーザー）だけが、代理署名で記録できます。'
+                : signer === 'wallet'
+                    ? 'この請求は本人のウォレットで署名されています。同じウォレットで署名してください（別のウォレットの記録は「第三者の記録」と表示されます）。'
+                    : '';
+        }
+        document.getElementById('extKind').addEventListener('change', (ev) => {
+            const special = ev.target.value === '期限の特例';
+            document.getElementById('extFirstWrap').classList.toggle('hidden', !special);
+            document.getElementById('extFirstDeadline').required = special;
+            document.getElementById('extFinalLabel').textContent = special ? '残りの決定期限（特例：残りを決定する期限）' : '延長後の決定期限';
+        });
+
+        async function readExtForm() {
+            const v = (id) => document.getElementById(id).value.trim();
+            const kind = v('extKind');
+            const f = {
+                refUid: v('extRefUid'), kind, authority: v('extAuthority'), noticeNumber: v('extNoticeNumber'),
+                legalBasis: v('extLegalBasis'), requestDate: v('extRequestDate'), decisionDate: v('extDecisionDate'),
+                firstDeadline: kind === '期限の特例' ? v('extFirstDeadline') : '', finalDeadline: v('extFinalDeadline'),
+                reason: v('extReason'),
+            };
+            if (f.decisionDate < f.requestDate || f.finalDeadline < f.decisionDate) throw new Error('日付の前後関係が不正です（開示請求の日 ≦ 通知の日 ≦ 決定期限）');
+            if (f.firstDeadline && (f.firstDeadline < f.decisionDate || f.firstDeadline > f.finalDeadline)) throw new Error('相当部分の決定期限は、通知の日から決定期限の間にしてください');
+            if (kind === '期限の特例' && !f.firstDeadline) throw new Error('期限の特例では、相当部分の決定期限を入力してください');
+            if (!extConfig) {
+                const res = await fetch('/api/ledger/extensions/config');
+                if (!res.ok) throw new Error((await res.json()).detail || '設定の取得に失敗しました');
+                extConfig = await res.json();
+            }
+            if (new TextEncoder().encode(f.reason).length > extConfig.max_reason_bytes) throw new Error('理由が長すぎます。一部を省くと原文と異なってしまうため、理由欄は空にして通知書ハッシュだけを記録してください');
+            const file = document.getElementById('extNoticeFile').files[0];
+            f.noticeHash = ethers.sha256(new Uint8Array(await file.arrayBuffer()));
+            return f;
+        }
+
+        // 個人情報らしき記述の確認（記録は削除できないため）。続行するなら true
+        function confirmPii(warnings) {
+            if (!warnings.length) return true;
+            const list = warnings.map(w => `${w.type}: ${w.match}`).join('\n');
+            return confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。理由を書き換えると原文と異なってしまうため、個人情報を含む場合は理由欄を空にして通知書ハッシュだけを記録することをお勧めします。このまま記録しますか？`);
+        }
+        const EXT_FINAL_CONFIRM = '記録は削除できません。通知書の全文は載せず、実施機関・文書番号・日付・理由の原文・ハッシュだけを公開します。よろしいですか？';
 
         document.getElementById('extForm').addEventListener('submit', async (ev) => {
             ev.preventDefault();
             const out = document.getElementById('extResult');
-            const btn = ev.target.querySelector('button[type="submit"]');
+            const btn = document.getElementById('extWalletBtn');
             btn.disabled = true;
             try {
                 if (!signer) throw new Error('先にウォレットを接続してください');
-                if (!extConfig) {
-                    const res = await fetch('/api/ledger/extensions/config');
-                    if (!res.ok) throw new Error((await res.json()).detail || '延長決定の設定取得に失敗しました');
-                    extConfig = await res.json();
-                }
-                const refUid = document.getElementById('extRefUid').value.trim();
-                const reason = document.getElementById('extReason').value.trim();
-                const decision = jstMidnightUnix(document.getElementById('extDecisionDate').value);
-                const newDeadline = jstMidnightUnix(document.getElementById('extNewDeadline').value);
-                if (newDeadline < decision) throw new Error('延長後の期限が延長決定の日より前になっています');
-                if (new TextEncoder().encode(reason).length > extConfig.max_reason_summary_bytes) throw new Error('理由の要約が長すぎます（約200文字まで）');
-
-                // 公開前に個人情報らしき記述を確認する（記録は削除できないため）
-                const scan = await (await fetch('/api/web3/attestation/scan-pii', { method: 'POST', body: new URLSearchParams({ text: reason }) })).json();
-                if (scan.warnings.length) {
-                    const list = scan.warnings.map(w => `${w.type}: ${w.match}`).join('\n');
-                    if (!confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。このまま記録しますか？`)) throw new Error('記録を中止しました');
-                }
-                if (!confirm('記録は削除できません。通知書の全文は載せず、日付・理由の要約・ハッシュだけを、あなたのウォレット署名で公開します。よろしいですか？')) throw new Error('記録を中止しました');
-
-                const file = document.getElementById('extNoticeFile').files[0];
-                const noticeHash = ethers.sha256(new Uint8Array(await file.arrayBuffer()));
+                const f = await readExtForm();
+                const scan = await (await fetch('/api/web3/attestation/scan-pii', { method: 'POST', body: new URLSearchParams({ text: f.reason + ' ' + f.noticeNumber }) })).json();
+                if (!confirmPii(scan.warnings)) throw new Error('記録を中止しました');
+                if (!confirm(EXT_FINAL_CONFIRM)) throw new Error('記録を中止しました');
                 const coder = ethers.AbiCoder.defaultAbiCoder();
-                const encoded = coder.encode(['string', 'uint256', 'uint256', 'string', 'bytes32'],
-                    [document.getElementById('extKind').value, decision, newDeadline, reason, noticeHash]);
-                out.textContent = '⏳ 延長決定の記録を署名してください...';
+                const encoded = coder.encode(
+                    ['string', 'string', 'string', 'uint256', 'uint256', 'uint256', 'uint256', 'string', 'string', 'bytes32'],
+                    [f.authority, f.noticeNumber, f.kind, jstMidnightUnix(f.requestDate), jstMidnightUnix(f.decisionDate),
+                     jstMidnightUnix(f.firstDeadline), jstMidnightUnix(f.finalDeadline), f.legalBasis, f.reason, f.noticeHash]);
+                out.textContent = '⏳ 記録を署名してください...';
                 const tx = await eas.attest({
                     schema: extConfig.extension_schema_uid,
-                    data: { recipient: ZERO_ADDRESS, expirationTime: 0, revocable: true, refUID: refUid, data: encoded, value: 0 },
+                    data: { recipient: ZERO_ADDRESS, expirationTime: 0, revocable: true, refUID: f.refUid, data: encoded, value: 0 },
                 });
                 const receipt = await tx.wait();
-                out.innerHTML = `✅ 延長決定を記録しました（あなたのウォレットで署名済み）<br>記録tx: <a class="cl-link" href="https://sepolia.basescan.org/tx/${receipt.hash}" target="_blank">${short(receipt.hash)} ↗</a>`;
+                out.innerHTML = `✅ 記録しました（あなたのウォレットで署名済み）<br>記録tx: <a class="cl-link" href="https://sepolia.basescan.org/tx/${receipt.hash}" target="_blank">${short(receipt.hash)} ↗</a>`;
+                loadLedger();
+            } catch (err) {
+                out.innerHTML = `<span class="text-red-300">エラー: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('extServerBtn').addEventListener('click', async () => {
+            const out = document.getElementById('extResult');
+            const btn = document.getElementById('extServerBtn');
+            btn.disabled = true;
+            try {
+                if (!document.getElementById('extForm').reportValidity()) return;
+                const f = await readExtForm();
+                const body = new URLSearchParams({
+                    authority: f.authority, notice_number: f.noticeNumber, kind: f.kind, request_date: f.requestDate,
+                    decision_date: f.decisionDate, first_deadline: f.firstDeadline, final_deadline: f.finalDeadline,
+                    legal_basis: f.legalBasis, reason: f.reason, notice_hash: f.noticeHash,
+                });
+                const post = () => fetch(`/api/ledger/${encodeURIComponent(f.refUid)}/extensions`, { method: 'POST', body, credentials: 'same-origin' });
+                out.textContent = '⏳ 記録しています...';
+                let res = await post();
+                if (res.status === 422) {
+                    const detail = (await res.json()).detail;
+                    if (!confirmPii(detail.personal_info_warnings || [])) throw new Error('記録を中止しました');
+                    body.set('acknowledge_warnings', 'true');
+                    res = await post();
+                }
+                const data = await res.json();
+                if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : (data.detail && data.detail.message) || '記録に失敗しました');
+                out.innerHTML = `✅ 記録しました（Civic Lens の代理署名・請求者本人のログインを確認済み）<br>記録tx: <a class="cl-link" href="${escapeHtml(data.tx_url)}" target="_blank">${short(data.tx_hash)} ↗</a>`;
                 loadLedger();
             } catch (err) {
                 out.innerHTML = `<span class="text-red-300">エラー: ${escapeHtml(err.message)}</span>`;

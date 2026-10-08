@@ -91,14 +91,17 @@ from web3_bounty import (
 from web3_chain_client import ChainClientNotConfigured
 from web3_attestation import (
     issue_attestation, get_attestation, verify_attestation, list_all_attestations,
-    register_wallet_attestation, scan_personal_info, PersonalInfoWarning, build_verification_kit,
+    register_wallet_attestation, scan_personal_info, PersonalInfoWarning, build_verification_kit, get_index_entry,
 )
 from onchain_ledger import fetch_ledger_entries, get_ledger_entry, ledger_meta, LedgerNotConfigured
 from ledger_reactions import (
     get_reactions, toggle_reaction, REACTION_TYPES as LEDGER_REACTION_TYPES,
     verify_wallet_signature, wallet_reactor_id,
 )
-from ledger_extensions import fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_SUMMARY_BYTES
+from ledger_extensions import (
+    fetch_extensions_by_request, extension_schema_uid, EXTENSION_KINDS, MAX_REASON_BYTES,
+    issue_extension, ExtensionInputError, ExtensionForbidden,
+)
 from ledger_tips import build_tip_leaderboard, trending_requests, tips_for_request, tip_schema_uid
 from community_feed import fetch_unified_feed, fetch_unified_stats
 from web3_ipfs import (
@@ -1787,8 +1790,70 @@ async def api_ledger_extensions_config():
         "extension_schema_uid": schema_uid,
         "network": meta["network"],
         "kinds": list(EXTENSION_KINDS),
-        "max_reason_summary_bytes": MAX_REASON_SUMMARY_BYTES,
+        "max_reason_bytes": MAX_REASON_BYTES,
     }
+
+
+@app.post("/api/ledger/{uid}/extensions")
+async def api_ledger_record_extension(
+    uid: str,
+    authority: str = Form(...),
+    notice_number: str = Form(""),
+    kind: str = Form(...),
+    request_date: str = Form(...),
+    decision_date: str = Form(...),
+    first_deadline: Optional[str] = Form(None),
+    final_deadline: str = Form(...),
+    legal_basis: str = Form(""),
+    reason: str = Form(""),
+    notice_hash: str = Form(...),
+    acknowledge_warnings: bool = Form(False),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Civic Lens の代理署名で、延長決定・期限の特例をオンチェーンに記録する。
+
+    請求が代理署名で記録されたもので、ログイン中のユーザーがその発行者本人の場合に限る。
+    通知書の全文は受け取らない（ハッシュだけ）。個人情報らしき記述があれば 422 で警告し、
+    本人が確認して acknowledge_warnings=true で再送した場合のみ記録する（記録は削除できない）。
+    """
+    if not current_user:
+        raise HTTPException(401, "代理署名で記録するにはログインが必要です")
+    try:
+        entry = get_ledger_entry(uid)
+        extension_schema_uid()  # 未設定なら LedgerNotConfigured（503）
+    except LedgerNotConfigured as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"オンチェーン台帳の読み込みに失敗しました: {e}")
+    if not entry:
+        raise HTTPException(404, "台帳にこの請求の記録がありません")
+
+    warnings = scan_personal_info(" ".join([reason, notice_number]))
+    if warnings and not acknowledge_warnings:
+        raise HTTPException(422, {"message": "個人情報の可能性がある記述が含まれています", "personal_info_warnings": warnings})
+    try:
+        return issue_extension(
+            request_uid=entry["uid"],
+            owner_user_id=current_user.user_id,
+            request_entry=entry,
+            index_entry=get_index_entry(entry["uid"]),
+            authority=authority.strip(),
+            notice_number=notice_number.strip(),
+            kind=kind,
+            request_date=request_date,
+            decision_date=decision_date,
+            first_deadline=first_deadline or None,
+            final_deadline=final_deadline,
+            legal_basis=legal_basis.strip() or entry["legal_basis"],
+            reason=reason.strip(),
+            notice_hash=notice_hash.strip(),
+        )
+    except ExtensionForbidden as e:
+        raise HTTPException(403, str(e))
+    except ExtensionInputError as e:
+        raise HTTPException(400, str(e))
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
 
 
 @app.post("/api/ledger/{uid}/react")
