@@ -1604,6 +1604,10 @@
         .briefing-step img { flex: none; margin-top: 0.1rem; }
         .briefing-auto { display: block; font-size: 0.72rem; color: var(--chat-muted); margin: 0.2rem 0 0.6rem; cursor: pointer; }
         .sdg-stage-btn.is-writing { opacity: 1; animation: sdgStageUp 0.9s ease-in-out infinite; outline: 2px solid #f59e0b; outline-offset: 1px; }
+        .sdg-mini-board { display: grid; grid-template-columns: repeat(17, 1fr); gap: 3px; margin: 0.3rem 0 0.6rem; max-width: 34rem; }
+        @media (max-width: 520px) { .sdg-mini-board { grid-template-columns: repeat(9, 1fr); } }
+        .sdg-mini { cursor: default; }
+        .sdg-mini.is-up::after { display: none; }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
         @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
@@ -3756,7 +3760,7 @@
         function showSdgStageItem(it) {
             const box = document.getElementById('sdgStageVoice');
             const n = sdgNumber(it.label);
-            document.querySelectorAll('.sdg-stage-btn').forEach(b => b.classList.toggle('is-selected', Number(b.dataset.sdg) === n));
+            document.querySelectorAll('#sdgStageGrid .sdg-stage-btn').forEach(b => b.classList.toggle('is-selected', Number(b.dataset.sdg) === n));
             const who = String(it.label || '').replace(/^目標(\d+)\s*/, 'SDG$1 ');
             box.innerHTML = `<span class="who">😡 ${escapeHtml(who)}のエージェント（AI）</span>${escapeHtml(it.remark)}<span class="src">📰 ${escapeHtml(it.title)}</span>`;
         }
@@ -3765,7 +3769,7 @@
             sdgStage.items = items;
             const byTheme = {};
             items.forEach(it => { byTheme[it.theme] = Math.max(byTheme[it.theme] || 0, Number(it.anger_level || 0)); });
-            document.querySelectorAll('.sdg-stage-btn').forEach(b => {
+            document.querySelectorAll('#sdgStageGrid .sdg-stage-btn').forEach(b => {
                 const lvl = byTheme[`sdg${b.dataset.sdg}`];
                 b.classList.toggle('is-up', !!lvl);
                 if (lvl) b.dataset.lvl = String(lvl); else delete b.dataset.lvl;
@@ -3792,24 +3796,32 @@
         const AUTO_READ_KEY = 'cl_auto_read';
         const getAutoRead = () => { try { return localStorage.getItem(AUTO_READ_KEY) !== '0'; } catch (_) { return true; } };
 
-        function markStageWriting(themes, on) {
+        // 声を書いている最中のSDGsアイコンを点滅させる（rootの中のボードだけを対象にする）
+        function markStageWriting(themes, on, root = document) {
             themes.forEach(t => {
                 const n = String(t).replace(/^sdg/, '');
-                document.querySelector(`.sdg-stage-btn[data-sdg="${n}"]`)?.classList.toggle('is-writing', on);
+                root.querySelectorAll(`${root === document ? '#sdgStageGrid ' : ''}.sdg-stage-btn[data-sdg="${n}"]`).forEach(el => el.classList.toggle('is-writing', on));
             });
         }
 
-        async function autoBriefing(items, region) {
-            const box = document.getElementById('sdgBriefing');
-            if (!box || !items.length) return;
-            if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) return;  // 既に会話中なら邪魔しない
-            const top = items.reduce((a, b) => (Number(b.anger_level || 0) > Number(a.anger_level || 0) ? b : a));
-            if (autoBriefed.has(top.link)) return;
-            autoBriefed.add(top.link);
-            box.classList.remove('hidden');
+        // 会話の中にも出す、小さなSDGsボード（ウェルカムのステージは会話が始まると隠れるため）
+        function miniBoardHtml() {
+            let h = '<div class="sdg-mini-board" aria-label="ニュースに怒るAIエージェント17体">';
+            for (let n = 1; n <= 17; n++) {
+                h += `<span class="sdg-stage-btn sdg-mini" data-sdg="${n}"><img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" loading="lazy"></span>`;
+            }
+            return h + '</div>';
+        }
+
+        // エージェントたちの検討（最初の画面の自律ブリーフィングと、会話でニュースを選んだときの両方で使う）。
+        // 記事を読む → 名乗り出る → 各エージェントが非同期に声を挙げる（書き終えた順）→ 統合エージェントが
+        // 開示請求する対象の行政文書をまとめる → 読み上げ、の過程を時系列で見せる。成功すると record を返す。
+        // 分析・音声の準備までは自律で行うが、提案を選ぶ・請求書を出す・SNSに投稿する判断は本人に残す。
+        async function runDeliberation(box, item, region, { board = false, abortIf = null, globalStage = false } = {}) {
             box.innerHTML = `
                 <div class="briefing-head">🤖 エージェントたちが検討しています（開示請求するかは、あなたが決めます）</div>
-                <div class="text-xs mb-2">📰 ${escapeHtml(top.title)}</div>
+                ${board ? miniBoardHtml() : ''}
+                <div class="text-xs mb-2">📰 ${escapeHtml(item.title)}</div>
                 <details class="briefing-log-wrap" open>
                     <summary class="briefing-log-title">🧠 検討の過程</summary>
                     <ol class="briefing-log"></ol>
@@ -3822,6 +3834,14 @@
             const autoReadEl = box.querySelector('.briefing-auto-read');
             autoReadEl.checked = getAutoRead();
             autoReadEl.addEventListener('change', () => { try { localStorage.setItem(AUTO_READ_KEY, autoReadEl.checked ? '1' : '0'); } catch (_) {} });
+            // 会話中のボードは、このニュースに名乗り出たエージェントだけを点灯する（最初の画面のステージは全ニュース合算）
+            const mark = (themes, on) => {
+                markStageWriting(themes, on, box);
+                if (globalStage) markStageWriting(themes, on);
+            };
+            const light = (themes) => themes.forEach(t => {
+                box.querySelector(`.sdg-mini[data-sdg="${String(t).replace(/^sdg/, '')}"]`)?.classList.add('is-up');
+            });
             const log = (html) => {
                 const li = document.createElement('li');
                 li.className = 'briefing-step';
@@ -3834,10 +3854,10 @@
             let record = null;
             try {
                 const fd = new FormData();
-                fd.append('title', top.title);
-                fd.append('link', top.link);
-                fd.append('summary', top.summary || '');
-                if (top.published) fd.append('published', top.published);
+                fd.append('title', item.title);
+                fd.append('link', item.link);
+                fd.append('summary', item.summary || '');
+                if (item.published) fd.append('published', item.published);
                 if (region) fd.append('region', region);
                 const key = document.getElementById('targetAuthority').value;
                 if (key) fd.append('authority_key', key);
@@ -3850,13 +3870,14 @@
                         log('📖 各エージェントが記事を読んでいます…');
                     } else if (ev.type === 'appear') {
                         appearedThemes = (ev.appearances || []).map(a => a.theme);
-                        markStageWriting(appearedThemes, true);
+                        light(appearedThemes);
+                        mark(appearedThemes, true);
                         const names = (ev.appearances || []).map(a => escapeHtml(shortAgentLabel(a.label))).join('・');
                         log(`🙋 ${names || '一般（行政監視）'} のエージェントが名乗り出ました。それぞれ声を書いています…`);
                     } else if (ev.type === 'voice') {
                         const v = ev.voice;
                         voiceCount++;
-                        markStageWriting([v.theme], false);
+                        mark([v.theme], false);
                         const n = sdgNumber(v.label);
                         const icon = n ? `<img src="${sdgIconSrc(n)}" alt="SDGs 目標${n}" width="22" height="22">` : '😡';
                         log(`${icon}<span><b>${escapeHtml(shortAgentLabel(v.label))}（AI・怒り${escapeHtml(String(v.anger_level ?? '-'))}）</b> ${escapeHtml(v.pseudo_citizen_voice || v.remark || '')}</span>`);
@@ -3884,14 +3905,32 @@
                     }
                 }
                 if (!record) throw new Error('分析結果を受け取れませんでした');
-                markStageWriting(appearedThemes, false);
-                if (document.getElementById('chatLeftPane')?.classList.contains('has-messages')) { box.classList.add('hidden'); return; }
+                mark(appearedThemes, false);
+                if (abortIf && abortIf()) { box.classList.add('hidden'); return null; }
                 box.querySelector('.briefing-head').textContent = '🤖 エージェントたちが検討しました（開示請求するかは、あなたが決めます）';
                 logWrap.querySelector('summary').textContent = `🧠 検討の過程（${voiceCount}体が声を挙げました）`;
                 logWrap.open = false;
                 renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked });
+                return record;
             } catch (err) {
-                markStageWriting(appearedThemes, false);
+                mark(appearedThemes, false);
+                throw err;
+            }
+        }
+
+        // 自律ブリーフィング: ユーザーの操作を待たず、地域のニュースで最も怒りの強い1件を最初の画面で検討する
+        async function autoBriefing(items, region) {
+            const box = document.getElementById('sdgBriefing');
+            if (!box || !items.length) return;
+            const chatStarted = () => !!document.getElementById('chatLeftPane')?.classList.contains('has-messages');
+            if (chatStarted()) return;  // 既に会話中なら邪魔しない
+            const top = items.reduce((a, b) => (Number(b.anger_level || 0) > Number(a.anger_level || 0) ? b : a));
+            if (autoBriefed.has(top.link)) return;
+            autoBriefed.add(top.link);
+            box.classList.remove('hidden');
+            try {
+                await runDeliberation(box, top, region, { abortIf: chatStarted, globalStage: true });
+            } catch (err) {
                 autoBriefed.delete(top.link);
                 box.classList.add('hidden');
                 console.warn('自律ブリーフィングに失敗:', err.message);
@@ -4221,28 +4260,11 @@
         // チャットのやり取りとして表示する
         async function analyzeNewsItemInChat(item) {
             addChatBubble('user', `📰 「${item.title}」のニュースについて、怒りのエージェントたちの声をまとめて、開示請求すべき対象を提案して`);
-            const assistantBubble = addChatBubble('assistant', '🔄 各エージェントが声を挙げ、統合エージェントが開示請求の対象を検討しています…（数十秒かかる場合があります）');
+            const assistantBubble = addChatBubble('assistant', '🔄 エージェントたちが記事を読み始めます…');
 
             try {
-                const formData = new FormData();
-                formData.append('title', item.title);
-                formData.append('link', item.link);
-                formData.append('summary', item.summary || '');
-                if (item.published) formData.append('published', item.published);
-                const region = getNewsRegion();
-                if (region) formData.append('region', region);
-                // regionは表示名の文字列に過ぎずGPS調査済みの未収録自治体（pool:キー）を
-                // 正しく特定できないため、実際に選択中の対象機関キーも一緒に送る
-                const currentKey = document.getElementById('targetAuthority').value;
-                if (currentKey) formData.append('authority_key', currentKey);
-
-                const res = await fetchWithRetry('/api/news-agent/analyze', { method: 'POST', body: formData }, 2);
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    throw new Error(errData.detail || `HTTP ${res.status}`);
-                }
-                const record = await res.json();
-                renderNewsSynthesis(assistantBubble, record, region);
+                // 最初の画面と同じ「検討の過程」を、会話の中にも流す（SDGsボード付き）
+                await runDeliberation(assistantBubble, item, getNewsRegion(), { board: true });
             } catch (err) {
                 // 分析はGemini呼び出しを2回連続で行うため数十秒かかり、不安定なネットワークでは
                 // "Failed to fetch"（TypeError）になりやすい。サーバー側は処理を継続・完了している
