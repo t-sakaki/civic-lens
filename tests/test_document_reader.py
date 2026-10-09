@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -68,12 +69,24 @@ def test_prepare_rejects_too_many_chunks(monkeypatch):
 
 
 def test_synthesize_calls_tts_once_per_line_with_disclaimer_first_and_caches(tts):
-    wav = dr.synthesize_document(object(), SCRIPT, "script")
+    wav, timing = dr.synthesize_document(object(), SCRIPT, "script")
     assert wav[:4] == b"RIFF"
     assert tts[0][1].startswith("これはAIが作成した登壇時の読み上げ原稿の案です")
-    assert len(tts) == len(dr.prepare(SCRIPT, "script"))
+    assert len(tts) == len(dr.prepare(SCRIPT, "script")) == len(timing)
     n = len(tts)
-    assert dr.synthesize_document(object(), SCRIPT, "script") == wav and len(tts) == n, "同じ本文はキャッシュ"
+    assert dr.synthesize_document(object(), SCRIPT, "script") == (wav, timing) and len(tts) == n, "同じ本文はキャッシュ"
+
+
+def test_chunk_timing_matches_the_concatenated_wav_layout():
+    sr = voice_panel.SAMPLE_RATE
+    pcm = [b"\x01\x00" * sr, b"\x01\x00" * (sr // 2), b"\x01\x00" * sr]  # 1.0秒・0.5秒・1.0秒
+    assert dr.chunk_timing(pcm, gap_ms=250) == [[0.0, 1.0], [1.25, 1.75], [2.0, 3.0]]
+
+
+def test_timing_header_excludes_the_disclaimer_and_is_ascii():
+    timing = [[0.0, 2.5], [2.75, 4.0], [4.25, 6.0]]  # 先頭は免責
+    header = dr.timing_header(timing)
+    assert header.isascii() and json.loads(header) == [[2.75, 4.0], [4.25, 6.0]]
 
 
 # --- API --------------------------------------------------------------------
@@ -91,6 +104,9 @@ def test_api_returns_wav_with_disclaimer(api, tts):
     r = c.post("/api/tts/document", data={"text": NOTICE, "kind": "notice"})
     assert r.status_code == 200 and r.headers["content-type"] == "audio/wav" and r.content[:4] == b"RIFF"
     assert "議員本人の発言ではありません" in tts[0][1]
+    timing = json.loads(r.headers["X-Doc-Timing"])
+    assert len(timing) == len(tts) - 1, "免責を除く本文の各かたまりの再生区間が返る"
+    assert all(a < b for a, b in timing) and all(timing[i][1] <= timing[i + 1][0] for i in range(len(timing) - 1))
 
 
 @pytest.mark.parametrize("data,status", [
@@ -134,4 +150,5 @@ def test_api_returns_503_on_synthesis_failure(api, monkeypatch):
 def test_index_page_has_read_aloud_controls(api):
     c, _ = api
     html = c.get("/").text
+    assert "mark.doc-reading" in html and "X-Doc-Timing" in html
     assert "docSpeech" in html and "完成したら自動で読み上げる（既定はオフ）" in html and "/api/tts/document" in html

@@ -1594,6 +1594,9 @@
         @keyframes sdgStageUp { 50% { transform: translateY(-2px); } }
         .sdg-stage-voice { min-height: 2.6rem; margin-top: 0.7rem; font-size: 0.8rem; line-height: 1.5; color: var(--chat-text); text-align: left; }
         .sdg-stage-voice .who { font-weight: 700; margin-right: 0.35rem; }
+        /* 読み上げ中の箇所のハイライト（緑）。色だけに頼らないよう、太めの下線も付ける */
+        mark.doc-reading { background: #bbf7d0; color: #052e16; border-bottom: 2px solid #16a34a; border-radius: 2px; padding: 0 1px; }
+        @media (prefers-color-scheme: dark) { mark.doc-reading { background: #166534; color: #f0fdf4; border-bottom-color: #4ade80; } }
         .sdg-stage-voice .src { display: block; font-size: 0.68rem; color: var(--chat-muted); }
         .sdg-briefing { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--chat-border-strong); text-align: left; font-size: 0.85rem; }
         .sdg-briefing .chat-bubble-label { display: none; }
@@ -5652,31 +5655,70 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         const docSpeech = (() => {
             let token = 0;        // 停止・再生のたびに増やし、古い再生を打ち切る
             let audio = null;
-            let statusEl = () => document.getElementById('docSpeechStatus');
+            let highlighted = null;  // { el, text }
+            const statusEl = () => document.getElementById('docSpeechStatus');
             const setStatus = (msg) => { const el = statusEl(); if (el) el.textContent = msg || ''; };
             const disclaimer = (kind) => `これはAIが作成した${DOC_KIND_LABEL[kind]}の案です。議員本人の発言ではありません。通告と登壇は議員自身が行います。確認用に読み上げます。`;
 
-            function splitForBrowser(text, limit = 180) {
-                const parts = text.split(/(?<=[。！？!?])|\n+/).map(t => t.trim()).filter(Boolean);
-                const out = []; let cur = '';
-                for (const p of parts) {
-                    if (cur && (cur.length + p.length) > limit) { out.push(cur); cur = ''; }
-                    cur += p;
-                    while (cur.length > limit * 2) { out.push(cur.slice(0, limit * 2)); cur = cur.slice(limit * 2); }
+            // 文の区切りで分ける。サーバー（document_reader.split_text）と同じ手順にして、
+            // 自然な声の再生区間（X-Doc-Timing）と画面のかたまりが対応するようにする
+            function splitText(text, limit) {
+                const sentences = (text || '').split(/(?<=[。！？!?])|\n+/).filter(t => t && t.trim());
+                const chunks = []; let cur = '';
+                for (let sentence of sentences) {
+                    sentence = sentence.trim();
+                    if (sentence.length > limit) {
+                        for (const piece of sentence.split(/(?<=[、，,])|\s+/)) {
+                            if (!piece) continue;
+                            if (cur && cur.length + piece.length > limit) { chunks.push(cur); cur = ''; }
+                            cur += piece;
+                        }
+                        continue;
+                    }
+                    if (cur && cur.length + sentence.length > limit) { chunks.push(cur); cur = ''; }
+                    cur += sentence;
                 }
-                if (cur) out.push(cur);
-                return out;
+                if (cur) chunks.push(cur);
+                return chunks;
             }
-            function speakBrowser(text, my) {
+            const normalize = (text) => text.replace(/[ \t　]+/g, ' ').trim();
+            const escapeRegex = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // 元の文面の中での、各かたまりの位置 [開始, 終了)。分割で取り除かれた改行や、圧縮された空白は
+            // 許容して探す（文字と文字の間に空白・改行があってもよいものとして照合する）
+            function locate(text, chunks) {
+                const spans = []; let pos = 0;
+                for (const chunk of chunks) {
+                    const re = new RegExp(Array.from(chunk.replace(/\s+/g, '')).map(escapeRegex).join('\\s*'));
+                    const m = re.exec(text.slice(pos));
+                    if (!m) { spans.push(null); continue; }
+                    spans.push([pos + m.index, pos + m.index + m[0].length]);
+                    pos += m.index + m[0].length;
+                }
+                return spans;
+            }
+            function highlight(el, text, span) {
+                if (!span) return;
+                const [a, b] = span;
+                el.innerHTML = `${escapeHtml(text.slice(0, a))}<mark class="doc-reading">${escapeHtml(text.slice(a, b))}</mark>${escapeHtml(text.slice(b))}`;
+                const mark = el.querySelector('mark');
+                if (mark && mark.scrollIntoView) mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            function clearHighlight() {
+                if (highlighted) { highlighted.el.textContent = highlighted.text; highlighted = null; }
+            }
+
+            function speakBrowser(text, my, onChunk) {
                 return new Promise((resolve, reject) => {
                     if (!('speechSynthesis' in window)) { reject(new Error('このブラウザは音声読み上げに対応していません')); return; }
-                    const queue = splitForBrowser(text);
+                    const queue = splitText(normalize(text), 60).map((t, i) => ({ t, i }));
                     const next = () => {
                         if (my !== token) { resolve(); return; }
-                        const chunk = queue.shift();
-                        if (!chunk) { resolve(); return; }
-                        const u = new SpeechSynthesisUtterance(chunk);
+                        const item = queue.shift();
+                        if (!item) { resolve(); return; }
+                        const u = new SpeechSynthesisUtterance(item.t);
                         u.lang = 'ja-JP';
+                        u.onstart = () => { if (onChunk && my === token) onChunk(item.i); };
                         u.onend = next;
                         u.onerror = (e) => (e.error === 'canceled' || e.error === 'interrupted') ? resolve() : reject(new Error('音声読み上げに失敗しました'));
                         window.speechSynthesis.speak(u);
@@ -5684,7 +5726,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     next();
                 });
             }
-            async function speakGemini(text, kind, my) {
+            async function speakGemini(text, kind, my, onTick) {
                 const body = new URLSearchParams({ text, kind });
                 const res = await fetch('/api/tts/document', { method: 'POST', body });
                 if (!res.ok) {
@@ -5693,11 +5735,20 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     err.status = res.status;
                     throw err;
                 }
+                let timing = [];
+                try { timing = JSON.parse(res.headers.get('X-Doc-Timing') || '[]'); } catch (_) {}
                 const url = URL.createObjectURL(await res.blob());
                 if (my !== token) { URL.revokeObjectURL(url); return; }
                 await new Promise((resolve, reject) => {
                     audio = new Audio(url);
-                    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+                    const done = () => { URL.revokeObjectURL(url); resolve(); };
+                    audio.ontimeupdate = () => {
+                        if (my !== token || !audio) return;
+                        const t = audio.currentTime;
+                        const i = timing.findIndex(([a, b]) => t >= a && t <= b + 0.15);
+                        if (i >= 0) onTick(i, timing.length);
+                    };
+                    audio.onended = done;
                     audio.onerror = () => { URL.revokeObjectURL(url); reject(new Error('音声の再生に失敗しました')); };
                     audio.play().catch(reject);
                 });
@@ -5706,6 +5757,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 token++;
                 if ('speechSynthesis' in window) window.speechSynthesis.cancel();
                 if (audio) { audio.pause(); audio = null; }
+                clearHighlight();
                 setStatus('');
             }
             // ids: 読み上げる <pre> の id の配列（順に読む）、engine: 'browser' | 'gemini'
@@ -5720,30 +5772,40 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                         const text = el.textContent.trim();
                         if (!text) continue;
                         setStatus(`🔊 ${DOC_KIND_LABEL[kind]}を読み上げ中…（AIが作成した案の確認用です）`);
+                        highlighted = { el, text: el.textContent };
+                        const original = highlighted.text;
                         let used = engine;
                         if (engine === 'gemini') {
-                            try { await speakGemini(text, kind, my); }
-                            catch (err) {
+                            // サーバーと同じ区切り（260文字）で位置を求め、再生区間に合わせてハイライトする
+                            const spans = locate(original, splitText(normalize(text), 260));
+                            let last = -1;
+                            try {
+                                await speakGemini(text, kind, my, (i) => {
+                                    if (i !== last && i < spans.length) { last = i; highlight(el, original, spans[i]); }
+                                });
+                            } catch (err) {
                                 if (my !== token) return;
-                                // 上限・未設定・長すぎる場合は、ブラウザの音声に切り替える
-                                setStatus(`${err.message}`);
+                                setStatus(`${err.message}`);  // 上限・未設定・長すぎる場合は、ブラウザの音声に切り替える
                                 used = 'browser';
                             }
                         }
                         if (used === 'browser') {
-                            await speakBrowser(disclaimer(kind), my);
-                            await speakBrowser(text, my);
+                            await speakBrowser(disclaimer(kind), my, null);
+                            const spans = locate(original, splitText(normalize(text), 60));
+                            await speakBrowser(text, my, (i) => highlight(el, original, spans[i]));
                         }
+                        if (my === token) { el.textContent = original; }
                     }
                 } catch (err) {
+                    clearHighlight();
                     setStatus(`⚠️ ${err.message}`);
                     return;
                 }
-                if (my === token) setStatus('');
+                if (my === token) { clearHighlight(); setStatus(''); }
             }
             const autoRead = () => { try { return localStorage.getItem(DOC_AUTO_READ_KEY) === '1'; } catch (_) { return false; } };
             const setAutoRead = (on) => { try { localStorage.setItem(DOC_AUTO_READ_KEY, on ? '1' : '0'); } catch (_) {} };
-            return { play, stop, autoRead, setAutoRead };
+            return { play, stop, autoRead, setAutoRead, _splitText: splitText, _normalize: normalize, _locate: locate };
         })();
 
         async function runCouncilQuestion(chatBubble) {

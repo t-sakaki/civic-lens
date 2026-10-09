@@ -1035,13 +1035,16 @@ async def tts_document(text: str = Form(...), kind: str = Form(...)):
     if client is None:
         raise HTTPException(status_code=503, detail="自然な声は現在利用できません（Gemini未設定）。ブラウザの音声で読み上げます")
     try:
-        wav = await asyncio.to_thread(document_reader.synthesize_document, client, text, kind)
+        wav, timing = await asyncio.to_thread(document_reader.synthesize_document, client, text, kind)
     except cost_guard.BudgetExceeded:
         raise HTTPException(status_code=503, detail="本日の自然な声の上限に達しました。ブラウザの音声で読み上げます")
     except Exception as e:
         print(f"[tts/document] 音声合成に失敗: {e}")
         raise HTTPException(status_code=503, detail="自然な声の合成に失敗しました。ブラウザの音声で読み上げます")
-    return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600"})
+    # X-Doc-Timing: 免責を除く本文の各かたまりの再生区間（秒）。画面側が読み上げ中の箇所をハイライトする
+    return Response(content=wav, media_type="audio/wav", headers={
+        "Cache-Control": "private, max-age=3600", "X-Doc-Timing": document_reader.timing_header(timing),
+    })
 
 
 # ---- 音声アーカイブ（人が承認したものだけ公開） ----

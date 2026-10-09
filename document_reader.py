@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -81,12 +82,33 @@ def prepare(text: str, kind: str) -> list[dict[str, str]]:
     return [{"voice": NARRATOR_VOICE, "text": disclaimer(kind)}] + [{"voice": VOICE, "text": c} for c in chunks]
 
 
-_cache: dict[str, bytes] = {}
+def chunk_timing(pcm: list[bytes], gap_ms: int = GAP_MS) -> list[list[float]]:
+    """連結したWAVの中で、各かたまりが再生される区間 [開始秒, 終了秒]（先頭は免責）。
+
+    画面側が、読み上げ中の箇所をハイライトするために使う。16bit・モノラルのPCMの長さから求める。
+    """
+    out: list[list[float]] = []
+    cursor = 0.0
+    for i, chunk in enumerate(pcm):
+        if i:
+            cursor += gap_ms / 1000
+        length = len(chunk) / 2 / voice_panel.SAMPLE_RATE
+        out.append([round(cursor, 3), round(cursor + length, 3)])
+        cursor += length
+    return out
+
+
+def timing_header(timing: list[list[float]]) -> str:
+    """X-Doc-Timing ヘッダの値（免責を除く本文の各かたまりの区間。ASCIIエスケープのJSON）"""
+    return json.dumps(timing[1:], ensure_ascii=True, separators=(",", ":"))
+
+
+_cache: dict[str, tuple[bytes, list[list[float]]]] = {}
 _CACHE_MAX = 20
 
 
-def synthesize_document(client: Any, text: str, kind: str) -> bytes:
-    """本文を合成してWAVを返す。失敗時は例外（画面側はブラウザの音声に切り替える）。"""
+def synthesize_document(client: Any, text: str, kind: str) -> tuple[bytes, list[list[float]]]:
+    """本文を合成して (WAV, 各かたまりの再生区間) を返す。失敗時は例外（画面側はブラウザの音声に切り替える）。"""
     key = hashlib.sha256(f"{kind}\n{text}".encode("utf-8")).hexdigest()
     cached = _cache.get(key)
     if cached:
@@ -94,8 +116,8 @@ def synthesize_document(client: Any, text: str, kind: str) -> bytes:
     script = prepare(text, kind)
     with ThreadPoolExecutor(max_workers=min(len(script), 5), thread_name_prefix="tts-doc") as pool:
         pcm = list(pool.map(lambda line: voice_panel._synthesize_line(client, line["voice"], line["text"]), script))
-    wav = voice_panel._to_wav(pcm, gap_ms=GAP_MS)
+    result = (voice_panel._to_wav(pcm, gap_ms=GAP_MS), chunk_timing(pcm))
     if len(_cache) >= _CACHE_MAX:
         _cache.pop(next(iter(_cache)))
-    _cache[key] = wav
-    return wav
+    _cache[key] = result
+    return result
