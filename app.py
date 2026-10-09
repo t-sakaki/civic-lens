@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
 import voice_panel
+import document_reader
 import voice_archive
 import news_watch
 from cost_guard import rate_limit
@@ -1014,6 +1015,36 @@ async def news_voice_panel(news_id: str = Form(...), format: str = Form("opus"))
         print(f"[news-agent/voice-panel] 音声アーカイブへの記録に失敗: {e}")
     headers = {"Cache-Control": "private, max-age=3600", "X-Panel-Timing": timing, **voice_archive.download_headers(f"civic-lens-{news_id}", "wav")}
     return Response(content=wav, media_type="audio/wav", headers=headers)
+
+
+@app.post("/api/tts/document", dependencies=[Depends(rate_limit)])
+async def tts_document(text: str = Form(...), kind: str = Form(...)):
+    """議会の通告書・読み上げ原稿などを、確認用にAIの声（Gemini TTS）で読み上げた音声（WAV）を返す。
+
+    画面の既定はブラウザの音声合成で、このAPIはユーザーが「自然な声」を選んだときだけ呼ぶ。
+    冒頭に「AIが作成した案で、議員本人の発言ではない」旨の免責を必ず付ける（サーバー側で付与）。
+    長すぎる本文は 413、TTSが使えない・日次上限に達した場合は 503 を返し、画面側はブラウザの音声に切り替える。
+    """
+    try:
+        document_reader.prepare(text, kind)  # 入力の検証（長さ・種別）。TTSは呼ばない
+    except document_reader.DocumentTooLong as e:
+        raise HTTPException(status_code=413, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    client = get_agent().genai_client
+    if client is None:
+        raise HTTPException(status_code=503, detail="自然な声は現在利用できません（Gemini未設定）。ブラウザの音声で読み上げます")
+    try:
+        wav, timing = await asyncio.to_thread(document_reader.synthesize_document, client, text, kind)
+    except cost_guard.BudgetExceeded:
+        raise HTTPException(status_code=503, detail="本日の自然な声の上限に達しました。ブラウザの音声で読み上げます")
+    except Exception as e:
+        print(f"[tts/document] 音声合成に失敗: {e}")
+        raise HTTPException(status_code=503, detail="自然な声の合成に失敗しました。ブラウザの音声で読み上げます")
+    # X-Doc-Timing: 免責を除く本文の各かたまりの再生区間（秒）。画面側が読み上げ中の箇所をハイライトする
+    return Response(content=wav, media_type="audio/wav", headers={
+        "Cache-Control": "private, max-age=3600", "X-Doc-Timing": document_reader.timing_header(timing),
+    })
 
 
 # ---- 音声アーカイブ（人が承認したものだけ公開） ----

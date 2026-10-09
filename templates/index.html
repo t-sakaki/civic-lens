@@ -1594,6 +1594,9 @@
         @keyframes sdgStageUp { 50% { transform: translateY(-2px); } }
         .sdg-stage-voice { min-height: 2.6rem; margin-top: 0.7rem; font-size: 0.8rem; line-height: 1.5; color: var(--chat-text); text-align: left; }
         .sdg-stage-voice .who { font-weight: 700; margin-right: 0.35rem; }
+        /* 読み上げ中の箇所のハイライト（緑）。色だけに頼らないよう、太めの下線も付ける */
+        mark.doc-reading { background: #bbf7d0; color: #052e16; border-bottom: 2px solid #16a34a; border-radius: 2px; padding: 0 1px; }
+        @media (prefers-color-scheme: dark) { mark.doc-reading { background: #166534; color: #f0fdf4; border-bottom-color: #4ade80; } }
         .sdg-stage-voice .src { display: block; font-size: 0.68rem; color: var(--chat-muted); }
         .sdg-briefing { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--chat-border-strong); text-align: left; font-size: 0.85rem; }
         .sdg-briefing .chat-bubble-label { display: none; }
@@ -5621,18 +5624,189 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             return data;
         }
 
-        function documentBlock(title, text, isMock, label) {
+        // speakKind（'notice' / 'script'）を渡すと、確認用の読み上げボタンを付ける
+        function documentBlock(title, text, isMock, label, speakKind) {
             const id = `doc-${Math.random().toString(36).slice(2, 10)}`;
+            const speakButtons = speakKind ? `
+                        <span class="inline-flex gap-1">
+                            <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="docSpeech.play(['${id}'], 'browser')" title="ブラウザの音声で読み上げます（無料・文面は送信されません）">🔊 読み上げ</button>
+                            <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="docSpeech.play(['${id}'], 'gemini')" title="Geminiの自然な声で読み上げます（文面をサーバーに送信します）">🎧 自然な声</button>
+                            <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="docSpeech.stop()">⏹ 停止</button>
+                        </span>` : '';
             return `
                 <div class="bg-white border p-4 rounded-md mb-4">
-                    <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
                         <h3 class="font-semibold">${title}</h3>
-                        <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="navigator.clipboard.writeText(document.getElementById('${id}').textContent).then(() => { this.textContent = '✓ コピーしました'; })">📋 コピー</button>
+                        <span class="inline-flex gap-1 flex-wrap">
+                            ${speakButtons}
+                            <button type="button" class="text-xs px-2 py-1 rounded border hover:bg-gray-100" onclick="navigator.clipboard.writeText(document.getElementById('${id}').textContent).then(() => { this.textContent = '✓ コピーしました'; })">📋 コピー</button>
+                        </span>
                     </div>
                     ${mockBadge(isMock, label)}
-                    <pre id="${id}" class="whitespace-pre-wrap text-sm font-mono">${escapeHtml(text || '')}</pre>
+                    <pre id="${id}" class="whitespace-pre-wrap text-sm font-mono" ${speakKind ? `data-speak-kind="${speakKind}"` : ''}>${escapeHtml(text || '')}</pre>
                 </div>`;
         }
+
+        // 通告書・読み上げ原稿の確認用の読み上げ。既定はブラウザの音声（無料・送信なし）。
+        // 「自然な声」はGemini TTS（サーバーへ送信）。上限や失敗のときはブラウザの音声に切り替える。
+        // どちらも冒頭で「AIが作成した案で、議員本人の発言ではない」ことを必ず読み上げる。
+        const DOC_AUTO_READ_KEY = 'cl_auto_read_docs';
+        const DOC_KIND_LABEL = { notice: '一般質問の通告書', script: '登壇時の読み上げ原稿' };
+        const docSpeech = (() => {
+            let token = 0;        // 停止・再生のたびに増やし、古い再生を打ち切る
+            let audio = null;
+            let highlighted = null;  // { el, text }
+            const statusEl = () => document.getElementById('docSpeechStatus');
+            const setStatus = (msg) => { const el = statusEl(); if (el) el.textContent = msg || ''; };
+            const disclaimer = (kind) => `これはAIが作成した${DOC_KIND_LABEL[kind]}の案です。議員本人の発言ではありません。通告と登壇は議員自身が行います。確認用に読み上げます。`;
+
+            // 文の区切りで分ける。サーバー（document_reader.split_text）と同じ手順にして、
+            // 自然な声の再生区間（X-Doc-Timing）と画面のかたまりが対応するようにする
+            function splitText(text, limit) {
+                const sentences = (text || '').split(/(?<=[。！？!?])|\n+/).filter(t => t && t.trim());
+                const chunks = []; let cur = '';
+                for (let sentence of sentences) {
+                    sentence = sentence.trim();
+                    if (sentence.length > limit) {
+                        for (const piece of sentence.split(/(?<=[、，,])|\s+/)) {
+                            if (!piece) continue;
+                            if (cur && cur.length + piece.length > limit) { chunks.push(cur); cur = ''; }
+                            cur += piece;
+                        }
+                        continue;
+                    }
+                    if (cur && cur.length + sentence.length > limit) { chunks.push(cur); cur = ''; }
+                    cur += sentence;
+                }
+                if (cur) chunks.push(cur);
+                return chunks;
+            }
+            const normalize = (text) => text.replace(/[ \t　]+/g, ' ').trim();
+            const escapeRegex = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // 元の文面の中での、各かたまりの位置 [開始, 終了)。分割で取り除かれた改行や、圧縮された空白は
+            // 許容して探す（文字と文字の間に空白・改行があってもよいものとして照合する）
+            function locate(text, chunks) {
+                const spans = []; let pos = 0;
+                for (const chunk of chunks) {
+                    const re = new RegExp(Array.from(chunk.replace(/\s+/g, '')).map(escapeRegex).join('\\s*'));
+                    const m = re.exec(text.slice(pos));
+                    if (!m) { spans.push(null); continue; }
+                    spans.push([pos + m.index, pos + m.index + m[0].length]);
+                    pos += m.index + m[0].length;
+                }
+                return spans;
+            }
+            function highlight(el, text, span) {
+                if (!span) return;
+                const [a, b] = span;
+                el.innerHTML = `${escapeHtml(text.slice(0, a))}<mark class="doc-reading">${escapeHtml(text.slice(a, b))}</mark>${escapeHtml(text.slice(b))}`;
+                const mark = el.querySelector('mark');
+                if (mark && mark.scrollIntoView) mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            function clearHighlight() {
+                if (highlighted) { highlighted.el.textContent = highlighted.text; highlighted = null; }
+            }
+
+            function speakBrowser(text, my, onChunk) {
+                return new Promise((resolve, reject) => {
+                    if (!('speechSynthesis' in window)) { reject(new Error('このブラウザは音声読み上げに対応していません')); return; }
+                    const queue = splitText(normalize(text), 60).map((t, i) => ({ t, i }));
+                    const next = () => {
+                        if (my !== token) { resolve(); return; }
+                        const item = queue.shift();
+                        if (!item) { resolve(); return; }
+                        const u = new SpeechSynthesisUtterance(item.t);
+                        u.lang = 'ja-JP';
+                        u.onstart = () => { if (onChunk && my === token) onChunk(item.i); };
+                        u.onend = next;
+                        u.onerror = (e) => (e.error === 'canceled' || e.error === 'interrupted') ? resolve() : reject(new Error('音声読み上げに失敗しました'));
+                        window.speechSynthesis.speak(u);
+                    };
+                    next();
+                });
+            }
+            async function speakGemini(text, kind, my, onTick) {
+                const body = new URLSearchParams({ text, kind });
+                const res = await fetch('/api/tts/document', { method: 'POST', body });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const err = new Error(typeof d.detail === 'string' ? d.detail : `HTTP ${res.status}`);
+                    err.status = res.status;
+                    throw err;
+                }
+                let timing = [];
+                try { timing = JSON.parse(res.headers.get('X-Doc-Timing') || '[]'); } catch (_) {}
+                const url = URL.createObjectURL(await res.blob());
+                if (my !== token) { URL.revokeObjectURL(url); return; }
+                await new Promise((resolve, reject) => {
+                    audio = new Audio(url);
+                    const done = () => { URL.revokeObjectURL(url); resolve(); };
+                    audio.ontimeupdate = () => {
+                        if (my !== token || !audio) return;
+                        const t = audio.currentTime;
+                        const i = timing.findIndex(([a, b]) => t >= a && t <= b + 0.15);
+                        if (i >= 0) onTick(i, timing.length);
+                    };
+                    audio.onended = done;
+                    audio.onerror = () => { URL.revokeObjectURL(url); reject(new Error('音声の再生に失敗しました')); };
+                    audio.play().catch(reject);
+                });
+            }
+            function stop() {
+                token++;
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                if (audio) { audio.pause(); audio = null; }
+                clearHighlight();
+                setStatus('');
+            }
+            // ids: 読み上げる <pre> の id の配列（順に読む）、engine: 'browser' | 'gemini'
+            async function play(ids, engine) {
+                stop();
+                const my = token;
+                try {
+                    for (const id of ids) {
+                        const el = document.getElementById(id);
+                        if (!el || my !== token) continue;
+                        const kind = el.dataset.speakKind;
+                        const text = el.textContent.trim();
+                        if (!text) continue;
+                        setStatus(`🔊 ${DOC_KIND_LABEL[kind]}を読み上げ中…（AIが作成した案の確認用です）`);
+                        highlighted = { el, text: el.textContent };
+                        const original = highlighted.text;
+                        let used = engine;
+                        if (engine === 'gemini') {
+                            // サーバーと同じ区切り（260文字）で位置を求め、再生区間に合わせてハイライトする
+                            const spans = locate(original, splitText(normalize(text), 260));
+                            let last = -1;
+                            try {
+                                await speakGemini(text, kind, my, (i) => {
+                                    if (i !== last && i < spans.length) { last = i; highlight(el, original, spans[i]); }
+                                });
+                            } catch (err) {
+                                if (my !== token) return;
+                                setStatus(`${err.message}`);  // 上限・未設定・長すぎる場合は、ブラウザの音声に切り替える
+                                used = 'browser';
+                            }
+                        }
+                        if (used === 'browser') {
+                            await speakBrowser(disclaimer(kind), my, null);
+                            const spans = locate(original, splitText(normalize(text), 60));
+                            await speakBrowser(text, my, (i) => highlight(el, original, spans[i]));
+                        }
+                        if (my === token) { el.textContent = original; }
+                    }
+                } catch (err) {
+                    clearHighlight();
+                    setStatus(`⚠️ ${err.message}`);
+                    return;
+                }
+                if (my === token) { clearHighlight(); setStatus(''); }
+            }
+            const autoRead = () => { try { return localStorage.getItem(DOC_AUTO_READ_KEY) === '1'; } catch (_) { return false; } };
+            const setAutoRead = (on) => { try { localStorage.setItem(DOC_AUTO_READ_KEY, on ? '1' : '0'); } catch (_) {} };
+            return { play, stop, autoRead, setAutoRead, _splitText: splitText, _normalize: normalize, _locate: locate };
+        })();
 
         async function runCouncilQuestion(chatBubble) {
             const targetAuthority = document.getElementById('targetAuthority').value;
@@ -5677,13 +5851,26 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     <p class="text-sm text-indigo-800">答弁者（想定）: ${escapeHtml(data.respondents)}</p>
                     <p class="text-xs text-indigo-700 mt-2">${escapeHtml(data.cover_note)}</p>
                 </div>
-                ${documentBlock('📄 通告書', noticeText, data.is_mock, 'AI通告書生成')}
+                <div class="bg-white border p-3 rounded-md mb-4 text-sm flex flex-wrap items-center gap-3">
+                    <button type="button" class="px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700" onclick="docSpeech.play(Array.from(document.querySelectorAll('[data-speak-kind]')).map(e => e.id), 'browser')">▶ 通告書と原稿を続けて読み上げ</button>
+                    <button type="button" class="px-3 py-1.5 rounded border hover:bg-gray-100" onclick="docSpeech.stop()">⏹ 停止</button>
+                    <label class="text-xs text-gray-600 flex items-center gap-1">
+                        <input type="checkbox" id="docAutoReadToggle" onchange="docSpeech.setAutoRead(this.checked)"> 完成したら自動で読み上げる（既定はオフ）
+                    </label>
+                    <span id="docSpeechStatus" class="text-xs text-gray-500" aria-live="polite"></span>
+                    <p class="text-xs text-gray-500 w-full">AIが作成した案の確認用です。議員本人の発言ではなく、通告・登壇は議員が行います。「🔊」はブラウザの音声（無料・送信なし）、「🎧」はGeminiの自然な声（文面をサーバーへ送信）です。</p>
+                </div>
+                ${documentBlock('📄 通告書', noticeText, data.is_mock, 'AI通告書生成', 'notice')}
                 <div class="bg-gray-50 p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">🎯 各質問のねらい（議員向けメモ）</h3>
                     <ul class="text-sm space-y-1">${intents}</ul>
                 </div>
-                ${documentBlock('🎤 登壇時の読み上げ原稿', data.script, data.is_mock, 'AI原稿生成')}
+                ${documentBlock('🎤 登壇時の読み上げ原稿', data.script, data.is_mock, 'AI原稿生成', 'script')}
             `;
+            document.getElementById('docAutoReadToggle').checked = docSpeech.autoRead();
+            if (docSpeech.autoRead()) {
+                docSpeech.play(Array.from(document.querySelectorAll('[data-speak-kind]')).map(e => e.id), 'browser');
+            }
         }
 
         async function runPoliceComplaint(chatBubble, isDirectParty) {
