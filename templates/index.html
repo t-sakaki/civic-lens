@@ -6051,6 +6051,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         // 保存ボタン（Private/Public）
         let currentDisclosureText = '';
         let currentTargetAuthority = '';
+        let currentAddressee = '';      // 請求の名宛人（例: 愛知県知事）。台帳の実施機関に使う
+        let currentOrdinanceName = '';  // 例: 愛知県情報公開条例
 
         document.getElementById('saveRecordBtn').addEventListener('click', async () => {
             const visibility = document.querySelector('input[name="visibility"]:checked').value;
@@ -6103,6 +6105,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         displayDisclosure = function(data) {
             currentDisclosureText = data.request_text;
             currentTargetAuthority = data.authority;
+            currentAddressee = data.addressee || data.authority;
+            currentOrdinanceName = data.ordinance_name || '';
             currentRecordTitle = data.ordinance_name ? `${data.ordinance_name}に基づく開示請求` : '開示請求書';
             currentRecordId = 'req-' + Math.random().toString(36).substring(2, 10);
 
@@ -6301,7 +6305,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 const formData = new FormData();
                 formData.append('title', currentRecordTitle);
                 formData.append('content', currentDisclosureText);
-                formData.append('authority', currentTargetAuthority || '自治体');
+                formData.append('authority', currentAddressee || currentTargetAuthority || '自治体');
+                if (currentOrdinanceName) formData.append('legal_basis', currentOrdinanceName);
                 if (walletInput) formData.append('user_wallet_address', walletInput);
                 formData.append('publish_plaintext', publish ? 'true' : 'false');
                 if (publish) formData.append('requested_documents', requestedDocs);
@@ -6452,8 +6457,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 if (!schemaUid) throw new Error('EAS_SCHEMA_UID がサーバーに未設定です。');
 
                 const recordId = 'req-' + (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(16));
-                const authority = currentTargetAuthority || '自治体';
-                const legalBasis = '情報公開法・各自治体情報公開条例';
+                const authority = currentAddressee || currentTargetAuthority || '自治体';
+                const legalBasis = currentOrdinanceName || '情報公開法・各自治体情報公開条例';
                 const publicDocuments = publish ? requestedDocs : '';
                 const docHash = await sha256HexTrimmed(currentDisclosureText);
                 const nowTs = Math.floor(Date.now() / 1000);
@@ -6673,8 +6678,18 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         let currentSort = 'new';
         let publicRecords = [];
 
+        // 自分が保存した請求のID（ログイン時のみ）。一覧で「オンチェーンに記録」を出す対象
+        let myRecordIds = new Set();
+        async function loadMyRecordIds() {
+            try {
+                const res = await fetch('/api/visibility/my-record-ids', { credentials: 'same-origin' });
+                myRecordIds = new Set(res.ok ? (await res.json()).ids : []);
+            } catch (_) { myRecordIds = new Set(); }
+        }
+
         async function loadPublicFeed() {
             try {
+                await loadMyRecordIds();
                 // 統計
                 const statsRes = await fetch('/api/community-feed/stats');
                 const stats = await statsRes.json();
@@ -6748,6 +6763,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                 <span class="text-xs">フォーク</span>
                             </button>
 
+                            ${myRecordIds.has(r.id) ? `<button class="attest-feed-btn text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-summary="${encodeURIComponent(r.summary || '')}" title="この請求を、Civic Lens の代理署名でオンチェーン台帳（EAS）に記録します">⛓️ オンチェーンに記録</button>` : ''}
                             <!-- Web3 IPFS バッジ -->
                             <div class="ipfs-badge-container ml-auto text-xs" data-record-id="${r.id}">
                                 <span class="text-gray-400 text-xs">🪐 IPFS未確認</span>
@@ -6881,6 +6897,50 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 await fetch(`/api/github/fork/${recordId}`, { method: 'POST' });
                 showToast('✅ フォークしました！この請求書を参考に新たな開示請求を作成できます。');
                 await loadRecordGitHubStats(recordId);
+            }
+
+            const attestBtn = e.target.closest('.attest-feed-btn');
+            if (attestBtn) {
+                const recordId = attestBtn.dataset.recordId;
+                const summary = decodeURIComponent(attestBtn.dataset.summary || '');
+                const publish = confirm('公開の請求として、請求する公文書の特定内容を平文でオンチェーンに記録しますか？\n\n[OK] 公開する（誰でも「何が請求されたか」を参照できます）\n[キャンセル] 請求書のハッシュだけを記録する（内容は非公開）\n\nどちらも記録は削除できません。');
+                let docs = '';
+                if (publish) {
+                    docs = (prompt('請求する公文書の特定内容を確認してください（個人名・住所・連絡先は書かないでください。330文字まで）', summary.slice(0, 330)) || '').trim();
+                    if (!docs) return;
+                    if (!confirm(`次の内容を平文でオンチェーンに記録します。記録は削除できません。\n\n${docs}`)) return;
+                }
+                attestBtn.disabled = true;
+                attestBtn.textContent = '⏳ 記録中...';
+                const send = (ack) => {
+                    const body = new URLSearchParams({ publish_plaintext: publish ? 'true' : 'false', requested_documents: docs });
+                    if (ack) body.set('acknowledge_warnings', 'true');
+                    return fetch(`/api/visibility/${encodeURIComponent(recordId)}/attest`, { method: 'POST', body, credentials: 'same-origin' });
+                };
+                try {
+                    let res = await send(false);
+                    if (res.status === 422) {
+                        const detail = (await res.json()).detail;
+                        const list = (detail.personal_info_warnings || []).map(w => `${w.type}: ${w.match}`).join('\n');
+                        if (!confirm(`個人情報の可能性がある記述があります。\n${list}\n\nオンチェーンの記録は削除できません。このまま記録しますか？`)) throw new Error('記録を中止しました');
+                        res = await send(true);
+                    }
+                    const data = await res.json();
+                    if (res.status === 409) {
+                        alert('この請求はすでにオンチェーンに記録されています。台帳（/ledger）をご確認ください。');
+                    } else if (!res.ok) {
+                        throw new Error(typeof data.detail === 'string' ? data.detail : (data.detail && data.detail.message) || '記録に失敗しました');
+                    } else {
+                        alert('オンチェーンに記録しました（Civic Lens の代理署名）。台帳（/ledger）に表示されます。\n' + (data.explorer_url || ''));
+                        loadPublicFeed();
+                        return;
+                    }
+                } catch (err) {
+                    alert('オンチェーン記録エラー: ' + err.message);
+                }
+                attestBtn.disabled = false;
+                attestBtn.textContent = '⛓️ オンチェーンに記録';
+                return;
             }
 
             const ipfsPinBtn = e.target.closest('.ipfs-feed-pin-btn');

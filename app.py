@@ -43,6 +43,7 @@ from ordinance_data import (
     match_authority_by_text,
     list_nearby_authorities,
     find_authority_by_prefecture,
+    addressee_name,
 )
 from station_guide import find_nearest_government_office, get_office_info
 from geolocation import (
@@ -1595,6 +1596,7 @@ async def generate_disclosure_request(
     return {
         "ordinance_name": ordinance.ordinance_name,
         "authority": ordinance.authority,
+        "addressee": addressee_name(ordinance),  # 請求の名宛人（例: 愛知県知事）。台帳の実施機関はこちらを使う
         "contact": ordinance.contact,
         "request_text": request_text,
         "is_mock": is_mock,
@@ -2225,6 +2227,64 @@ async def visibility_get_my(session_id: Optional[str] = None):
     return {
         "records": [r.model_dump() for r in records]
     }
+
+
+@app.get("/api/visibility/my-record-ids")
+async def visibility_my_record_ids(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """ログイン中のユーザーが保存した開示請求のID一覧（一覧画面で「自分の請求」にだけ操作を出すため）"""
+    if not current_user:
+        return {"ids": []}
+    return {"ids": [r.id for r in get_records_by_user(current_user.user_id)]}
+
+
+@app.post("/api/visibility/{record_id}/attest")
+async def visibility_attest_record(
+    record_id: str,
+    publish_plaintext: bool = Form(False),
+    requested_documents: str = Form(""),
+    acknowledge_warnings: bool = Form(False),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """保存済みの自分の開示請求を、Civic Lens の代理署名でオンチェーン（EAS）に記録する。
+
+    請求書の生成直後だけでなく、あとからでも台帳に載せられるようにする。記録できるのは請求を保存した本人のみ
+    （ログイン必須）。請求書の本文のハッシュを記録し、公開する場合だけ「請求する公文書の特定内容」を平文で記録する
+    （個人情報らしき記述があれば 422 で警告し、確認後にのみ記録）。同じ請求は二重に記録しない。
+    実施機関は請求の名宛人（例: 愛知県知事）で記録する。
+    """
+    if not current_user:
+        raise HTTPException(401, "オンチェーンに記録するにはログインが必要です")
+    record = get_record_by_id(record_id)
+    if not record:
+        raise HTTPException(404, "開示請求が見つかりません")
+    if record.user_id != current_user.user_id:
+        raise HTTPException(403, "オンチェーンに記録できるのは、この請求を保存した本人だけです")
+    existing = get_index_entry(record.id)
+    if existing:
+        raise HTTPException(409, {"message": "この請求はすでにオンチェーンに記録されています", "uid": existing.uid})
+    ordinance = get_ordinance(record.target_authority)
+    if not ordinance:
+        raise HTTPException(404, f"対象機関が見つかりません: {record.target_authority}")
+    try:
+        attestation = issue_attestation(
+            record_id=record.id,
+            title=f"{ordinance.ordinance_name}に基づく開示請求",
+            content=record.request_text,
+            authority=addressee_name(ordinance),
+            legal_basis=ordinance.ordinance_name,
+            user_wallet_address=None,
+            requested_documents=requested_documents,
+            publish_plaintext=publish_plaintext,
+            acknowledge_warnings=acknowledge_warnings,
+            owner_user_id=current_user.user_id,
+        )
+    except PersonalInfoWarning as e:
+        raise HTTPException(422, {"message": str(e), "personal_info_warnings": e.warnings})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ChainClientNotConfigured as e:
+        raise HTTPException(503, str(e))
+    return {**attestation.model_dump(), "verification_kit": build_verification_kit(attestation, record.request_text)}
 
 
 @app.get("/api/visibility/stats")
