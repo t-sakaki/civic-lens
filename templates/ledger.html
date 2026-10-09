@@ -199,7 +199,7 @@
             return `${y}年${m}月${d}日`;
         }
 
-        function deadlineHtml(dl) {
+        function deadlineHtml(dl, declared) {
             if (!dl) {
                 return '<p class="text-xs text-gray-400">この実施機関の決定期限データがないため、期限の目安は表示できません。</p>';
             }
@@ -216,7 +216,7 @@
                 </div>
                 <p class="text-xs text-gray-400 mt-1 leading-relaxed">
                     ${escapeHtml(dl.ordinance_name)}：請求日から起算して${dl.request_deadline_days}日以内、延長は${dl.extension_days}日以内（延長時の目安 ${formatDate(dl.extended_deadline)}）。
-                    記録日を請求日とみなした目安で、補正の期間や延長通知によって変わります。
+                    ${declared ? '請求者が申告した請求日を起算日とした目安で、' : '記録日を請求日とみなした目安で、'}補正の期間や延長通知によって変わります。
                 </p>`;
         }
 
@@ -285,6 +285,7 @@
                         <span class="cl-badge-teal rounded-full px-2 py-0.5 font-semibold">オンチェーンの事実（改ざん不可）</span>
                         <span class="cl-badge rounded-full px-2 py-0.5">${e.is_public ? '公開の請求' : '非公開の請求'}</span>
                         <span class="text-gray-400">記録日時 ${escapeHtml(e.recorded_at_display)}</span>
+                        ${e.requested_date_declared ? `<span class="rounded-full px-2 py-0.5" style="border:1px solid rgba(255,255,255,.2)">📅 請求日 ${formatDate(e.requested_date)}（請求者の申告）</span>` : ''}
                     </div>
                     <div>
                         <div class="text-xs text-gray-400">請求先 / 根拠</div>
@@ -294,7 +295,7 @@
                         <div class="text-xs text-gray-400 mb-0.5">請求した公文書</div>
                         ${docs}
                     </div>
-                    <div class="border-t border-white/10 pt-3">${deadlineHtml(e.deadline)}</div>
+                    <div class="border-t border-white/10 pt-3">${deadlineHtml(e.deadline, e.requested_date_declared)}</div>
                     ${extensionsHtml(e)}
                     <details class="text-xs text-gray-300">
                         <summary class="cursor-pointer cl-link">🔎 この記録を検証する</summary>

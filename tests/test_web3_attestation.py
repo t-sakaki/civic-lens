@@ -153,3 +153,29 @@ def test_verify_detects_tampering(chain):
     r = wa.issue_attestation("req-4", "t", FULL_TEXT, "愛知県知事")
     assert wa.verify_attestation(r.uid, FULL_TEXT)["verified"]
     assert not wa.verify_attestation(r.uid, FULL_TEXT + "改")["verified"]
+
+
+def test_request_date_is_recorded_in_the_timestamp_field(chain):
+    from datetime import datetime, timezone, timedelta
+
+    jst = timezone(timedelta(hours=9))
+    r = wa.issue_attestation("req-date", "t", FULL_TEXT, "愛知県知事", request_date="2026-09-22")
+    _, _, _, _, _, ts, _ = decode(chain)
+    assert ts == int(datetime(2026, 9, 22, tzinfo=jst).timestamp()), "請求日（その日の0時JST）が timestamp 欄に入る"
+    assert r.timestamp != ts and r.timestamp > ts, "記録した時刻は別に残る"
+
+
+def test_without_request_date_timestamp_is_the_recording_time(chain):
+    import time
+
+    before = int(time.time())
+    wa.issue_attestation("req-nodate", "t", FULL_TEXT, "愛知県知事")
+    ts = decode(chain)[5]
+    assert before <= ts <= int(time.time()) + 1
+
+
+@pytest.mark.parametrize("bad", ["2026/09/22", "来週", "2999-01-01", "1999-12-31"])
+def test_invalid_request_date_is_rejected_before_writing_to_chain(chain, bad):
+    with pytest.raises(ValueError):
+        wa.issue_attestation("req-bad", "t", FULL_TEXT, "愛知県知事", request_date=bad)
+    assert "encoded_data" not in chain

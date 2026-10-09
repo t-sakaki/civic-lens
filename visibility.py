@@ -13,6 +13,7 @@ Publicデータは匿名化され、地域の行政問題を可視化する。
 import os
 import hashlib
 import uuid
+from request_date import parse_request_date
 from typing import Optional, List, Dict
 from datetime import datetime
 from pydantic import BaseModel
@@ -44,6 +45,7 @@ class DisclosureRequestRecord(BaseModel):
     anonymous_user_id: Optional[str] = None  # "市民#0001" のような形式
     user_id: Optional[str] = None  # 認証ユーザーID (usr-...)
     project_id: Optional[str] = None  # 紐付くプロジェクトID (proj-...)
+    submitted_date: Optional[str] = None  # 請求日（実際に提出した日 YYYY-MM-DD。請求者の申告）
 
 
 def _collection():
@@ -87,8 +89,10 @@ def create_record(
     ip: Optional[str] = None,
     user_id: Optional[str] = None,
     project_id: Optional[str] = None,
+    submitted_date: Optional[str] = None,
 ) -> DisclosureRequestRecord:
     """新規開示請求記録を作成"""
+    parsed = parse_request_date(submitted_date)  # 不正な日付は ValueError
     if visibility not in ("private", "public"):
         raise ValueError(f"visibility must be 'private' or 'public', got '{visibility}'")
 
@@ -113,11 +117,26 @@ def create_record(
         anonymous_user_id=anonymous_id,
         user_id=user_id,
         project_id=project_id,
+        submitted_date=parsed.isoformat() if parsed else None,
     )
 
     _save_one(record.model_dump())
 
     return record
+
+
+def set_submitted_date(record_id: str, user_id: str, submitted_date: Optional[str]) -> Optional[DisclosureRequestRecord]:
+    """請求日（実際に提出した日）を保存する。請求を保存した本人（user_id 一致）のみ。空にすると消す。"""
+    parsed = parse_request_date(submitted_date)  # 不正な日付は ValueError
+    doc_ref = _collection().document(record_id)
+    snap = doc_ref.get()
+    if not snap.exists or snap.to_dict().get("user_id") != user_id:
+        return None
+    data = snap.to_dict()
+    data["submitted_date"] = parsed.isoformat() if parsed else None
+    data["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    doc_ref.set(data)
+    return DisclosureRequestRecord(**data)
 
 
 def update_visibility(record_id: str, new_visibility: str, session_id: Optional[str] = None) -> Optional[DisclosureRequestRecord]:

@@ -2318,6 +2318,14 @@
                 </div>
 
                 <div class="bg-white p-3 rounded-md border border-teal-200 mb-3">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1" for="attestationRequestDate">
+                        📅 請求日（実際に開示請求を提出した日・任意）:
+                    </label>
+                    <input type="date" id="attestationRequestDate" class="text-xs border rounded px-2.5 py-1.5 focus:outline-none focus:border-teal-500">
+                    <p class="text-xs text-gray-500 mt-1">請求者の申告として記録します。オンチェーンの記録時刻（記録した日）とは別に残り、台帳の決定期限の目安の起算日になります。空欄なら記録した日です。保存・IPFS保存にも同じ請求日を残します。</p>
+                </div>
+
+                <div class="bg-white p-3 rounded-md border border-teal-200 mb-3">
                     <label class="block text-xs font-semibold text-gray-700 mb-1">
                         🦊 請求者のEthereum/Baseウォレットアドレス（任意 / 空欄ならガス代ゼロ代行公証）:
                     </label>
@@ -6074,6 +6082,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 formData.append('request_text', currentDisclosureText);
                 formData.append('target_authority', targetAuthority);
                 formData.append('visibility', visibility);
+                const submittedDate = document.getElementById('attestationRequestDate').value;
+                if (submittedDate) formData.append('submitted_date', submittedDate);
                 if (situationKey) formData.append('situation_key', situationKey);
                 if (currentUser && currentUser.user_id) formData.append('user_id', currentUser.user_id);
                 if (currentProjectId) formData.append('project_id', currentProjectId);
@@ -6307,6 +6317,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 formData.append('content', currentDisclosureText);
                 formData.append('authority', currentAddressee || currentTargetAuthority || '自治体');
                 if (currentOrdinanceName) formData.append('legal_basis', currentOrdinanceName);
+                const requestDate = document.getElementById('attestationRequestDate').value;
+                if (requestDate) formData.append('request_date', requestDate);
                 if (walletInput) formData.append('user_wallet_address', walletInput);
                 formData.append('publish_plaintext', publish ? 'true' : 'false');
                 if (publish) formData.append('requested_documents', requestedDocs);
@@ -6461,12 +6473,18 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 const legalBasis = currentOrdinanceName || '情報公開法・各自治体情報公開条例';
                 const publicDocuments = publish ? requestedDocs : '';
                 const docHash = await sha256HexTrimmed(currentDisclosureText);
-                const nowTs = Math.floor(Date.now() / 1000);
+                // timestamp 欄: 請求者が申告した請求日（その日の0時JST）。空欄なら記録した時刻
+                const requestDateStr = document.getElementById('attestationRequestDate').value;
+                const tsField = requestDateStr
+                    ? Math.floor(new Date(requestDateStr + 'T00:00:00+09:00').getTime() / 1000)
+                    : Math.floor(Date.now() / 1000);
+                if (tsField > Math.floor(Date.now() / 1000)) throw new Error('請求日に未来の日付は指定できません');
 
+                // スキーマ: recordId, authority, requestType, requestedDocuments, documentHash, timestamp, legalBasis
                 const coder = ethers.AbiCoder.defaultAbiCoder();
                 const encodedData = coder.encode(
-                    ['string', 'string', 'string', 'bytes32', 'uint256', 'string'],
-                    [recordId, authority, publicDocuments, docHash, nowTs, legalBasis]
+                    ['string', 'string', 'string', 'string', 'bytes32', 'uint256', 'string'],
+                    [recordId, authority, '行政文書開示請求', publicDocuments, docHash, tsField, legalBasis]
                 );
 
                 statusEl.textContent = 'ウォレットで署名してください（EASコントラクトへの直接送信）...';
@@ -6587,6 +6605,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 formData.append('title', currentRecordTitle);
                 formData.append('content', currentDisclosureText);
                 formData.append('target_authority', currentTargetAuthority || '自治体');
+                const ipfsSubmitted = document.getElementById('attestationRequestDate').value;
+                if (ipfsSubmitted) formData.append('submitted_date', ipfsSubmitted);
                 if (selectedSituation) formData.append('situation_key', selectedSituation.key);
 
                 const res = await fetch('/api/web3/ipfs/pin', {
@@ -6678,6 +6698,11 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         let currentSort = 'new';
         let publicRecords = [];
 
+        (function limitRequestDateToToday() {
+            const el = document.getElementById('attestationRequestDate');
+            if (el) el.max = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+        })();
+
         // 自分が保存した請求のID（ログイン時のみ）。一覧で「オンチェーンに記録」を出す対象
         let myRecordIds = new Set();
         async function loadMyRecordIds() {
@@ -6763,7 +6788,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                 <span class="text-xs">フォーク</span>
                             </button>
 
-                            ${myRecordIds.has(r.id) ? `<button class="attest-feed-btn text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-summary="${encodeURIComponent(r.summary || '')}" title="この請求を、Civic Lens の代理署名でオンチェーン台帳（EAS）に記録します">⛓️ オンチェーンに記録</button>` : ''}
+                            ${myRecordIds.has(r.id) ? `<button class="date-feed-btn text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-submitted="${r.submitted_date || ''}" title="実際に開示請求を提出した日を記録します">📅 請求日を記録</button><button class="attest-feed-btn text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-submitted="${r.submitted_date || ''}" data-summary="${encodeURIComponent(r.summary || '')}" title="この請求を、Civic Lens の代理署名でオンチェーン台帳（EAS）に記録します">⛓️ オンチェーンに記録</button>` : ''}
                             <!-- Web3 IPFS バッジ -->
                             <div class="ipfs-badge-container ml-auto text-xs" data-record-id="${r.id}">
                                 <span class="text-gray-400 text-xs">🪐 IPFS未確認</span>
@@ -6783,7 +6808,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                             <span class="text-xs text-gray-500">${date}</span>
                         </div>
                         <div class="text-sm text-gray-700 mb-2">
-                            <strong>対象機関:</strong> ${r.target_authority}
+                            <strong>対象機関:</strong> ${r.target_authority}${r.submitted_date ? ` <span class="text-xs text-gray-500">／ 📅 請求日 ${r.submitted_date.replace(/-/g, '/')}（請求者の申告）</span>` : ''}
                         </div>
                         <div class="text-sm bg-gray-50 p-2 rounded mb-2">
                             ${r.summary}
@@ -6804,11 +6829,11 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             // DB版レコードのみ、スター・フォーク統計とIPFS記録を取得
             filtered.filter(r => r.source !== 'onchain').forEach(r => {
                 loadRecordGitHubStats(r.id);
-                loadRecordIpfsStats(r.id, r.summary, r.target_authority);
+                loadRecordIpfsStats(r.id, r.summary, r.target_authority, r.submitted_date);
             });
         }
 
-        async function loadRecordIpfsStats(recordId, fallbackContent, fallbackAuthority) {
+        async function loadRecordIpfsStats(recordId, fallbackContent, fallbackAuthority, fallbackSubmitted) {
             try {
                 const res = await fetch(`/api/web3/ipfs/record/${recordId}`);
                 const container = document.querySelector(`.ipfs-badge-container[data-record-id="${recordId}"]`);
@@ -6829,6 +6854,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                         <button class="ipfs-feed-pin-btn text-xs bg-gray-50 hover:bg-purple-50 text-gray-600 hover:text-purple-700 border border-gray-200 hover:border-purple-300 px-2 py-0.5 rounded flex items-center gap-1 transition"
                                 data-record-id="${recordId}"
                                 data-content="${encodeURIComponent(fallbackContent || '開示請求')}"
+                                data-submitted="${fallbackSubmitted || ''}"
                                 data-authority="${encodeURIComponent(fallbackAuthority || '自治体')}">
                             <span>🪐</span> IPFS保存
                         </button>
@@ -6899,10 +6925,34 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 await loadRecordGitHubStats(recordId);
             }
 
+            const dateBtn = e.target.closest('.date-feed-btn');
+            if (dateBtn) {
+                const input = prompt('実際に開示請求を提出した日（請求日）を YYYY-MM-DD で入力してください（例: 2026-09-22）。\n請求者の申告として保存されます。空欄で消せます。', dateBtn.dataset.submitted || '');
+                if (input === null) return;
+                const value = input.trim();
+                if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) { alert('請求日は YYYY-MM-DD 形式で入力してください（例: 2026-09-22）'); return; }
+                dateBtn.disabled = true;
+                try {
+                    const res = await fetch(`/api/visibility/${encodeURIComponent(dateBtn.dataset.recordId)}/submitted-date`, {
+                        method: 'POST', body: new URLSearchParams({ submitted_date: value }), credentials: 'same-origin' });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '請求日の保存に失敗しました');
+                    loadPublicFeed();
+                } catch (err) {
+                    alert('請求日エラー: ' + err.message);
+                    dateBtn.disabled = false;
+                }
+                return;
+            }
+
             const attestBtn = e.target.closest('.attest-feed-btn');
             if (attestBtn) {
                 const recordId = attestBtn.dataset.recordId;
                 const summary = decodeURIComponent(attestBtn.dataset.summary || '');
+                const dateInput = prompt('実際に開示請求を提出した日（請求日）を YYYY-MM-DD で入力してください。\nオンチェーンには請求者の申告として記録され、決定期限の目安の起算日になります。空欄なら記録した日です。', attestBtn.dataset.submitted || '');
+                if (dateInput === null) return;
+                const requestDate = dateInput.trim();
+                if (requestDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) { alert('請求日は YYYY-MM-DD 形式で入力してください（例: 2026-09-22）'); return; }
                 const publish = confirm('公開の請求として、請求する公文書の特定内容を平文でオンチェーンに記録しますか？\n\n[OK] 公開する（誰でも「何が請求されたか」を参照できます）\n[キャンセル] 請求書のハッシュだけを記録する（内容は非公開）\n\nどちらも記録は削除できません。');
                 let docs = '';
                 if (publish) {
@@ -6914,6 +6964,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 attestBtn.textContent = '⏳ 記録中...';
                 const send = (ack) => {
                     const body = new URLSearchParams({ publish_plaintext: publish ? 'true' : 'false', requested_documents: docs });
+                    if (requestDate) body.set('request_date', requestDate);
                     if (ack) body.set('acknowledge_warnings', 'true');
                     return fetch(`/api/visibility/${encodeURIComponent(recordId)}/attest`, { method: 'POST', body, credentials: 'same-origin' });
                 };
@@ -6958,6 +7009,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     formData.append('title', `市民請求-${recordId}`);
                     formData.append('content', content);
                     formData.append('target_authority', authority);
+                    if (ipfsPinBtn.dataset.submitted) formData.append('submitted_date', ipfsPinBtn.dataset.submitted);
 
                     const res = await fetch('/api/web3/ipfs/pin', { method: 'POST', body: formData });
                     if (!res.ok) throw new Error('IPFS保存に失敗しました');

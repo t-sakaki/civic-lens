@@ -9,8 +9,8 @@ REQUEST_TEXT = "愛知県知事 殿\n愛知県情報公開条例に基づき、�
 DOCS = "あいこんナビの個人情報誤掲載に関する委託契約書・業務報告書・点検監査記録・調査報告書"
 
 
-def record(user_id="user-1", rid="5410-0000-1111-2222"):
-    return SimpleNamespace(id=rid, user_id=user_id, target_authority="aichi-pref", request_text=REQUEST_TEXT)
+def record(user_id="user-1", rid="5410-0000-1111-2222", submitted=None):
+    return SimpleNamespace(id=rid, user_id=user_id, target_authority="aichi-pref", request_text=REQUEST_TEXT, submitted_date=submitted)
 
 
 @pytest.fixture
@@ -135,3 +135,83 @@ def test_index_page_has_the_feed_attest_button(api):
     c, _, _ = api
     html = c.get("/").text
     assert "attest-feed-btn" in html and "/attest" in html and "currentAddressee" in html
+
+
+SET_DATE_URL = "/api/visibility/5410-0000-1111-2222/submitted-date"
+
+
+def test_request_date_is_passed_to_the_chain_and_saved_to_the_record(api, monkeypatch):
+    c, appmod, calls = api
+    login(appmod)
+    saved = []
+    monkeypatch.setattr(appmod, "set_submitted_date", lambda rid, uid, d: saved.append((rid, uid, d)))
+    assert c.post(URL, data={"request_date": "2026-09-22"}).status_code == 200
+    assert calls[0]["request_date"] == "2026-09-22"
+    assert saved == [("5410-0000-1111-2222", "user-1", "2026-09-22")], "オンチェーンに記録した請求日は保存データにも残す"
+
+
+def test_saved_request_date_is_used_when_none_is_given(api, monkeypatch):
+    c, appmod, calls = api
+    login(appmod)
+    monkeypatch.setattr(appmod, "get_record_by_id", lambda rid: record(submitted="2026-09-22"))
+    monkeypatch.setattr(appmod, "set_submitted_date", lambda *a: pytest.fail("変更がなければ保存し直さない"))
+    assert c.post(URL).status_code == 200
+    assert calls[0]["request_date"] == "2026-09-22"
+
+
+def test_chain_record_survives_a_failure_to_save_the_date(api, monkeypatch):
+    c, appmod, _ = api
+    login(appmod)
+
+    def boom(*a):
+        raise RuntimeError("firestore down")
+
+    monkeypatch.setattr(appmod, "set_submitted_date", boom)
+    assert c.post(URL, data={"request_date": "2026-09-22"}).status_code == 200
+
+
+def test_set_submitted_date_requires_login_and_owner(api, monkeypatch):
+    c, appmod, _ = api
+    assert c.post(SET_DATE_URL, data={"submitted_date": "2026-09-22"}).status_code == 401
+    login(appmod)
+    monkeypatch.setattr(appmod, "set_submitted_date", lambda rid, uid, d: None)  # 本人の請求ではない
+    assert c.post(SET_DATE_URL, data={"submitted_date": "2026-09-22"}).status_code == 404
+
+
+def test_set_submitted_date_saves_and_validates(api, monkeypatch):
+    c, appmod, _ = api
+    login(appmod)
+    import visibility
+
+    stored = {}
+    monkeypatch.setattr(appmod, "set_submitted_date", lambda rid, uid, d: SimpleNamespace(
+        id=rid, submitted_date=(visibility.parse_request_date(d).isoformat() if visibility.parse_request_date(d) else None)))
+    r = c.post(SET_DATE_URL, data={"submitted_date": "2026-09-22"})
+    assert r.status_code == 200 and r.json() == {"id": "5410-0000-1111-2222", "submitted_date": "2026-09-22"}
+    assert c.post(SET_DATE_URL, data={"submitted_date": ""}).json()["submitted_date"] is None, "空で消せる"
+    assert c.post(SET_DATE_URL, data={"submitted_date": "2999-01-01"}).status_code == 400
+    assert c.post(SET_DATE_URL, data={"submitted_date": "9/22"}).status_code == 400
+
+
+def test_ipfs_pin_carries_the_submitted_date(api, monkeypatch):
+    c, appmod, _ = api
+    seen = {}
+
+    async def fake_pin(**kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(model_dump=lambda: {"cid": "x"})
+
+    monkeypatch.setattr(appmod, "pin_to_ipfs", fake_pin)
+    assert c.post("/api/web3/ipfs/pin", data={"content": "本文", "submitted_date": "2026-09-22"}).status_code == 200
+    assert seen["submitted_date"] == "2026-09-22"
+    assert c.post("/api/web3/ipfs/pin", data={"content": "本文", "submitted_date": "あした"}).status_code == 400
+
+
+def test_feed_item_exposes_the_submitted_date(monkeypatch):
+    import community_feed
+
+    monkeypatch.setattr(community_feed, "get_record_stats", lambda rid: {"stars": 0, "forks": 0})
+    r = SimpleNamespace(id="r1", created_at="2026-10-09T02:00:00Z", anonymous_user_id="市民#1", target_authority_name="愛知県",
+                        category="自治体", summary_public=None, user_input="あいこんナビ", status="draft", result_excerpt=None,
+                        submitted_date="2026-09-22")
+    assert community_feed._db_item(r)["submitted_date"] == "2026-09-22"
