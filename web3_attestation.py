@@ -27,6 +27,7 @@ from web3_chain_client import (
     submit_attestation_onchain, fetch_attestation_onchain, ChainClientNotConfigured, ZERO_ADDRESS,
 )
 from storage_backend import use_firestore
+from request_date import parse_request_date, to_unix as request_date_to_unix
 
 DEFAULT_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data")
 if os.getenv("VERCEL"):
@@ -236,8 +237,12 @@ def issue_attestation(
     publish_plaintext: bool = False,
     acknowledge_warnings: bool = False,
     owner_user_id: Optional[str] = None,
+    request_date: Optional[str] = None,
 ) -> AttestationRecord:
     """開示請求書に対する EAS オンチェーン存在証明（タイムスタンプ）を実チェーンに発行する。
+
+    request_date（YYYY-MM-DD）は、実際に請求を提出した日（請求者の申告）。スキーマの timestamp 欄に
+    その日の0時（JST）として記録する。省略時は記録した時刻。ブロック時刻（記録した時刻）は別に残る。
 
     publish_plaintext=True の場合のみ、requested_documents（請求する公文書の特定内容）を
     平文でオンチェーンに記録する。個人情報らしき記述が検出された場合は、
@@ -261,8 +266,10 @@ def issue_attestation(
         if warnings and not acknowledge_warnings:
             raise PersonalInfoWarning(warnings)
 
+    declared = parse_request_date(request_date)  # 不正な日付は ValueError
     doc_hash = compute_document_hash(content)
     now_ts = int(time.time())
+    declared_ts = request_date_to_unix(declared) if declared else now_ts
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # 請求者ウォレット未指定時は EAS の慣例どおり宛先なし（ゼロアドレス）で記録する
@@ -270,7 +277,7 @@ def issue_attestation(
 
     encoded_data = abi_encode(
         ["string", "string", "string", "string", "bytes32", "uint256", "string"],
-        [record_id, authority, request_type, public_documents, bytes.fromhex(doc_hash[2:]), now_ts, legal_basis],
+        [record_id, authority, request_type, public_documents, bytes.fromhex(doc_hash[2:]), declared_ts, legal_basis],
     )
 
     schema_uid = os.getenv("EAS_SCHEMA_UID")

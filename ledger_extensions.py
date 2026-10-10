@@ -147,8 +147,10 @@ def _parse(att: Dict[str, Any], chain_id: int, request_entry: Optional[Dict[str,
         "recorded_at": datetime.fromtimestamp(int(att["time"]), JST).isoformat(),
         # 通知書記載の請求日と、台帳に記録された日（記録日）が異なる場合の事実の注記
         "request_date_differs_from_recorded": bool(
-            request_date and req.get("recorded_at")
-            and request_date != datetime.fromisoformat(req["recorded_at"]).astimezone(JST).date()
+            request_date and (req.get("requested_date") or req.get("recorded_at"))
+            and request_date != (
+                date.fromisoformat(req["requested_date"]) if req.get("requested_date")
+                else datetime.fromisoformat(req["recorded_at"]).astimezone(JST).date())
         ),
         # 期限を過ぎても決定がない場合に、不作為についての審査請求を検討できる最短の日（目安）。
         # 期限の特例では「相当部分」と「残り」で別。法的な見解が分かれうるため断定しない

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from ordinance_data import AUTHORITIES, addressee_name
+from request_date import from_unix as request_date_from_unix
 
 JST = timezone(timedelta(hours=9))
 
@@ -115,6 +116,25 @@ def compute_deadline(authority: str, recorded_at: datetime, today: Optional[date
     }
 
 
+def _unix_from_field(value: Any) -> Optional[int]:
+    """EAS の uint256 欄の値（{"type":"BigNumber","hex":"0x…"}・整数・数字文字列）を UNIX 秒に。読めなければ None。"""
+    try:
+        if isinstance(value, dict):
+            return int(value.get("hex", "0x0"), 16)
+        if isinstance(value, str):
+            return int(value, 16) if value.lower().startswith("0x") else int(value)
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _declared_request_date(fields: Dict[str, Any], recorded_at: datetime):
+    """スキーマの timestamp 欄に請求者が申告した請求日（日付）。記録した日より後や読めない値は無効（None）。"""
+    ts = _unix_from_field(fields.get("timestamp"))
+    d = request_date_from_unix(ts) if ts else None
+    return d if d and d <= recorded_at.astimezone(JST).date() else None
+
+
 def _parse(att: Dict[str, Any], chain_id: int, official_attester: Optional[str], today: Optional[datetime] = None) -> Dict[str, Any]:
     fields = {f["name"]: f["value"]["value"] for f in json.loads(att["decodedDataJson"])}
     recorded_at = datetime.fromtimestamp(int(att["time"]), JST)
@@ -127,6 +147,10 @@ def _parse(att: Dict[str, Any], chain_id: int, official_attester: Optional[str],
     # 投げ銭の送金先: recipientが指定されていればそれ、なければ「本人ウォレット署名」の場合の
     # attester自身（=請求者本人）。Civic Lens公証・recipient未指定の場合は送金先が特定できない。
     tip_recipient = recipient if not is_zero_recipient else (attester if not is_official else None)
+    # 請求日は、請求者が申告した日があればそれ、なければ記録した日。期限の目安の起算日に使う
+    declared = _declared_request_date(fields, recorded_at)
+    requested_date = declared or recorded_at.astimezone(JST).date()
+    deadline_start = datetime(requested_date.year, requested_date.month, requested_date.day, tzinfo=JST)
     return {
         "uid": att["id"],
         "record_id": fields.get("recordId", ""),
@@ -137,6 +161,8 @@ def _parse(att: Dict[str, Any], chain_id: int, official_attester: Optional[str],
         "document_hash": fields.get("documentHash", ""),
         "recorded_at": recorded_at.isoformat(),
         "recorded_at_display": recorded_at.strftime("%Y年%m月%d日 %H:%M"),
+        "requested_date": requested_date.isoformat(),
+        "requested_date_declared": declared is not None and declared != recorded_at.astimezone(JST).date(),
         "revoked": bool(att.get("revoked")),
         "ref_uid": att.get("refUID"),
         "tx_hash": att.get("txid"),
@@ -146,7 +172,7 @@ def _parse(att: Dict[str, Any], chain_id: int, official_attester: Optional[str],
         "signer_label": "Civic Lens 公証（代理署名）" if is_official else "請求者本人のウォレット署名",
         "explorer_url": f"{EAS_EXPLORER_HOSTS[chain_id]}/attestation/view/{att['id']}",
         "tx_url": f"{TX_EXPLORER_HOSTS[chain_id]}/tx/{att.get('txid')}",
-        "deadline": compute_deadline(authority, recorded_at, today),
+        "deadline": compute_deadline(authority, deadline_start, today),
     }
 
 

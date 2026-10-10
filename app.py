@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
 import voice_panel
 import document_reader
+from request_date import parse_request_date
 import voice_archive
 import news_watch
 from cost_guard import rate_limit
@@ -73,7 +74,7 @@ from situations import get_situation_list, get_situation
 from visibility import (
     create_record, update_visibility, add_result,
     get_public_records, get_my_records, get_public_stats, get_records_by_user,
-    get_records_by_project, get_record_by_id,
+    get_records_by_project, get_record_by_id, set_submitted_date,
     DisclosureRequestRecord,
 )
 from project import (
@@ -2107,6 +2108,7 @@ async def visibility_create(
     session_id: Optional[str] = Form(None),
     user_id: Optional[str] = Form(None),
     project_id: Optional[str] = Form(None),
+    submitted_date: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """新規開示請求を保存（Private/Public 選択、ログインユーザー・プロジェクト自動紐付け）"""
@@ -2135,6 +2137,7 @@ async def visibility_create(
             session_id=session_id,
             user_id=assigned_user_id,
             project_id=project_id,
+            submitted_date=submitted_date,
         )
 
         return {
@@ -2237,12 +2240,34 @@ async def visibility_my_record_ids(current_user: Optional[User] = Depends(get_cu
     return {"ids": [r.id for r in get_records_by_user(current_user.user_id)]}
 
 
+@app.post("/api/visibility/{record_id}/submitted-date")
+async def visibility_set_submitted_date(
+    record_id: str,
+    submitted_date: str = Form(""),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """請求日（実際に開示請求を提出した日）を保存する。請求を保存した本人のみ。空にすると消す。
+
+    請求者の申告であり、オンチェーンの記録時刻とは別。未来の日付は指定できない。
+    """
+    if not current_user:
+        raise HTTPException(401, "請求日を記録するにはログインが必要です")
+    try:
+        record = set_submitted_date(record_id, current_user.user_id, submitted_date)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not record:
+        raise HTTPException(404, "開示請求が見つからないか、あなたが保存した請求ではありません")
+    return {"id": record.id, "submitted_date": record.submitted_date}
+
+
 @app.post("/api/visibility/{record_id}/attest")
 async def visibility_attest_record(
     record_id: str,
     publish_plaintext: bool = Form(False),
     requested_documents: str = Form(""),
     acknowledge_warnings: bool = Form(False),
+    request_date: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """保存済みの自分の開示請求を、Civic Lens の代理署名でオンチェーン（EAS）に記録する。
@@ -2277,6 +2302,7 @@ async def visibility_attest_record(
             publish_plaintext=publish_plaintext,
             acknowledge_warnings=acknowledge_warnings,
             owner_user_id=current_user.user_id,
+            request_date=request_date or record.submitted_date,  # 未指定なら保存済みの請求日
         )
     except PersonalInfoWarning as e:
         raise HTTPException(422, {"message": str(e), "personal_info_warnings": e.warnings})
@@ -2284,6 +2310,11 @@ async def visibility_attest_record(
         raise HTTPException(400, str(e))
     except ChainClientNotConfigured as e:
         raise HTTPException(503, str(e))
+    if request_date and request_date != record.submitted_date:
+        try:
+            set_submitted_date(record.id, current_user.user_id, request_date)  # 記録した請求日を保存データにも残す
+        except Exception as e:
+            print(f"[visibility/attest] 請求日の保存に失敗: {e}")  # オンチェーンへの記録は完了している
     return {**attestation.model_dump(), "verification_kit": build_verification_kit(attestation, record.request_text)}
 
 
@@ -2572,6 +2603,7 @@ async def api_issue_attestation(
     requested_documents: str = Form(""),
     publish_plaintext: bool = Form(False),
     acknowledge_warnings: bool = Form(False),
+    request_date: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """開示請求書に対する EAS オンチェーン存在証明（タイムスタンプ）を発行
@@ -2594,6 +2626,7 @@ async def api_issue_attestation(
             publish_plaintext=publish_plaintext,
             acknowledge_warnings=acknowledge_warnings,
             owner_user_id=current_user.user_id if current_user else None,
+            request_date=request_date,
         )
     except PersonalInfoWarning as e:
         raise HTTPException(422, {"message": str(e), "personal_info_warnings": e.warnings})
@@ -2650,8 +2683,13 @@ async def api_pin_to_ipfs(
     content: str = Form(...),
     target_authority: str = Form("自治体"),
     situation_key: Optional[str] = Form(None),
+    submitted_date: Optional[str] = Form(None),
 ):
     """開示請求書を IPFS に刻んで永久保存し、CIDを発行"""
+    try:
+        submitted = parse_request_date(submitted_date)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     rec_id = record_id or f"req-{uuid.uuid4().hex[:8]}"
     record = await pin_to_ipfs(
         record_id=rec_id,
@@ -2659,6 +2697,7 @@ async def api_pin_to_ipfs(
         content=content,
         target_authority=target_authority,
         situation_key=situation_key,
+        submitted_date=submitted.isoformat() if submitted else None,
     )
     return record.model_dump()
 

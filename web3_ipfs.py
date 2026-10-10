@@ -75,7 +75,8 @@ async def pin_to_ipfs(
     title: str,
     content: str,
     target_authority: str,
-    situation_key: Optional[str] = None
+    situation_key: Optional[str] = None,
+    submitted_date: Optional[str] = None,
 ) -> IPFSRecord:
     """開示請求書ドキュメントを IPFS にアーカイブ"""
     payload = {
@@ -84,6 +85,7 @@ async def pin_to_ipfs(
         "title": title,
         "target_authority": target_authority,
         "situation_key": situation_key,
+        "submitted_date": submitted_date,  # 請求日（実際に提出した日・請求者の申告）。pin した時刻は timestamp
         "content": content,
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "legal_context": "Act on Access to Information Held by Administrative Organs / Local Ordinance"
