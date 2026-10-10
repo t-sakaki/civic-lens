@@ -11,6 +11,7 @@ import json
 import requests
 from typing import List, Dict, Optional
 from pydantic import BaseModel
+from ordinance_data import default_authority_type
 
 
 GMI_API_KEY = os.getenv("GMI_API_KEY", "")
@@ -212,7 +213,7 @@ def _mock_municipality_research(municipality: str) -> Dict:
     """GMI_API_KEY未設定・API失敗時の一般的な条例ひな形"""
     return {
         "ordinance_name": f"{municipality}情報公開条例",
-        "authority_type": "市長" if municipality.endswith(("市", "区")) else "町長・村長",
+        "authority_type": default_authority_type(municipality),
         "request_deadline_days": 30,
         "extension_days": 30,
         "review_period_days": 90,

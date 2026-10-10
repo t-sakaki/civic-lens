@@ -111,7 +111,7 @@ def _authority_info_from_pool(pooled: Optional[dict]) -> Optional[AuthorityInfo]
         key=f"{POOL_KEY_PREFIX}{pooled['muni_code']}",
         category="自治体",
         authority=municipality,
-        authority_type=pooled.get("authority_type") or "市長",
+        authority_type=default_authority_type(municipality, pooled.get("authority_type")),
         ordinance_name=pooled.get("ordinance_name") or f"{municipality}情報公開条例",
         ordinance_id="（自動調査のため不明）",
         enacted="（自動調査のため不明）",
@@ -131,6 +131,20 @@ def _authority_info_from_pool(pooled: Optional[dict]) -> Optional[AuthorityInfo]
         ),
         aliases=[municipality],
     )
+
+
+def default_authority_type(name: str, given: str = "") -> str:
+    """自治体名の語尾から実施機関の種別（市長・区長・町長・村長・知事）を決める。
+    AI調査結果の値が名称と食い違う場合（例: 品川区なのに市長）は名称を優先する。"""
+    name = (name or "").strip()
+    for suffix, kind in (("市", "市長"), ("区", "区長"), ("町", "町長"), ("村", "村長")):
+        if name.endswith(suffix):
+            return kind
+    if name.endswith(("県", "府", "道")):
+        return "知事"
+    if name.endswith("都"):
+        return "都知事"
+    return given or "市長"
 
 
 def addressee_name(info: AuthorityInfo) -> str:

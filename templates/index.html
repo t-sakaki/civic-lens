@@ -3162,9 +3162,21 @@
 
         // Geolocationのバックグラウンド調査で新たに判明した自治体（data/authorities/*.json
         // 未収録）を "pool:<muni_code>" キーの候補として<select>に追加する
+        // 自治体名の語尾から実施機関の種別を決める（品川区→区長）。名称と食い違うAI値より名称を優先
+        function authorityTypeFor(name, given) {
+            const n = (name || '').trim();
+            if (n.endsWith('市')) return '市長';
+            if (n.endsWith('区')) return '区長';
+            if (n.endsWith('町')) return '町長';
+            if (n.endsWith('村')) return '村長';
+            if (/[県府道]$/.test(n)) return '知事';
+            if (n.endsWith('都')) return '都知事';
+            return given || '市長';
+        }
+
         function addDynamicAuthorityOption(key, name, type) {
             if (allAuthorities.some(a => a.key === key)) return;
-            allAuthorities.push({ key, name, type: type || '市長', category: '自治体' });
+            allAuthorities.push({ key, name, type: authorityTypeFor(name, type), category: '自治体' });
             renderAuthorityOptions(currentAuthorityFilter);
         }
 
@@ -4848,7 +4860,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 if (allAuthorities.some(a => a.key === key)) continue;
                 if (!key.startsWith('pool:') && !key.startsWith('pref:')) continue;
 
-                const type = key.startsWith('pref:') ? '知事' : '市長';
+                const type = key.startsWith('pref:') ? '知事' : authorityTypeFor(r.authority_name);
                 allAuthorities.push({ key, name: r.authority_name, type, category: '履歴' });
                 added++;
             }
