@@ -27,6 +27,7 @@ from eth_abi import decode as abi_decode
 from web3 import Web3
 
 from ens_resolve import resolve_ens_name
+from web3_attestation import scan_personal_info
 from onchain_ledger import EAS_GRAPHQL_URLS, ledger_config, LedgerNotConfigured
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
@@ -119,6 +120,27 @@ def _graphql(query: str, variables: dict) -> dict:
     return body["data"]
 
 
+def hide_ens_names() -> bool:
+    """PRIVACY_HIDE_ENS が有効なら、ENS名（個人のハンドルになりうる）を公開ランキングに出さない。未設定なら従来どおり。"""
+    return os.getenv("PRIVACY_HIDE_ENS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _display_ens_name(address: str) -> Optional[str]:
+    return None if hide_ens_names() else resolve_ens_name(address)
+
+
+MASK = "●●●"
+
+
+def mask_personal_info(text: str) -> str:
+    """応援メッセージ中の個人情報らしき記述を伏せる（表示時のみ。チェーン上の原文は削除できない）。
+    誤検知は許容し、請求側の個人情報スキャン（scan_personal_info）と同じ検出パターンを使う。"""
+    masked = text or ""
+    for found in sorted(scan_personal_info(masked), key=lambda f: len(f["match"]), reverse=True):
+        masked = masked.replace(found["match"], MASK)
+    return masked
+
+
 def _empty_breakdown():
     return defaultdict(lambda: {"total_amount": 0, "count": 0, "decimals": 18})
 
@@ -164,7 +186,7 @@ def build_tip_leaderboard() -> Dict[str, Any]:
             ]
             result.append({
                 "address": addr,
-                "ens_name": resolve_ens_name(addr),
+                "ens_name": _display_ens_name(addr),
                 count_label: count_by_addr[addr],
                 "breakdown": breakdown,
             })
@@ -262,7 +284,7 @@ def tips_for_request(ref_uid: str) -> List[Dict[str, Any]]:
             "referrer": Web3.to_checksum_address(referrer) if referrer.lower() != ZERO_ADDRESS else None,
             "currency": symbol,
             "amount": amount / (10 ** decimals),
-            "comment": comment,
+            "comment": mask_personal_info(comment),
             "time": a["time"],
         })
     return results
