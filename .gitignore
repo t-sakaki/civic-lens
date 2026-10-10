@@ -61,3 +61,6 @@ data/ledger_reactions.json
 
 # ニュースの見張りの購読情報（実行時データ）
 data/push_subscriptions.json
+
+# デモ素材の出力
+demo/out/
