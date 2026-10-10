@@ -112,7 +112,7 @@ from web3_ipfs import (
     pin_to_ipfs, get_ipfs_record, verify_content_integrity, list_all_ipfs_records
 )
 from web3_sbt import (
-    mint_sbt, get_sbt_metadata, get_user_passport, list_available_badges
+    mint_sbt, get_sbt_metadata, get_user_passport, list_available_badges, passport_public_view
 )
 from auth import (
     User, register_user, authenticate_password, authenticate_wallet,
@@ -2725,7 +2725,7 @@ async def api_list_ipfs_records():
 
 @app.post("/api/web3/sbt/mint")
 async def api_mint_sbt(
-    recipient_id: str = Form("市民#00001"),
+    recipient_id: str = Form(""),
     badge_key: str = Form("first_request"),
     wallet_address: str = Form(...),
 ):
@@ -2764,7 +2764,7 @@ async def api_get_sbt_metadata(token_id: str):
 async def api_get_user_passport(recipient_id_or_wallet: str):
     """特定ユーザーまたはウォレットが保有するSBT一覧（シビック・パスポート）を取得"""
     records = get_user_passport(recipient_id_or_wallet)
-    return {"passport": [r.model_dump() for r in records]}
+    return {"passport": [passport_public_view(r, recipient_id_or_wallet) for r in records]}
 
 
 # ---------------------------------------------------------------------------

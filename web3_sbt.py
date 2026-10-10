@@ -10,6 +10,7 @@
 import os
 import json
 import hashlib
+import secrets
 import time
 from typing import Optional, Dict, List
 from datetime import datetime
@@ -72,6 +73,24 @@ BADGE_TYPES = {
         "tier": "Platinum",
     }
 }
+
+
+# 旧API既定値。連番で登録順が推測できるため「未指定」として扱い、ランダムIDに置き換える
+LEGACY_DEFAULT_RECIPIENT_ID = "市民#00001"
+
+
+def hide_wallet_in_public_views() -> bool:
+    """PRIVACY_HIDE_WALLET_META が有効なら、公開メタデータ・パスポートAPIにウォレットを出さない。
+
+    EAS上の記録（recipient）は削除できず公開のままだが、公開APIで「市民ID ↔ ウォレット」の
+    対応を引けなくすることで、簡単な突合を防ぐ。未設定なら従来どおり。
+    """
+    return os.getenv("PRIVACY_HIDE_WALLET_META", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def new_recipient_id() -> str:
+    """推測できない市民ID（連番や登録順を含まない）"""
+    return "citizen-" + secrets.token_hex(6)
 
 
 class SBTRecord(BaseModel):
@@ -157,6 +176,9 @@ def mint_sbt(
         badge_key = "first_request"
     if not wallet_address:
         raise ValueError("wallet_address は必須です（EASアテステーションの受給者アドレス）")
+    recipient_id = (recipient_id or "").strip()
+    if not recipient_id or recipient_id == LEGACY_DEFAULT_RECIPIENT_ID:
+        recipient_id = new_recipient_id()
 
     badge = BADGE_TYPES[badge_key]
     minted_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
@@ -212,19 +234,23 @@ def get_sbt_metadata(token_id: str) -> Optional[dict]:
     r = records[token_id]
     badge = BADGE_TYPES.get(r["badge_key"], {})
     
+    attributes = [
+        {"trait_type": "Recipient", "value": r["recipient_id"]},
+        {"trait_type": "Wallet", "value": r["wallet_address"]},
+        {"trait_type": "Tier", "value": badge.get("tier", "Bronze")},
+        {"trait_type": "Soulbound", "value": "True (Locked)"},
+        {"trait_type": "Mint Date", "value": r["minted_at"]},
+        {"trait_type": "Chain", "value": r["chain"]},
+    ]
+    if hide_wallet_in_public_views():
+        attributes = [a for a in attributes if a["trait_type"] != "Wallet"]
+
     return {
         "name": r["badge_name"],
         "description": badge.get("description", "Civic Lens 譲渡不能市民バッジ"),
         "image_data": r["svg_image"],
         "external_url": f"https://civic-lens-liart.vercel.app/sbt/{token_id}",
-        "attributes": [
-            {"trait_type": "Recipient", "value": r["recipient_id"]},
-            {"trait_type": "Wallet", "value": r["wallet_address"]},
-            {"trait_type": "Tier", "value": badge.get("tier", "Bronze")},
-            {"trait_type": "Soulbound", "value": "True (Locked)"},
-            {"trait_type": "Mint Date", "value": r["minted_at"]},
-            {"trait_type": "Chain", "value": r["chain"]},
-        ]
+        "attributes": attributes,
     }
 
 
@@ -236,6 +262,14 @@ def get_user_passport(recipient_id_or_wallet: str) -> List[SBTRecord]:
         if r["recipient_id"].lower() == target or r["wallet_address"].lower() == target:
             results.append(SBTRecord(**r))
     return results
+
+
+def passport_public_view(record: SBTRecord, query: str) -> dict:
+    """パスポートAPIの公開用の表現。フラグ有効時は、ウォレットで検索した本人以外にウォレットを返さない。"""
+    data = record.model_dump()
+    if hide_wallet_in_public_views() and data["wallet_address"].lower() != query.lower():
+        data.pop("wallet_address", None)
+    return data
 
 
 def list_available_badges() -> List[dict]:
