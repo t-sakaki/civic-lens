@@ -45,6 +45,7 @@ from ordinance_data import (
     list_nearby_authorities,
     find_authority_by_prefecture,
     addressee_name,
+    default_authority_type,
 )
 from station_guide import find_nearest_government_office, get_office_info
 from geolocation import (
@@ -364,7 +365,7 @@ def _resolve_municipality_candidates(
         candidates = [{
             "key": pool_authority_key,
             "name": pooled.get("municipality") or location.municipality,
-            "type": pooled.get("authority_type") or "市長",
+            "type": default_authority_type(pooled.get("municipality") or location.municipality, pooled.get("authority_type")),
             "category": "自治体",
             "distance_km": 0.0,
         }] + candidates
@@ -462,7 +463,7 @@ async def list_nearby_municipalities(lat: float, lon: float, muni_code: str = ""
             candidates.append({
                 "key": f"pool:{f['muni_code']}",
                 "name": pooled.get("municipality") or f["municipality"],
-                "type": pooled.get("authority_type") or "市長",
+                "type": default_authority_type(pooled.get("municipality") or f["municipality"], pooled.get("authority_type")),
                 "category": "自治体",
                 "distance_km": f["distance_km"],
                 "researched": True,

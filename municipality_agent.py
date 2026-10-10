@@ -16,6 +16,7 @@ from gmi_client import (
     research_prefecture_disclosure_system,
 )
 from municipality_pool import mark_researching, save_research_result, mark_failed
+from ordinance_data import default_authority_type
 
 
 def research_municipality_now(
@@ -47,7 +48,7 @@ def research_municipality_now(
             "lon": lon,
             "status": "ready",
             "ordinance_name": research.get("ordinance_name"),
-            "authority_type": research.get("authority_type"),
+            "authority_type": default_authority_type(municipality, research.get("authority_type")),
             "request_deadline_days": research.get("request_deadline_days", 30),
             "extension_days": research.get("extension_days", 30),
             "review_period_days": research.get("review_period_days", 90),
