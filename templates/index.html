@@ -5564,6 +5564,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 }
 
                 displayDisclosure(data);
+                renderOutcomeButtons(data);
                 document.getElementById('outputSection').classList.remove('hidden');
 
                 const routeFormData = new FormData();
@@ -5589,6 +5590,38 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         }
 
         document.getElementById('disclosureBtn').addEventListener('click', () => runDisclosureRequest());
+
+        // ---- 自己改善ループ: 請求の結果を記録し、次の請求書生成に活かす ----
+        function renderOutcomeButtons(data) {
+            const section = document.getElementById('outputSection');
+            if (!section || !data.request_id) return;
+            section.querySelector('.outcome-panel')?.remove();
+            const fewShot = (data.few_shot_cases || []).length
+                ? `<div class="text-xs text-green-700 mb-1">📚 過去に開示につながった類似請求 ${data.few_shot_cases.length}件を参考に作成しました</div>` : '';
+            const opts = [['disclosed', '✅ 開示'], ['partial', '🟡 一部開示'], ['non_disclosure', '⛔ 不開示'], ['not_submitted', '📭 未提出']];
+            const panel = document.createElement('div');
+            panel.className = 'outcome-panel mt-4 p-3 border rounded-lg bg-gray-50';
+            panel.innerHTML = `${fewShot}<div class="text-sm font-semibold mb-2">この請求の結果を教えてください（次の請求書づくりに活かします）</div>
+                <div class="flex flex-wrap gap-2">${opts.map(([k, l]) => `<button type="button" class="chat-suggestion-btn" data-outcome="${k}">${l}</button>`).join('')}</div>
+                <div class="outcome-status text-xs text-gray-600 mt-2"></div>`;
+            section.appendChild(panel);
+            panel.querySelectorAll('button[data-outcome]').forEach(btn => btn.addEventListener('click', async () => {
+                const fd = new FormData();
+                fd.append('request_id', data.request_id);
+                fd.append('outcome', btn.dataset.outcome);
+                fd.append('target_authority', data.target_authority_key || '');
+                fd.append('request_text', data.request_text || '');
+                const st = panel.querySelector('.outcome-status');
+                try {
+                    const r = await fetch('/api/disclosure-outcome', { method: 'POST', body: fd });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.detail || '保存に失敗しました');
+                    panel.querySelectorAll('button').forEach(b => b.classList.toggle('font-bold', b === btn));
+                    const rate = j.stats && j.stats.success_rate != null ? `（この機関の開示率 ${Math.round(j.stats.success_rate * 100)}%）` : '';
+                    st.textContent = `「${j.outcome_label}」として記録しました${rate}。押し直せば訂正できます。`;
+                } catch (e) { st.textContent = '⚠️ ' + e.message; }
+            }));
+        }
 
         // 分析完了後にチャット内で「開示請求書を作成しますか？」とサジェストする
         let disclosureSuggestionCount = 0;

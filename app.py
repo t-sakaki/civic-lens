@@ -4,6 +4,7 @@
 """
 import asyncio
 import sdgs_scorer
+import disclosure_outcomes
 import json
 import time
 import os
@@ -1614,8 +1615,17 @@ async def generate_disclosure_request(
             )
 
     agent = get_agent()
+    # 自己改善ループ: 同じ機関・地域で開示につながった過去の請求を few-shot 例として渡す
     try:
-        request_text, is_mock = agent.generate_disclosure_request(user_input, ordinance, strategy_option=strategy_option or "option-fast")
+        past_cases = await asyncio.to_thread(
+            disclosure_outcomes.find_similar_successes, target_authority, ordinance.authority, 3)
+    except Exception as e:
+        print(f"[disclosure_outcomes] 過去事例の取得に失敗: {e}")
+        past_cases = []
+    try:
+        request_text, is_mock = agent.generate_disclosure_request(
+            user_input, ordinance, strategy_option=strategy_option or "option-fast",
+            few_shot=disclosure_outcomes.format_few_shot(past_cases))
     except Exception as e:
         print(f"Gemini エラー: {e}")
         request_text = _mock_disclosure_request(user_input, ordinance)
@@ -1650,6 +1660,10 @@ async def generate_disclosure_request(
         "contact": ordinance.contact,
         "request_text": request_text,
         "is_mock": is_mock,
+        "request_id": disclosure_outcomes.new_request_id(),
+        "target_authority_key": target_authority,
+        "few_shot_cases": [
+            {"authority": c.get("authority"), "outcome_label": c.get("outcome_label")} for c in past_cases],
         "deadline": {
             "decision_days": ordinance.request_deadline_days,
             "decision_deadline": deadline.isoformat(),
@@ -1659,6 +1673,34 @@ async def generate_disclosure_request(
         },
         "next_steps": next_steps,
     }
+
+
+@app.post("/api/disclosure-outcome", dependencies=[Depends(rate_limit)])
+async def save_disclosure_outcome(
+    request_id: str = Form(...),
+    outcome: str = Form(...),
+    target_authority: str = Form(""),
+    request_text: str = Form(""),
+):
+    """生成した開示請求書の実際の結果（開示/一部開示/不開示/未提出）を記録する。
+
+    記録は次の請求書生成時に few-shot 例として使われる（自己改善ループ）。
+    """
+    ordinance = get_ordinance(target_authority) if target_authority else None
+    try:
+        saved = await asyncio.to_thread(
+            disclosure_outcomes.record_outcome, request_id, outcome, target_authority,
+            ordinance.authority if ordinance else "", ordinance.authority if ordinance else "", request_text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "outcome": saved["outcome"], "outcome_label": saved["outcome_label"],
+            "storage": saved["storage"], "stats": await asyncio.to_thread(disclosure_outcomes.stats, target_authority or None)}
+
+
+@app.get("/api/disclosure-outcome/stats")
+async def disclosure_outcome_stats(target_authority: Optional[str] = None):
+    """結果の集計（機関指定可）。開示率の推移で自己改善ループの効果を見る"""
+    return await asyncio.to_thread(disclosure_outcomes.stats, target_authority or None)
 
 
 @app.post("/api/review-request")
