@@ -1588,7 +1588,10 @@
         @media (max-width: 520px) { .sdg-stage-grid { grid-template-columns: repeat(6, 1fr); } }
         .sdg-stage-btn { position: relative; padding: 0; border: 0; background: none; cursor: pointer; opacity: 0.35; transition: opacity 0.3s, transform 0.3s; line-height: 0; }
         .sdg-stage-btn img { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
-        .sdg-stage-btn.is-up { opacity: 1; animation: sdgStageUp 2.4s ease-in-out infinite; }
+        .sdg-stage-btn.is-up { opacity: 1; --l: clamp(0, var(--lvl, 5), 10); --amp: calc(0.15px + var(--l) * 0.28px); --rot: calc(var(--l) * 0.35deg); animation: sdgShake calc(2.2s - var(--l) * 0.195s) ease-in-out infinite; border-radius: 0.45rem; box-shadow: 0 0 0 calc(var(--l) * 0.2px + 1px) rgba(239, 68, 68, calc(0.25 + var(--l) * 0.06)), 0 0 calc(var(--l) * 1.4px) calc(var(--l) * 0.4px) rgba(239, 68, 68, calc(var(--l) * 0.07)); }
+        .sdg-stage-btn.is-up[data-lvl="0"] { animation: none; box-shadow: none; }
+        /* 震え（警鐘レベル比例・SDGsダッシュボードと同じ見せ方）。アイコン自体は無改変で、ボタンごと動かし外枠を光らせる */
+        @keyframes sdgShake { 0%, 100% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(calc(var(--amp) * -1), calc(var(--amp) * 0.5)) rotate(calc(var(--rot) * -1)); } 40% { transform: translate(var(--amp), calc(var(--amp) * -0.5)) rotate(var(--rot)); } 60% { transform: translate(calc(var(--amp) * -0.6), calc(var(--amp) * -0.4)) rotate(calc(var(--rot) * -0.6)); } 80% { transform: translate(calc(var(--amp) * 0.6), calc(var(--amp) * 0.4)) rotate(calc(var(--rot) * 0.6)); } }
         .sdg-stage-btn.is-up::after { content: attr(data-lvl); position: absolute; right: -4px; top: -6px; min-width: 1.15rem; padding: 0 0.25rem; border-radius: 999px; background: #b91c1c; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
         .sdg-stage-btn.is-selected { transform: scale(1.12); opacity: 1; z-index: 1; }
         @keyframes sdgStageUp { 50% { transform: translateY(-2px); } }
@@ -1643,7 +1646,7 @@
         .tour-item { margin-bottom: 0.6rem; }
         .tour-item-title { cursor: pointer; font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0; }
         .sdg-stage-note { font-size: 0.66rem; color: var(--chat-muted); text-align: center; margin-top: 0.4rem; }
-        @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up { animation: none; } }
+        @media (prefers-reduced-motion: reduce) { .sdg-stage-btn.is-up, .sdg-stage-btn.is-writing { animation: none; } }
         /* 音声パネルの公式アイコン（枠・角丸・色は加えない） */
         .vp-agent-icon.vp-sdg-img { border: none; border-radius: 0; padding: 0; background: none; object-fit: contain; width: 44px; height: 44px; }
         .vp-voice-hero { border: 1px solid var(--sdg-hero, #cbd5e1); border-radius: 0.75rem; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(148, 163, 184, 0.08); }
@@ -3349,8 +3352,10 @@
             return authorityPopover.contains(document.activeElement);
         }
 
+        let authorityPopoverOpenedAt = 0;
         function openAuthorityPopover() {
             clearTimeout(authorityPopoverCloseTimer);
+            if (authorityPopover.classList.contains('hidden')) authorityPopoverOpenedAt = Date.now();
             authorityPopover.classList.remove('hidden');
             authorityTag.classList.add('open');
             renderAuthorityChipBatch();
@@ -3363,9 +3368,11 @@
 
         authorityTag.addEventListener('click', (e) => {
             e.stopPropagation();
+            // マウスを乗せた時点で開くため、そのままクリックすると閉じてしまい「開かない」ように見える。
+            // ホバーで開いた直後のクリックは閉じない（タッチ端末では従来どおりタップで開閉）
             if (authorityPopover.classList.contains('hidden')) {
                 openAuthorityPopover();
-            } else {
+            } else if (Date.now() - authorityPopoverOpenedAt > 800) {
                 closeAuthorityPopover();
             }
         });
@@ -3856,7 +3863,7 @@
             document.querySelectorAll('#sdgStageGrid .sdg-stage-btn').forEach(b => {
                 const lvl = byTheme[`sdg${b.dataset.sdg}`];
                 b.classList.toggle('is-up', !!lvl);
-                if (lvl) b.dataset.lvl = String(lvl); else delete b.dataset.lvl;
+                if (lvl) { b.dataset.lvl = String(lvl); b.style.setProperty('--lvl', String(Math.max(0, Math.min(10, Math.round(Number(lvl) || 0))))); } else { delete b.dataset.lvl; b.style.removeProperty('--lvl'); }
             });
             clearInterval(sdgStage.timer);
             const withSdg = items.filter(it => sdgNumber(it.label));
@@ -3920,7 +3927,7 @@
                 if (globalStage) markStageWriting(themes, on);
             };
             const light = (themes) => themes.forEach(t => {
-                box.querySelector(`.sdg-mini[data-sdg="${String(t).replace(/^sdg/, '')}"]`)?.classList.add('is-up');
+                { const sn = String(t).replace(/^sdg/, ''); const m = box.querySelector(`.sdg-mini[data-sdg="${sn}"]`); if (m) { m.classList.add('is-up'); const g = document.querySelector(`#sdgStageGrid .sdg-stage-btn[data-sdg="${sn}"]`); const gl = g && g.dataset.lvl; if (gl) m.style.setProperty('--lvl', String(Math.max(0, Math.min(10, Math.round(Number(gl) || 0))))); } }
             });
             const log = (html) => {
                 const li = document.createElement('li');
@@ -3963,6 +3970,8 @@
                         log(`${icon}<span><b>${escapeHtml(shortAgentLabel(v.label))}（AI・怒り${escapeHtml(String(v.anger_level ?? '-'))}）</b> ${escapeHtml(v.pseudo_citizen_voice || v.remark || '')}</span>`);
                     } else if (ev.type === 'integrating') {
                         log('🧭 統合エージェントが、声を横断して開示請求する対象の行政文書をまとめています…');
+                    } else if (ev.type === 'sdgs_scoring') {
+                        log('🌍 17体のSDGs目標エージェントが、169ターゲットに照らして怒りを採点しています…');
                     } else if (ev.type === 'done') {
                         record = ev.record;
                     } else if (ev.type === 'error') {
@@ -3991,6 +4000,7 @@
                 logWrap.querySelector('summary').textContent = `🧠 検討の過程（${voiceCount}体が声を挙げました）`;
                 logWrap.open = false;
                 renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked, onAudioEnded, onVoiceUnavailable });
+                if (record.sdgs_anger) resultEl.insertAdjacentHTML('beforeend', sdgsAngerPanelHtml(record.sdgs_anger));
                 return record;
             } catch (err) {
                 mark(appearedThemes, false);
@@ -5345,6 +5355,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 const data = await res.json();
 
                 displayAnalysis(data);
+                if (data.sdgs_anger) document.getElementById('angerDisplay').insertAdjacentHTML('beforeend', sdgsAngerPanelHtml(data.sdgs_anger));
                 document.getElementById('resultSection').classList.remove('hidden');
                 document.getElementById('actionSection').classList.remove('hidden');
                 activateSplitView();
@@ -5400,6 +5411,32 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             if (!isMock) return '';
             const reasonText = MOCK_REASON_LABELS[reason] || 'AI処理に失敗したため';
             return `<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ ${reasonText}サンプルデータです（${label}）</div>`;
+        }
+
+        // ---- SDGs怒りエージェント団（17目標×169ターゲット）----
+        // 怒ることに疲れた市民の代わりに、17体の目標エージェントが0〜10で怒る。上位の怒りが開示請求の根拠になる。
+        function sdgsAngerPanelHtml(sdgs) {
+            if (!sdgs || !Array.isArray(sdgs.goals)) return '';
+            const color = (s) => s >= 7 ? '#dc2626' : (s >= 4 ? '#f97316' : (s >= 1 ? '#facc15' : '#e5e7eb'));
+            const rows = sdgs.goals.map(g => {
+                const icon = (typeof sdgIconSrc === 'function') ? `<img src="${sdgIconSrc(g.goal)}" alt="SDGs 目標${g.goal}" width="20" height="20" style="flex:none">` : `<b style="width:20px">${g.goal}</b>`;
+                const tgt = (g.targets || []).length ? ` <span class="text-gray-500">[${g.targets.map(escapeHtml).join(', ')}]</span>` : '';
+                const cmt = g.comment ? `<div class="text-xs text-gray-700 ml-7">😡 ${escapeHtml(g.comment)}${tgt}</div>` : '';
+                return `<div class="py-0.5" title="${escapeHtml(g.label)}">
+                    <div class="flex items-center gap-2 text-xs">${icon}
+                        <span style="width:9.5em;flex:none" class="truncate">${escapeHtml(g.label)}</span>
+                        <div style="flex:1;background:#f3f4f6;border-radius:4px;height:10px">
+                            <div style="width:${g.score * 10}%;background:${color(g.score)};height:10px;border-radius:4px"></div></div>
+                        <b style="width:2.5em;text-align:right">${g.score}</b></div>${cmt}</div>`;
+            }).join('');
+            const rationale = sdgs.disclosure_rationale
+                ? `<div class="mt-2 p-2 rounded bg-red-50 text-sm"><b>📄 この怒りを開示請求の根拠に：</b>${escapeHtml(sdgs.disclosure_rationale)}</div>` : '';
+            return `<div class="sdgs-anger-panel mt-4 p-3 border rounded-lg bg-white">
+                ${sdgs.is_mock ? '<div class="mb-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">⚠️ AI未接続のため簡易推定です</div>' : ''}
+                <div class="font-bold mb-1">🌍 SDGs怒りエージェント団 — 17目標・169ターゲットで、あなたの代わりに怒りました</div>
+                <div class="text-xs text-gray-500 mb-2">怒りスコア 0〜10（最大 ${sdgs.max_score}/10）。怒りの強い目標が、請求する行政文書とその理由を後押しします。</div>
+                ${rows}${rationale}
+                <div class="text-xs text-gray-400 mt-2">${escapeHtml(sdgs.disclaimer || '')}</div></div>`;
         }
 
         let latestAnalysis = null;

@@ -3,6 +3,7 @@
 市民の怒りを情報公開に変換するエンドポイント
 """
 import asyncio
+import sdgs_scorer
 import json
 import time
 import os
@@ -552,6 +553,41 @@ async def get_municipality_detection_history(
     return {"records": [r.model_dump() for r in records]}
 
 
+# ---------------------------------------------------------------------------
+# SDGs怒りエージェント団（sdgs_scorer.py）: 17目標×169ターゲットで怒りを数値化し、開示請求の根拠にする
+# ---------------------------------------------------------------------------
+_NEWS_SDGS_CACHE: Dict[str, Any] = {}
+
+
+def _news_sdgs(news_id: str, news_text: str) -> Optional[dict]:
+    """ニュース1件のSDGs怒り（プロセス内キャッシュ。同じ記事で何度もGeminiを呼ばない）"""
+    if news_id in _NEWS_SDGS_CACHE:
+        return _NEWS_SDGS_CACHE[news_id]
+    try:
+        result = sdgs_scorer.score_sdgs(news_text, "ニュース記事", get_agent().genai_client)
+    except Exception as e:
+        print(f"[sdgs] ニュースのスコアリング失敗: {e}")
+        return None
+    if len(_NEWS_SDGS_CACHE) > 500:
+        _NEWS_SDGS_CACHE.clear()
+    _NEWS_SDGS_CACHE[news_id] = result
+    return result
+
+
+@app.post("/api/sdgs", dependencies=[Depends(rate_limit)])
+async def sdgs_anger_score(text: str = Form(...), kind: str = Form("grievance")):
+    """テキスト（市民の訴え or ニュース）を、17体のSDGs目標エージェントが0〜10で怒りスコアリングする。
+
+    戻り値: {"goals": [{goal, label, score, comment, targets[], document_focus}] (17件),
+            "top_goals", "max_score", "disclosure_rationale", "is_mock", ...}
+    """
+    text = text.strip()
+    if not text:
+        raise HTTPException(400, "テキストを入力してください。")
+    label = "ニュース記事" if kind == "news" else "市民の訴え"
+    return await asyncio.to_thread(sdgs_scorer.score_sdgs, text[:6000], label, get_agent().genai_client)
+
+
 @app.post("/api/analyze")
 async def analyze_anger(
     user_input: str = Form(""),
@@ -642,8 +678,16 @@ async def analyze_anger(
             is_mock=True,
         )
 
+    # 5. SDGs怒りエージェント団（17目標×169ターゲット）。請求文書の特定結果は変えず、根拠として添える
+    try:
+        sdgs_anger = await asyncio.to_thread(sdgs_scorer.score_sdgs, analysis_input, "市民の訴え", agent.genai_client)
+    except Exception as e:
+        print(f"[sdgs] スコアリング失敗: {e}")
+        sdgs_anger = None
+
     return {
         "anger_analysis": anger_analysis.model_dump(),
+        "sdgs_anger": sdgs_anger,
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
         "attachments_reading": attachments_reading.model_dump() if attachments_reading else None,
@@ -887,7 +931,8 @@ async def analyze_news_item(
     # 分析済みの記事は再分析せず、保存済みの記録を返す（自律ブリーフィング等で何度呼ばれてもGemini費用が増えない）
     existing = get_record(news_id)
     if existing and existing.get("voices") and existing.get("proposals"):
-        return {**existing, "panel_script": voice_panel.agent_lines(existing)}
+        return {**existing, "panel_script": voice_panel.agent_lines(existing),
+                "sdgs_anger": await asyncio.to_thread(_news_sdgs, news_id, news_text)}
     result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, authority_key)
     record = record_analysis(
         news_id=news_id,
@@ -904,7 +949,8 @@ async def analyze_news_item(
         **_voices_to_record_fields(result["voices"]),
     )
     # 画面の表示は、音声パネルの読み上げと同じ「エージェントごとの一言」にする（保存はしない）
-    return {**record, "panel_script": voice_panel.agent_lines(record)}
+    return {**record, "panel_script": voice_panel.agent_lines(record),
+            "sdgs_anger": await asyncio.to_thread(_news_sdgs, news_id, news_text)}
 
 
 def _analysis_events(
@@ -925,7 +971,8 @@ def _analysis_events(
         for v in existing["voices"]:
             yield {"type": "voice", "replay": True, "voice": v}
         yield {"type": "integrating", "replay": True}
-        yield {"type": "done", "replay": True, "record": {**existing, "panel_script": voice_panel.agent_lines(existing)}}
+        yield {"type": "done", "replay": True, "record": {
+            **existing, "panel_script": voice_panel.agent_lines(existing), "sdgs_anger": _news_sdgs(news_id, news_text)}}
         return
     hint = _resolve_hint_key(region, authority_key)
     appearances = _get_appearances(news_id, news_text, region)
@@ -950,7 +997,8 @@ def _analysis_events(
         overall_anger_level=proposed["anger_level"],
         **_voices_to_record_fields(voices),
     )
-    yield {"type": "done", "record": {**record, "panel_script": voice_panel.agent_lines(record)}}
+    yield {"type": "done", "record": {
+        **record, "panel_script": voice_panel.agent_lines(record), "sdgs_anger": _news_sdgs(news_id, news_text)}}
 
 
 @app.post("/api/news-agent/analyze-stream", dependencies=[Depends(rate_limit)])
