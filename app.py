@@ -31,7 +31,7 @@ import document_reader
 from request_date import parse_request_date
 import voice_archive
 import news_watch
-from cost_guard import rate_limit
+from cost_guard import rate_limit, generation_rate_limit
 from pydantic import BaseModel
 
 from agent import get_agent, AngerAnalysis, AgentResponse
@@ -576,7 +576,7 @@ def _news_sdgs(news_id: str, news_text: str) -> Optional[dict]:
     return result
 
 
-@app.post("/api/sdgs", dependencies=[Depends(rate_limit)])
+@app.post("/api/sdgs", dependencies=[Depends(rate_limit), Depends(generation_rate_limit)])
 async def sdgs_anger_score(text: str = Form(...), kind: str = Form("grievance")):
     """テキスト（市民の訴え or ニュース）を、17体のSDGs目標エージェントが0〜10で怒りスコアリングする。
 
@@ -590,7 +590,7 @@ async def sdgs_anger_score(text: str = Form(...), kind: str = Form("grievance"))
     return await asyncio.to_thread(sdgs_scorer.score_sdgs, text[:6000], label, get_agent().genai_client)
 
 
-@app.post("/api/analyze")
+@app.post("/api/analyze", dependencies=[Depends(generation_rate_limit)])
 async def analyze_anger(
     user_input: str = Form(""),
     image_data: Optional[str] = Form(None),
@@ -1617,7 +1617,7 @@ async def share_pseudo_citizen_voice(payload: SocialShareRequest):
 VALID_STRATEGY_OPTIONS = ("option-fast", "option-thorough")
 
 
-@app.post("/api/disclosure-request")
+@app.post("/api/disclosure-request", dependencies=[Depends(generation_rate_limit)])
 async def generate_disclosure_request(
     user_input: str = Form(...),
     target_authority: str = Form(...),
@@ -1733,7 +1733,7 @@ async def disclosure_outcome_stats(target_authority: Optional[str] = None):
     return await asyncio.to_thread(disclosure_outcomes.stats, target_authority or None)
 
 
-@app.post("/api/review-request")
+@app.post("/api/review-request", dependencies=[Depends(generation_rate_limit)])
 async def generate_review_request(
     non_disclosure_decision: str = Form(...),
     target_authority: str = Form(...),

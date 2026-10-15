@@ -12,6 +12,8 @@ import os
 os.environ["UPSTASH_REDIS_REST_URL"] = ""
 os.environ["UPSTASH_REDIS_REST_TOKEN"] = ""
 os.environ.setdefault("CIVIC_LENS_STORAGE", "json")
+os.environ.setdefault("GENERATION_RATE_LIMIT_PER_MINUTE", "0")
+os.environ.setdefault("GENERATION_RATE_LIMIT_PER_HOUR", "0")
 
 
 # Firebase（Auth/Firestore）を使うテストは、エミュレータがあるときだけ実行する。

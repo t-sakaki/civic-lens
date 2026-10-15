@@ -5359,6 +5359,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     const detail = typeof errData.detail === 'string' ? errData.detail : '';
+                    if (res.status === 429) throw new Error(`⏳ ${detail || '利用が集中しています。少し待ってからもう一度お試しください。'}`);
                     throw new Error(detail || `分析に失敗しました（HTTP ${res.status}）。`);
                 }
                 const data = await res.json();
