@@ -785,8 +785,12 @@ JSONのみを出力してください。
         user_input: str,
         ordinance,
         strategy_option: str = "option-fast",
+        few_shot: str = "",
     ) -> tuple[str, bool]:
-        """戻り値: (請求書テキスト, is_mock)。is_mock=True はGemini未使用のテンプレート生成を示す"""
+        """戻り値: (請求書テキスト, is_mock)。is_mock=True はGemini未使用のテンプレート生成を示す
+
+        few_shot: 過去に開示につながった類似請求（disclosure_outcomes.format_few_shot）。自己改善ループの入力
+        """
         """開示請求書・司法行政文書開示申出書を生成（Gemini優先・Human-in-the-loop戦略反映）"""
         current_date = __import__('datetime').datetime.now().strftime("%Y年%m月%d日")
         is_court = getattr(ordinance, "category", "") == "裁判所"
@@ -827,7 +831,7 @@ JSONのみを出力してください。
 
 【戦略オプション】:
 {strategy_note}
-
+{few_shot}
 【提出先情報】:
 - 機関名（宛先）: {addressee}
 - 担当窓口: {ordinance.contact}
