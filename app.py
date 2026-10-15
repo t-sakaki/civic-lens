@@ -5,6 +5,7 @@
 import asyncio
 import sdgs_scorer
 import disclosure_outcomes
+import authority_inference
 import json
 import time
 import os
@@ -656,6 +657,18 @@ async def analyze_anger(
     if anger_level is None:
         anger_level = text_to_anger_level(analysis_input)
 
+    # 3.5 対象機関が未選択なら、内容から推定する（画面の既定値で無関係な機関が入るのを防ぐ）
+    authority_guess = None
+    if not hint_authority_key:
+        try:
+            authority_guess = await asyncio.to_thread(
+                authority_inference.infer_authority, analysis_input, agent.genai_client)
+        except Exception as e:
+            print(f"[authority_inference] 失敗: {e}")
+            authority_guess = authority_inference._result()
+        if authority_guess.get("inferred"):
+            hint_authority_key = authority_guess["authority_key"]
+
     # 4. Geminiエージェントで詳細分析
     try:
         anger_analysis = agent.analyze_anger(analysis_input, hint_authority_key)
@@ -679,6 +692,16 @@ async def analyze_anger(
             is_mock=True,
         )
 
+    # 4.5 推定できなかった場合は対象機関を埋めない（請求文書の特定結果はそのまま）
+    if authority_guess is not None and not authority_guess.get("inferred"):
+        anger_analysis.target_authority_key = ""
+        anger_analysis.target_authority = "（未特定）対象機関を選んでください"
+    elif authority_guess is not None and authority_guess.get("inferred"):
+        # 分析側が別の機関に変えた場合は、その機関を推定結果として扱う
+        if anger_analysis.target_authority_key and anger_analysis.target_authority_key != authority_guess["authority_key"]:
+            authority_guess = {**authority_guess, "authority_key": anger_analysis.target_authority_key,
+                               "authority": anger_analysis.target_authority, "source": "analysis"}
+
     # 5. SDGs怒りエージェント団（17目標×169ターゲット）。請求文書の特定結果は変えず、根拠として添える
     try:
         sdgs_anger = await asyncio.to_thread(sdgs_scorer.score_sdgs, analysis_input, "市民の訴え", agent.genai_client)
@@ -689,6 +712,7 @@ async def analyze_anger(
     return {
         "anger_analysis": anger_analysis.model_dump(),
         "sdgs_anger": sdgs_anger,
+        "authority_inference": authority_guess,
         "emotion_data": emotion_data,
         "emotion_is_mock": emotion_is_mock,
         "attachments_reading": attachments_reading.model_dump() if attachments_reading else None,

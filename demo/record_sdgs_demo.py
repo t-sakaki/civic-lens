@@ -8,7 +8,7 @@ import argparse
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-GRIEVANCE = ("市が駅前の公園の樹木を大量に伐採して再開発を進めている。業者は随意契約で決まったらしく、"
+GRIEVANCE = ("豊田市が駅前の公園の樹木を大量に伐採して再開発を進めている。業者は随意契約で決まったらしく、"
              "住民説明会も開かれていない。税金がいくら使われているのかも分からない。")
 
 ap = argparse.ArgumentParser()

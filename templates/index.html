@@ -3218,6 +3218,12 @@
                 ...Object.keys(groups).filter(c => !categoryOrder.includes(c)),
             ];
 
+            // 既定は「未選択」。先頭の機関（例: 愛知県議会）が黙って送られないようにする
+            const noneOption = document.createElement('option');
+            noneOption.value = '';
+            noneOption.textContent = '未選択（内容から自動で推定）';
+            select.appendChild(noneOption);
+
             allCategories.forEach(category => {
                 const optgroup = document.createElement('optgroup');
                 optgroup.label = `─── ${category} ───`;
@@ -3235,6 +3241,8 @@
             // 直前の選択がまだ選択肢に残っていれば維持する
             if ([...select.options].some(o => o.value === previousValue)) {
                 select.value = previousValue;
+            } else {
+                select.value = '';
             }
 
             const hint = document.getElementById('authorityFilterHint');
@@ -3277,7 +3285,8 @@
 
             const current = allAuthorities.find(a => a.key === select.value);
             if (!current) {
-                label.textContent = '未選択';
+                icon.textContent = '🏛️';
+                label.textContent = '未選択（内容から自動で推定）';
                 return;
             }
             icon.textContent = categoryIconFor(current.category);
@@ -5371,8 +5380,17 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     + (data.attachments_reading ? visionReadingHtml(data.attachments_reading) + '<div class="mt-3"></div>' : '')
                     + `分析が完了しました。怒りレベル ${analysis.anger_level}/10、対象機関「${escapeHtml(authorityName)}」への${actionLabel}を分析結果にまとめました。`;
 
+                const inf = data.authority_inference;
                 if (data.anger_analysis.target_authority_key) {
-                    setSelectedAuthority(data.anger_analysis.target_authority_key);
+                    // 推定した機関は「自動」扱いにし、ユーザーが選び直せるようにする
+                    setSelectedAuthority(data.anger_analysis.target_authority_key, { auto: !!(inf && inf.inferred) });
+                }
+                if (inf && inf.inferred) {
+                    const dept = inf.department ? `（担当: ${escapeHtml(inf.department)}）` : '';
+                    assistantBubble.insertAdjacentHTML('beforeend', `<div class="mt-2 text-xs text-amber-500">🤖 対象機関「${escapeHtml(inf.authority || '')}」${dept}は${escapeHtml(inf.note || 'AIの推定です。提出前に確認してください。')}</div>`);
+                } else if (inf && !inf.inferred) {
+                    assistantBubble.insertAdjacentHTML('beforeend', `<div class="mt-2 text-sm text-amber-500">📍 ${escapeHtml(inf.message || '対象機関を選んでください。')}</div>`);
+                    document.getElementById('selectedAuthorityLabel')?.closest('button, div')?.classList.add('ring-2', 'ring-amber-400');
                 }
 
                 suggestDisclosureAction(analysis.next_action);
@@ -5460,7 +5478,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 <p class="mt-2 text-gray-700">${analysis.pain_summary}</p>
             `;
 
-            document.getElementById('authorityDisplay').textContent = analysis.target_authority;
+            document.getElementById('authorityDisplay').textContent = analysis.target_authority
+                + (data.authority_inference && data.authority_inference.inferred ? '（AIの推定です。提出前に確認してください。）' : '');
             document.getElementById('legalBasisDisplay').textContent = analysis.legal_basis;
 
             const docsList = document.getElementById('documentsList');
