@@ -792,6 +792,8 @@ JSONのみを出力してください。
         few_shot: 過去に開示につながった類似請求（disclosure_outcomes.format_few_shot）。自己改善ループの入力
         """
         """開示請求書・司法行政文書開示申出書を生成（Gemini優先・Human-in-the-loop戦略反映）"""
+        if strategy_option not in ("option-fast", "option-thorough"):
+            raise ValueError(f"未知の strategy_option: {strategy_option!r}")
         current_date = __import__('datetime').datetime.now().strftime("%Y年%m月%d日")
         is_court = getattr(ordinance, "category", "") == "裁判所"
         doc_label = "司法行政文書" if is_court else "行政文書"

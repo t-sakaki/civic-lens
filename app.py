@@ -1614,6 +1614,9 @@ async def share_pseudo_citizen_voice(payload: SocialShareRequest):
     }
 
 
+VALID_STRATEGY_OPTIONS = ("option-fast", "option-thorough")
+
+
 @app.post("/api/disclosure-request")
 async def generate_disclosure_request(
     user_input: str = Form(...),
@@ -1622,6 +1625,9 @@ async def generate_disclosure_request(
     strategy_option: Optional[str] = Form("option-fast"),
 ):
     """開示請求書・司法行政文書開示申出書を生成（Human-in-the-loop戦略選択対応）"""
+    strategy_option = (strategy_option or "option-fast").strip()
+    if strategy_option not in VALID_STRATEGY_OPTIONS:
+        raise HTTPException(400, f"strategy_option は {', '.join(VALID_STRATEGY_OPTIONS)} のいずれかを指定してください。")
     ordinance = get_ordinance(target_authority)
     if not ordinance:
         raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
