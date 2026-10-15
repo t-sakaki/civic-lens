@@ -16,12 +16,36 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from typing import Any, Optional
 
 from gemini_models import generate as gemini_generate
 
 INFERRED_NOTE = "AIの推定です。提出前に確認してください。"
+GENERIC_NOTE = "AIの推定です。提出前に確認してください。（未収録の自治体のため、条例名・窓口は一般的な名称で表示しています）"
+_PLACE_RE = re.compile(r"((?:東京都|北海道|(?:京都|大阪)府|[一-龥]{2,3}県)?[一-龥々ヶ]{1,6}?(?:市|区|町|村))(?:の|で|が|は|内|役所|役場)")
+
+
+def _generic(municipality: str, department: str = "", reason: str = "", source: str = "") -> Optional[dict]:
+    from ordinance_data import make_municipality_key, get_ordinance, addressee_name
+    key = make_municipality_key(municipality)
+    info = get_ordinance(key) if key else None
+    if not info:
+        return None
+    r = _result(key, addressee_name(info), department, municipality, reason, source)
+    r["note"] = GENERIC_NOTE
+    r["generic"] = True
+    return r
+
+
+def _place_from_text(text: str) -> str:
+    from ordinance_data import normalize_municipality_name
+    for m in _PLACE_RE.finditer(text):
+        n = normalize_municipality_name(m.group(1))
+        if n:
+            return n
+    return ""
 NEEDS_REGION_MESSAGE = "対象の市区町村が分からないため、対象機関を特定していません。市区町村を入力するか、対象機関を選んでください。"
 UNKNOWN_MESSAGE = "内容から対象機関を推定できませんでした。対象機関を選んでください。"
 
@@ -31,7 +55,8 @@ PROMPT = """あなたは日本の情報公開制度に詳しいアシスタン�
 ルール:
 - 訴えに出てくる地名・施設・事業の主体から判断する（例: 市の公園の樹木伐採 → その市の公園・緑地担当部署を持つ市）
 - 都道府県議会は、議会の活動（政務活動費・議事など）が対象のときだけ選ぶ
-- 市区町村が訴えから読み取れない場合、または候補にない自治体の場合は authority_key を空文字にする
+- 候補にない自治体の場合は authority_key を空文字にし、municipality に都道府県名つきの自治体名を書く（例: 東京都千代田区）
+- 市区町村が訴えから読み取れない場合は authority_key も municipality も空文字にする
 - 推測で無関係な機関を選ばない
 
 【候補（key: 機関名）】
@@ -78,9 +103,10 @@ def infer_authority(text: str, client: Optional[Any] = None) -> dict:
     key = match_authority_by_text(text, default="")
     if key and get_ordinance(key):
         return _result(key, addressee_name(get_ordinance(key)), source="text")
-    # 2. Gemini
+    # 2. Gemini（未設定なら地名の抜き出しだけ試す）
     if client is None:
-        return _result()
+        place = _place_from_text(text)
+        return (_generic(place, source="text_place") if place else None) or _result()
     options, authorities = _options()
     try:
         cfg = None
@@ -97,12 +123,18 @@ def infer_authority(text: str, client: Optional[Any] = None) -> dict:
         data = json.loads(raw)
     except Exception as e:  # noqa: BLE001
         print(f"[authority_inference] 推定に失敗: {e}", file=sys.stderr)
-        return _result()
+        place = _place_from_text(text)
+        return (_generic(place, source="text_place") if place else None) or _result()
     k = str(data.get("authority_key") or "").strip()
     muni = str(data.get("municipality") or "").strip()[:40]
     dept = str(data.get("department") or "").strip()[:40]
     reason = str(data.get("reason") or "").strip()[:120]
     info = authorities.get(k) if k else None
     if not info:
-        return _result(municipality=muni, department=dept, reason=reason, source="gemini")
+        # 収録外の自治体: 地名から汎用の機関を組み立てる（Geminiが地名を返さなければ本文から抜き出す）
+        g = _generic(muni, dept, reason, "gemini_municipality") if muni else None
+        if not g:
+            place = _place_from_text(text)
+            g = _generic(place, dept, reason, "text_place") if place else None
+        return g or _result(municipality=muni, department=dept, reason=reason, source="gemini")
     return _result(k, addressee_name(info), dept, muni, reason, source="gemini")

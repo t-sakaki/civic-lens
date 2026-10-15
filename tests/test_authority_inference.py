@@ -44,7 +44,11 @@ def test_gemini_unknown_municipality_does_not_fill_assembly():
 def test_gemini_invalid_key_is_rejected():
     c = _Client({"authority_key": "made-up-key", "municipality": "架空市"})
     r = ai.infer_authority(PARK, client=c)
-    assert r["authority_key"] == "" and r["needs_region"] is False and r["message"]
+    # 不正なキーは使わない。未収録の自治体名からは汎用の機関（AI推定）を組み立てる
+    assert r["authority_key"] == "muni:架空市" and r["inferred"] and "AIの推定" in r["note"]
+    c2 = _Client({"authority_key": "made-up-key", "municipality": "<b>x</b>"})
+    r2 = ai.infer_authority(PARK, client=c2)
+    assert r2["authority_key"] == "" and r2["message"]
 
 
 def test_gemini_valid_key_is_marked_as_inference():

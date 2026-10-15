@@ -92,6 +92,79 @@ COURT_AUTHORITIES: Dict[str, AuthorityInfo] = {
 
 
 POOL_KEY_PREFIX = "pool:"
+MUNI_KEY_PREFIX = "muni:"  # 未収録自治体を地名から組み立てる汎用機関（AI推定。保存はしない）
+
+_PREFS = (
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県",
+    "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県",
+    "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+    "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県",
+    "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+)
+_MUNI_RE = __import__("re").compile(r"^[一-龥々ヶケが-んァ-ヴー]{1,10}(市|区|町|村)$")
+
+
+def normalize_municipality_name(name: str) -> str:
+    """「東京都千代田区」「千代田区」などを検証して返す。自治体名として不正なら空文字"""
+    name = (name or "").strip().replace(" ", "").replace("　", "")
+    if not name or len(name) > 16:
+        return ""
+    body = name
+    for p in _PREFS:
+        if name.startswith(p):
+            body = name[len(p):]
+            break
+    if not _MUNI_RE.match(body) or body in ("地区", "市区", "区", "市", "町", "村", "当市", "本市", "当区"):
+        return ""
+    return name
+
+
+def make_municipality_key(name: str) -> str:
+    n = normalize_municipality_name(name)
+    return f"{MUNI_KEY_PREFIX}{n}" if n else ""
+
+
+def _office_name_for(municipality: str) -> str:
+    if municipality.endswith(("町", "村")):
+        return f"{municipality}役場"
+    return f"{municipality}役所"
+
+
+def _authority_info_generic(name: str) -> Optional[AuthorityInfo]:
+    """地名だけから汎用の自治体機関を組み立てる（条例番号・窓口の詳細は不明。AIの推定として扱う）"""
+    municipality = normalize_municipality_name(name)
+    if not municipality:
+        return None
+    short = municipality
+    for p in _PREFS:
+        if municipality.startswith(p) and len(municipality) > len(p):
+            short = municipality[len(p):]
+            break
+    office = _office_name_for(short)
+    return AuthorityInfo(
+        key=f"{MUNI_KEY_PREFIX}{municipality}",
+        category="自治体",
+        authority=short,
+        authority_type=default_authority_type(short),
+        ordinance_name=f"{short}情報公開条例",
+        ordinance_id="（AI推定のため未確認）",
+        enacted="（AI推定のため未確認）",
+        request_form=f"{short}情報公開請求書",
+        request_deadline_days=14,
+        extension_days=30,
+        review_period_days=90,
+        non_disclosure_grounds=[],
+        review_authority=f"{short}情報公開審査会",
+        contact=f"{office}（情報公開担当窓口。提出前に確認してください）",
+        office=OfficeInfo(
+            name=office,
+            address=municipality,
+            lat=0.0,
+            lon=0.0,
+            nearest_station="不明（AI推定のため未特定）",
+        ),
+        aliases=[short],
+    )
 
 
 def _authority_info_from_pool(pooled: Optional[dict]) -> Optional[AuthorityInfo]:
@@ -176,6 +249,8 @@ def get_ordinance(authority_key: str) -> Optional[AuthorityInfo]:
     "pool:<muni_code>" 形式のキーは、Geolocationのバックグラウンド調査で
     municipality_pool に保存された未収録自治体を指す。
     """
+    if authority_key and authority_key.startswith(MUNI_KEY_PREFIX):
+        return _authority_info_generic(authority_key[len(MUNI_KEY_PREFIX):])
     if authority_key and authority_key.startswith(POOL_KEY_PREFIX):
         from municipality_pool import get_pooled
         muni_code = authority_key[len(POOL_KEY_PREFIX):]
@@ -203,10 +278,14 @@ def is_court_authority(authority_key: str) -> bool:
     return authority_key in COURT_AUTHORITIES
 
 
-def get_office_info(authority_key: str) -> Dict:
-    """対象機関の窓口・アクセス情報（station_guide.py から利用）"""
-    info = AUTHORITIES.get(authority_key) or AUTHORITIES.get("anjo-city")
-    return info.office.model_dump()
+def get_office_info(authority_key: str) -> Optional[Dict]:
+    """対象機関の窓口・アクセス情報（station_guide.py から利用）
+
+    選択・推定された機関の窓口を返す。分からない機関は None（以前は安城市にフォールバックしていたため、
+    千代田区を選んでも安城市役所が表示されていた）。
+    """
+    info = get_ordinance(authority_key) if authority_key else None
+    return info.office.model_dump() if info else None
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

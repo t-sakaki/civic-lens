@@ -1861,8 +1861,14 @@ async def get_route(
     current_lat: Optional[float] = Form(None),
     current_lon: Optional[float] = Form(None),
 ):
-    """市役所までの経路案内"""
+    """市役所までの経路案内（選択・推定された機関の窓口。分からなければ office=None）"""
     office = get_office_info(target_authority)
+    if not office:
+        return {"office": None, "route": None, "unknown": True}
+    has_coords = bool(office.get("lat")) and bool(office.get("lon"))
+    if not has_coords:
+        # 座標が分からない（AI推定・自動調査の自治体）ときは、別の場所への経路を出さない
+        return {"office": office, "route": None, "unknown": False}
     if current_lat is None:
         current_lat = office["lat"]
     if current_lon is None:
@@ -1873,6 +1879,7 @@ async def get_route(
     return {
         "office": office,
         "route": route,
+        "unknown": False,
     }
 
 

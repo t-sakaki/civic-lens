@@ -3186,6 +3186,7 @@
         function autoTagFor(a) {
             if (a.category === '履歴') return '・履歴';
             if (a.key.startsWith('pool:') || a.key.startsWith('pref:')) return '・自動調査';
+            if (a.key.startsWith('muni:')) return '・AI推定';
             return '';
         }
 
@@ -5320,6 +5321,21 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 inputEl.focus();
                 return;
             }
+            const muniReply = userInput.replace(/(です|でお願いします|をお願いします|で)?[。．.!！]?$/, '').trim();
+            if (latestAnalysis && !latestAnalysis.target_authority_key && attachments.length === 0
+                && /^(東京都|北海道|京都府|大阪府|[一-龥]{2,3}県)?[一-龥々ヶ]{1,6}(市|区|町|村)$/.test(muniReply)) {
+                if (options.userText === undefined) { inputEl.value = ''; autoResizeComposer(); }
+                addChatBubble('user', escapeHtml(userInput));
+                const key = 'muni:' + muniReply;
+                addDynamicAuthorityOption(key, muniReply.replace(/^(東京都|北海道|京都府|大阪府|[一-龥]{2,3}県)/, ''), '');
+                setSelectedAuthority(key);
+                latestAnalysis.target_authority_key = key;
+                const authEl = document.getElementById('authorityDisplay');
+                if (authEl) authEl.textContent = `${muniReply}（AIの推定です。提出前に確認してください。）`;
+                addChatBubble('assistant', `対象機関を「${escapeHtml(muniReply)}」にしました（AIの推定です。提出前に確認してください）。さきほどの分析はそのまま使います。`);
+                suggestDisclosureAction(latestAnalysis.next_action);
+                return;
+            }
             analyzeInFlight = true;
             lastSubmittedText = userInput;
             if (options.userText === undefined) {
@@ -5382,6 +5398,10 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     + `分析が完了しました。怒りレベル ${analysis.anger_level}/10、対象機関「${escapeHtml(authorityName)}」への${actionLabel}を分析結果にまとめました。`;
 
                 const inf = data.authority_inference;
+                // 未収録の自治体（muni:キー）は候補に足してから選ぶ
+                if (inf && inf.inferred && inf.authority_key && !allAuthorities.some(a => a.key === inf.authority_key)) {
+                    addDynamicAuthorityOption(inf.authority_key, inf.municipality || inf.authority, '');
+                }
                 if (data.anger_analysis.target_authority_key) {
                     // 推定した機関は「自動」扱いにし、ユーザーが選び直せるようにする
                     setSelectedAuthority(data.anger_analysis.target_authority_key, { auto: !!(inf && inf.inferred) });
@@ -5591,8 +5611,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 routeFormData.append('target_authority', targetAuthority);
                 const routeRes = await fetch('/api/route', { method: 'POST', body: routeFormData });
                 const routeData = await routeRes.json();
-                displayRoute(routeData);
-                document.getElementById('routeSection').classList.remove('hidden');
+                if (displayRoute(routeData)) document.getElementById('routeSection').classList.remove('hidden');
 
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>開示請求書を作成しました。提出先窓口までのアクセス情報とあわせて右側にまとめています。`;
@@ -5602,6 +5621,9 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 if (chatBubble) {
                     chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
                 }
+                // 失敗したら方針ボタンを押し直せるようにする（対象機関を選んだあとに再実行できる）
+                const g = lastDisclosureGroupId && document.getElementById(lastDisclosureGroupId);
+                if (g) g.querySelectorAll('button').forEach(b => b.disabled = false);
                 alert('エラー: ' + err.message);
             } finally {
                 stopThinking(thinkingHandle);
@@ -6096,9 +6118,11 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             runReviewRequest(bubble, 'non_disclosure');
         });
 
+        let lastDisclosureGroupId = null;
         function handleDisclosureSuggestion(strategyOption, groupId, clickedBtn) {
             const group = document.getElementById(groupId);
             if (group) group.querySelectorAll('button').forEach(b => b.disabled = true);
+            lastDisclosureGroupId = groupId;
 
             const label = strategyOption === 'option-thorough' ? '🗂 プランB：網羅的に作成' : '📝 プランA：迅速開示重視で作成';
             const userBubble = addChatBubble('user', label);
@@ -6138,11 +6162,17 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         }
 
         function displayRoute(data) {
+            const section = document.getElementById('routeSection');
+            if (!data || !data.office) {
+                document.getElementById('routeContent').innerHTML = '';
+                if (section) section.classList.add('hidden');
+                return false;
+            }
             const html = `
                 <div class="bg-gray-50 p-4 rounded-md">
-                    <h3 class="font-semibold mb-2">🏛️ ${data.office.name}</h3>
-                    <p class="text-sm text-gray-600">${data.office.address}</p>
-                    <p class="text-sm text-gray-500 mt-1">最寄り駅: ${data.office.nearest_station}</p>
+                    <h3 class="font-semibold mb-2">🏛️ ${escapeHtml(data.office.name)}</h3>
+                    <p class="text-sm text-gray-600">${escapeHtml(data.office.address)}</p>
+                    <p class="text-sm text-gray-500 mt-1">最寄り駅: ${escapeHtml(data.office.nearest_station)}</p>
                 </div>
                 <div class="mt-4 bg-blue-50 p-4 rounded-md">
                     <h3 class="font-semibold mb-2 text-blue-900">🚉 アクセス経路</h3>
@@ -6152,10 +6182,11 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                             <p>乗換: ${data.route.transfer_count}回 / 運賃: ${data.route.fare_yen}円</p>
                             <p class="mt-2 text-xs">${data.route.summary || ''}</p>
                         </div>
-                    ` : '<p>経路情報を取得できませんでした</p>'}
+                    ` : '<p>経路情報はありません（窓口の所在地が未確認です）</p>'}
                 </div>
             `;
             document.getElementById('routeContent').innerHTML = html;
+            return true;
         }
 
         // 保存ボタン（Private/Public）
