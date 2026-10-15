@@ -27,8 +27,8 @@
     <meta property="og:site_name" content="Civic Lens">
     <meta property="og:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
     <meta property="og:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う ── 市民の怒りを情報公開に変換するAIエージェント（5自治体 + 4警察本部対応）。">
-    <meta property="og:url" content="https://civic-lens-jp.vercel.app/">
-    <meta property="og:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+    <meta property="og:url" content="https://civic-lens-259303826380.asia-northeast1.run.app/">
+    <meta property="og:image" content="https://civic-lens-259303826380.asia-northeast1.run.app/static/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:locale" content="ja_JP">
@@ -37,7 +37,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Civic Lens — 市民の怒りを情報公開に変換する">
     <meta name="twitter:description" content="見えない課題に、焦点を。エージェンティックAIが人を救う。">
-    <meta name="twitter:image" content="https://civic-lens-jp.vercel.app/static/og-image.png">
+    <meta name="twitter:image" content="https://civic-lens-259303826380.asia-northeast1.run.app/static/og-image.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
@@ -4312,7 +4312,7 @@
                         resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${data.detail || 'シェアに失敗しました'}</span>`;
                     }
                 } catch (err) {
-                    resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${err.message}</span>`;
+                    resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${escapeHtml(err.message)}</span>`;
                 }
             }
 
@@ -5395,7 +5395,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
 
                 suggestDisclosureAction(analysis.next_action);
             } catch (err) {
-                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
+                assistantBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
             } finally {
                 stopThinking(thinkingHandle);
                 sendBtn.classList.remove('busy');
@@ -5475,7 +5475,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     </div>
                     <div class="text-2xl font-bold">${analysis.anger_level}/10</div>
                 </div>
-                <p class="mt-2 text-gray-700">${analysis.pain_summary}</p>
+                <p class="mt-2 text-gray-700">${escapeHtml(analysis.pain_summary)}</p>
             `;
 
             document.getElementById('authorityDisplay').textContent = analysis.target_authority
@@ -5530,20 +5530,20 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                   (isInProgress ? '<span class="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">市民選択中</span>' :
                                   '<span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">待機中</span>');
 
-                    const depsText = t.dependencies.length > 0 ? `<div class="text-[10px] text-gray-500 mt-1 font-mono">先行依存: ${t.dependencies.join(', ')}</div>` : '';
+                    const depsText = (t.dependencies || []).length > 0 ? `<div class="text-[10px] text-gray-500 mt-1 font-mono">先行依存: ${escapeHtml((t.dependencies || []).join(', '))}</div>` : '';
 
                     const nodeEl = document.createElement('div');
                     nodeEl.className = `p-3 rounded-lg border text-xs flex flex-col justify-between ${statusBg}`;
                     nodeEl.innerHTML = `
                         <div>
                             <div class="flex items-center justify-between gap-1 mb-1">
-                                <span class="font-bold text-gray-900">${index + 1}. ${t.name}</span>
+                                <span class="font-bold text-gray-900">${index + 1}. ${escapeHtml(t.name)}</span>
                                 ${badge}
                             </div>
-                            <p class="text-gray-600 text-[11px] leading-snug">${t.description}</p>
+                            <p class="text-gray-600 text-[11px] leading-snug">${escapeHtml(t.description)}</p>
                         </div>
                         <div class="mt-2 pt-2 border-t border-gray-200/60">
-                            <div class="text-[10px] text-emerald-800 font-medium">✓ 判定基準: ${t.acceptance_criteria}</div>
+                            <div class="text-[10px] text-emerald-800 font-medium">✓ 判定基準: ${escapeHtml(t.acceptance_criteria)}</div>
                             ${depsText}
                         </div>
                     `;
@@ -5599,7 +5599,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 suggestFollowUpActions();
             } catch (err) {
                 if (chatBubble) {
-                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${err.message}`;
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>⚠️ エラーが発生しました: ${escapeHtml(err.message)}`;
                 }
                 alert('エラー: ' + err.message);
             } finally {
@@ -6110,26 +6110,26 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         function displayDisclosure(data) {
             const html = `
                 <div class="bg-gray-50 p-4 rounded-md mb-4">
-                    <h3 class="font-semibold mb-2">📋 ${data.ordinance_name}</h3>
-                    <p class="text-sm text-gray-600">${data.authority} - ${data.contact}</p>
+                    <h3 class="font-semibold mb-2">📋 ${escapeHtml(data.ordinance_name)}</h3>
+                    <p class="text-sm text-gray-600">${escapeHtml(data.authority)} - ${escapeHtml(data.contact)}</p>
                 </div>
                 <div class="bg-blue-50 p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2 text-blue-900">📅 期限</h3>
                     <ul class="text-sm text-blue-800">
-                        <li>開示決定まで: ${data.deadline.decision_days}日（${new Date(data.deadline.decision_deadline).toLocaleDateString()}）</li>
+                        <li>開示決定まで: ${escapeHtml(data.deadline.decision_days)}日（${new Date(data.deadline.decision_deadline).toLocaleDateString()}）</li>
                         <li>延長上限: ${new Date(data.deadline.extended_deadline).toLocaleDateString()}</li>
-                        <li>審査請求期限: ${data.deadline.review_period_days}日</li>
+                        <li>審査請求期限: ${escapeHtml(data.deadline.review_period_days)}日</li>
                     </ul>
                 </div>
                 <div class="bg-white border p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">📄 開示請求書</h3>
                     ${mockBadge(data.is_mock, 'AI文書生成')}
-                    <pre class="whitespace-pre-wrap text-sm font-mono">${data.request_text}</pre>
+                    <pre class="whitespace-pre-wrap text-sm font-mono">${escapeHtml(data.request_text)}</pre>
                 </div>
                 <div class="bg-green-50 p-4 rounded-md">
                     <h3 class="font-semibold mb-2 text-green-900">🎯 次のステップ</h3>
                     <ol class="text-sm text-green-800 list-decimal list-inside">
-                        ${data.next_steps.map(s => `<li>${s}</li>`).join('')}
+                        ${(data.next_steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('')}
                     </ol>
                 </div>
             `;
@@ -6199,7 +6199,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     document.getElementById('saveStatus').innerHTML = `✅ 非公開で保存しました ${authNote}`;
                 }
             } catch (err) {
-                document.getElementById('saveStatus').innerHTML = `<span style="color: red;">エラー: ${err.message}</span>`;
+                document.getElementById('saveStatus').innerHTML = `<span style="color: red;">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 document.getElementById('saveRecordBtn').disabled = false;
             }
@@ -6272,7 +6272,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 renderBountyCard(data);
                 statusEl.textContent = '✨ コピー代支援プールが開設されました！';
             } catch (err) {
-                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>💰</span> コピー代支援プールを開設 (50枚/1,500円想定)';
@@ -6468,7 +6468,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 resultCard.classList.remove('hidden');
                 statusEl.textContent = '✨ EAS オンチェーン公証が完了しました！';
             } catch (err) {
-                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🔏</span> オンチェーンに存在証明を刻印 (EAS)';
@@ -6682,7 +6682,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     feedback.innerHTML = `<span class="text-red-600 font-bold bg-red-50 px-2 py-1 rounded">❌ 改ざん検知: 文書内容がアテステーション刻印時から変更されています。</span>`;
                 }
             } catch (err) {
-                feedback.innerHTML = `<span class="text-red-500">照合エラー: ${err.message}</span>`;
+                feedback.innerHTML = `<span class="text-red-500">照合エラー: ${escapeHtml(err.message)}</span>`;
             }
         });
 
@@ -6729,7 +6729,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 resultCard.classList.remove('hidden');
                 statusEl.textContent = '✨ IPFSへの永久刻印が完了しました！';
             } catch (err) {
-                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🪐</span> IPFSに永久刻印する (CID発行)';
@@ -6785,7 +6785,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 resultCard.classList.remove('hidden');
                 statusEl.textContent = '✨ 譲渡不能 SBT バッジが正常にミントされました！';
             } catch (err) {
-                statusEl.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusEl.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<span>🏅</span> 市民実績 SBT をミントする (First Disclosure)';
@@ -6832,7 +6832,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 renderMinnaTicker(publicRecords);
             } catch (err) {
                 document.getElementById('publicFeed').innerHTML =
-                    `<div class="text-red-500 text-center py-8">エラー: ${err.message}</div>`;
+                    `<div class="text-red-500 text-center py-8">エラー: ${escapeHtml(err.message)}</div>`;
                 renderMinnaTicker([]);
             }
         }
@@ -6889,7 +6889,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                 <span class="text-xs">フォーク</span>
                             </button>
 
-                            ${myRecordIds.has(r.id) ? `<button class="date-feed-btn text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-submitted="${r.submitted_date || ''}" title="実際に開示請求を提出した日を記録します">📅 請求日を記録</button><button class="attest-feed-btn text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${r.id}" data-submitted="${r.submitted_date || ''}" data-summary="${encodeURIComponent(r.summary || '')}" title="この請求を、Civic Lens の代理署名でオンチェーン台帳（EAS）に記録します">⛓️ オンチェーンに記録</button>` : ''}
+                            ${myRecordIds.has(r.id) ? `<button class="date-feed-btn text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${escapeHtml(r.id)}" data-submitted="${escapeHtml(r.submitted_date || '')}" title="実際に開示請求を提出した日を記録します">📅 請求日を記録</button><button class="attest-feed-btn text-xs bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded flex items-center gap-1" data-record-id="${escapeHtml(r.id)}" data-submitted="${escapeHtml(r.submitted_date || '')}" data-summary="${encodeURIComponent(r.summary || '')}" title="この請求を、Civic Lens の代理署名でオンチェーン台帳（EAS）に記録します">⛓️ オンチェーンに記録</button>` : ''}
                             <!-- Web3 IPFS バッジ -->
                             <div class="ipfs-badge-container ml-auto text-xs" data-record-id="${r.id}">
                                 <span class="text-gray-400 text-xs">🪐 IPFS未確認</span>
@@ -6901,7 +6901,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
                         <div class="flex items-start justify-between mb-2">
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="font-bold text-gray-800">${r.author_label || '匿名市民'}</span>
+                                <span class="font-bold text-gray-800">${escapeHtml(r.author_label || '匿名市民')}</span>
                                 ${sourceBadge}
                                 ${categoryBadge}
                                 ${statusBadge}
@@ -6909,15 +6909,15 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                             <span class="text-xs text-gray-500">${date}</span>
                         </div>
                         <div class="text-sm text-gray-700 mb-2">
-                            <strong>対象機関:</strong> ${r.target_authority}${r.submitted_date ? ` <span class="text-xs text-gray-500">／ 📅 請求日 ${r.submitted_date.replace(/-/g, '/')}（請求者の申告）</span>` : ''}
+                            <strong>対象機関:</strong> ${escapeHtml(r.target_authority)}${r.submitted_date ? ` <span class="text-xs text-gray-500">／ 📅 請求日 ${escapeHtml(r.submitted_date.replace(/-/g, '/'))}（請求者の申告）</span>` : ''}
                         </div>
                         <div class="text-sm bg-gray-50 p-2 rounded mb-2">
-                            ${r.summary}
+                            ${escapeHtml(r.summary)}
                         </div>
                         ${r.result_excerpt ? `
                             <details class="text-xs text-gray-600 mb-2">
                                 <summary class="cursor-pointer text-blue-600 hover:underline">📄 開示結果をみる</summary>
-                                <div class="mt-2 p-2 bg-green-50 rounded">${r.result_excerpt}</div>
+                                <div class="mt-2 p-2 bg-green-50 rounded">${escapeHtml(r.result_excerpt)}</div>
                             </details>
                         ` : ''}
                         ${engagementFooter}
@@ -7302,7 +7302,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 selectProject(project.project_id);
                 document.getElementById('newProjectModal').classList.add('hidden');
             } catch (err) {
-                statusMsg.innerHTML = `<span class="text-red-500">${err.message}</span>`;
+                statusMsg.innerHTML = `<span class="text-red-500">${escapeHtml(err.message)}</span>`;
             }
         });
 
@@ -7409,7 +7409,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     btn.addEventListener('click', () => toggleComments(btn.dataset.recordId));
                 });
             } catch (err) {
-                listEl.innerHTML = `<div class="text-red-500 text-center py-6 text-sm">エラー: ${err.message}</div>`;
+                listEl.innerHTML = `<div class="text-red-500 text-center py-6 text-sm">エラー: ${escapeHtml(err.message)}</div>`;
             }
         }
 
@@ -7473,7 +7473,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                         </div>
                     `).join('');
             } catch (err) {
-                listEl.innerHTML = `<div class="text-red-500">エラー: ${err.message}</div>`;
+                listEl.innerHTML = `<div class="text-red-500">エラー: ${escapeHtml(err.message)}</div>`;
             }
         }
 
@@ -7494,7 +7494,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 const inviteUrl = `${window.location.origin}/?invite=${invite.token}`;
                 resultEl.innerHTML = `招待リンク（7日間有効・1回限り）:<br><span class="font-mono text-indigo-700">${inviteUrl}</span>`;
             } catch (err) {
-                resultEl.innerHTML = `<span class="text-red-500">${err.message}</span>`;
+                resultEl.innerHTML = `<span class="text-red-500">${escapeHtml(err.message)}</span>`;
             }
         });
 
@@ -7592,7 +7592,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 authModal.classList.add('hidden');
                 await checkAuthStatus();
             } catch (err) {
-                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 submitPasswordAuthBtn.disabled = false;
             }
@@ -7650,7 +7650,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 authModal.classList.add('hidden');
                 await checkAuthStatus();
             } catch (err) {
-                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             }
         });
 
@@ -7677,7 +7677,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
 
                 statusMsg.innerHTML = '<span class="text-green-600">✅ ' + email + ' 宛にログイン用リンクを送信しました。メール内のリンクをクリックしてログインしてください（15分間有効）。</span>';
             } catch (err) {
-                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${err.message}</span>`;
+                statusMsg.innerHTML = `<span class="text-red-500">エラー: ${escapeHtml(err.message)}</span>`;
             } finally {
                 submitBtn.disabled = false;
             }
@@ -7738,13 +7738,13 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                                 <span class="text-xs text-gray-400">${date}</span>
                             </div>
                             <div class="text-xs text-gray-600 bg-white p-2 rounded border border-gray-100 line-clamp-2">
-                                ${r.user_input || r.request_text.substring(0, 100)}
+                                ${escapeHtml(r.user_input || (r.request_text || '').substring(0, 100))}
                             </div>
                         </div>
                     `;
                 }).join('');
             } catch (err) {
-                listEl.innerHTML = `<div class="text-red-500 text-center py-6">エラー: ${err.message}</div>`;
+                listEl.innerHTML = `<div class="text-red-500 text-center py-6">エラー: ${escapeHtml(err.message)}</div>`;
             }
         }
 
@@ -7845,11 +7845,11 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 const text = r.summary || r.summary_public || (r.user_input ? r.user_input.substring(0, 60) : '');
                 const onchainBadge = r.source === 'onchain' ? '<span class="text-indigo-300">⛓️</span>' : '';
                 el.innerHTML = `
-                    <span class="font-bold ${categoryColor(r.category)}">${r.category || '自治体'}</span>
+                    <span class="font-bold ${categoryColor(r.category)}">${escapeHtml(r.category || '自治体')}</span>
                     ${onchainBadge}
-                    <span class="text-gray-400">${r.author_label || r.anonymous_user_id || '匿名市民'}</span>
+                    <span class="text-gray-400">${escapeHtml(r.author_label || r.anonymous_user_id || '匿名市民')}</span>
                     <span class="text-gray-500">→</span>
-                    <span class="text-gray-300">${r.target_authority || ''}</span>
+                    <span class="text-gray-300">${escapeHtml(r.target_authority || '')}</span>
                     <span class="text-white">${text}</span>
                 `;
                 return el;
