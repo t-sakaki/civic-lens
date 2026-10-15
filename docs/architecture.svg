@@ -1,108 +1,100 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="'IPAexGothic','Noto Sans CJK JP','Hiragino Sans',sans-serif">
-  <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker>
-  </defs>
-  <rect width="1600" height="1000" fill="#f8fafc"/>
-  <text x="40" y="48" font-size="30" font-weight="bold" fill="#0f172a">Civic Lens システムアーキテクチャ</text>
-  <text x="40" y="78" font-size="17" fill="#475569">市民の代わりにAIがニュースへ怒り、開示請求という具体行動に変換する（Google Cloud Run + Gemini / ADK）</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="'Noto Sans CJK JP','Noto Serif CJK JP','IPAexGothic','Hiragino Sans',sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker>
+<marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#16a34a"/></marker></defs>
+<rect width="1600" height="1000" fill="#f8fafc"/>
+<text x="40" y="48" font-size="30" font-weight="bold" fill="#0f172a">Civic Lens システムアーキテクチャ</text>
+<text x="40" y="80" font-size="17" fill="#475569">行政に怒ることに疲れた市民に代わり、AIエージェントたちがSDGsの観点で怒り、開示請求する行政文書を特定・出力する</text>
 
-  <!-- ユーザー -->
-  <rect x="40" y="130" width="230" height="330" rx="12" fill="#fff" stroke="#94a3b8" stroke-width="2"/>
-  <text x="155" y="162" font-size="19" font-weight="bold" text-anchor="middle" fill="#0f172a">市民（ブラウザ）</text>
-  <text x="60" y="198" font-size="16" fill="#334155">・チャットUI（怒りの入力）</text>
-  <text x="60" y="226" font-size="16" fill="#334155">・ニュース一覧</text>
-  <text x="60" y="250" font-size="16" fill="#334155">　＋エージェントの一言</text>
-  <text x="60" y="278" font-size="16" fill="#334155">・音声パネルの再生</text>
-  <text x="60" y="306" font-size="16" fill="#334155">・GPSで対象地域を推定</text>
-  <text x="60" y="334" font-size="16" fill="#334155">・開示請求書の確認・編集</text>
-  <text x="60" y="362" font-size="16" fill="#334155">・SNSシェアの最終判断</text>
-  <text x="155" y="420" font-size="15" text-anchor="middle" fill="#b45309" font-weight="bold">最終判断は必ず本人（HITL）</text>
+<!-- 市民 -->
+<rect x="40" y="130" width="240" height="400" rx="12" fill="#fff" stroke="#94a3b8" stroke-width="2"/>
+<text x="160" y="164" font-size="19" font-weight="bold" text-anchor="middle" fill="#0f172a">市民（ブラウザ）</text>
+<text x="58" y="202" font-size="16" fill="#334155">・行政への怒りを入力</text>
+<text x="58" y="228" font-size="16" fill="#334155">  （添付: 通知書・写真）</text>
+<text x="58" y="258" font-size="16" fill="#334155">・地域のニュース一覧</text>
+<text x="58" y="288" font-size="16" fill="#334155">・SDGs怒りグラフを確認</text>
+<text x="58" y="318" font-size="16" fill="#334155">・開示請求書を確認・編集</text>
+<text x="58" y="348" font-size="16" fill="#334155">・提出して結果を記録</text>
+<text x="58" y="374" font-size="14" fill="#64748b">  開示/一部開示/不開示/未提出</text>
+<text x="160" y="490" font-size="15" text-anchor="middle" fill="#b45309" font-weight="bold">請求するかは必ず本人が決める</text>
+<text x="160" y="512" font-size="14" text-anchor="middle" fill="#b45309">（Human-in-the-loop）</text>
 
-  <!-- Cloud Run -->
-  <rect x="320" y="110" width="780" height="860" rx="16" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
-  <text x="340" y="142" font-size="21" font-weight="bold" fill="#1d4ed8">Google Cloud Run — FastAPI（app.py）</text>
+<!-- Cloud Run -->
+<rect x="320" y="110" width="820" height="740" rx="16" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
+<text x="340" y="142" font-size="21" font-weight="bold" fill="#1d4ed8">Google Cloud Run（asia-northeast1）— FastAPI app.py</text>
 
-  <rect x="350" y="165" width="720" height="62" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="370" y="192" font-size="18" font-weight="bold" fill="#0f172a">① NewsCollectorAgent</text>
-  <text x="370" y="216" font-size="15" fill="#475569">地域名だけで自治体・警察・公的行事のニュースを収集（テーマに依存しない）</text>
+<rect x="350" y="162" width="760" height="72" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
+<text x="370" y="190" font-size="18" font-weight="bold" fill="#0f172a">① 入力: 市民の訴え（中核） / 地域ニュース（NewsCollectorAgent）</text>
+<text x="370" y="218" font-size="15" fill="#475569">添付資料は Gemini Vision で読み取り。GPSで対象自治体を推定</text>
 
-  <rect x="350" y="255" width="720" height="104" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="370" y="282" font-size="18" font-weight="bold" fill="#0f172a">② AngerReproductionAgent × 18（SDGs17目標 + 一般）</text>
-  <text x="370" y="308" font-size="15" fill="#475569">記事を読んで自律的に名乗り出る（最大3体・17体分を1回のGeminiで判定）</text>
-  <text x="370" y="332" font-size="15" fill="#475569">名乗り出た各体が並行して、論点整理 + 疑似的な市民の声（AI生成フィクション）を生成</text>
+<rect x="350" y="252" width="760" height="150" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2.5"/>
+<text x="370" y="282" font-size="19" font-weight="bold" fill="#b91c1c">② SDGs怒りエージェント団（sdgs_scorer.py）★今回追加</text>
+<text x="370" y="310" font-size="15" fill="#475569">17体の目標エージェントが市民の代わりに怒る：17目標 × 公式169ターゲット</text>
+<text x="370" y="334" font-size="15" fill="#475569">各目標 → 怒りスコア0〜10 / 怒りのコメント / ターゲット番号（実在番号のみ検証）</text>
+<text x="370" y="358" font-size="15" fill="#475569">上位目標の怒り → 「確認すべき文書の観点」と開示請求の根拠文</text>
+<text x="370" y="382" font-size="14" fill="#64748b">ニュースでは名乗り出たSDGsエージェントの声も並行生成（AI生成のフィクションと明示）</text>
 
-  <rect x="350" y="387" width="720" height="62" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
-  <text x="370" y="414" font-size="18" font-weight="bold" fill="#92400e">🛡 ガードレール監視（guardrail.py）</text>
-  <text x="370" y="438" font-size="15" fill="#78350f">個人情報の混入 / 実在人物の偽装 / 法的助言（弁護士法72条）を検査し、違反は安全な文に差し替え</text>
+<rect x="350" y="420" width="760" height="100" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
+<text x="370" y="450" font-size="18" font-weight="bold" fill="#0f172a">③ 開示請求対象の特定（CivicLensAgent / 統合エージェント）</text>
+<text x="370" y="476" font-size="15" fill="#475569">対象機関・請求する行政文書・根拠条例・期限を特定（請求先ごとに集約）</text>
+<text x="370" y="500" font-size="15" fill="#475569">SDGsの怒りは「何を・なぜ請求するか」の根拠として添える</text>
 
-  <rect x="350" y="477" width="720" height="62" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="370" y="504" font-size="18" font-weight="bold" fill="#0f172a">③ DisclosureTargetAgent（統合）</text>
-  <text x="370" y="528" font-size="15" fill="#475569">複数の声を横断分析し、開示請求すべき機関・文書を優先順位つきで最大3件提案</text>
+<rect x="350" y="538" width="760" height="100" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
+<text x="370" y="568" font-size="18" font-weight="bold" fill="#0f172a">④ 開示請求書の生成（Gemini）</text>
+<text x="370" y="594" font-size="15" fill="#475569">プランA 迅速開示 / プランB 網羅的。個人情報の記入欄はAIが埋めない</text>
+<text x="370" y="618" font-size="15" fill="#15803d" font-weight="bold">few-shot: 同じ機関・地域で開示につながった過去の請求を最大3件参照 ★</text>
 
-  <rect x="350" y="567" width="720" height="82" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="370" y="594" font-size="18" font-weight="bold" fill="#0f172a">④ DisclosureRequestAgent（ADK: LlmAgent + SequentialAgent）</text>
-  <text x="370" y="620" font-size="15" fill="#475569">ユーザーが選んだ提案 → 根拠条例・請求理由・期限など開示請求書の該当箇所を生成</text>
-  <text x="370" y="642" font-size="15" fill="#475569">氏名・住所等の個人情報欄は含めない ／ 条例DB（17機関）で機関キーを補正</text>
+<rect x="350" y="656" width="760" height="86" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2.5"/>
+<text x="370" y="686" font-size="18" font-weight="bold" fill="#15803d">⑤ 結果フィードバック（disclosure_outcomes.py）★今回追加</text>
+<text x="370" y="712" font-size="15" fill="#475569">請求書ごとに 開示/一部開示/不開示/未提出 を記録 → 機関別の開示率を集計</text>
+<text x="370" y="732" font-size="14" fill="#64748b">実行時のコード書き換えはしない。改善はデータ（記録）経由のみ</text>
 
-  <rect x="350" y="677" width="350" height="82" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="365" y="704" font-size="17" font-weight="bold" fill="#0f172a">音声パネル（voice_panel.py）</text>
-  <text x="365" y="730" font-size="14" fill="#475569">エージェントごとに別の声で議論を読み上げ</text>
-  <text x="365" y="750" font-size="14" fill="#475569">冒頭で「AI生成のフィクション」を必ず読み上げ</text>
+<rect x="350" y="760" width="760" height="70" rx="10" fill="#fff" stroke="#94a3b8" stroke-width="1.5"/>
+<text x="370" y="788" font-size="16" font-weight="bold" fill="#0f172a">ガードレール・費用ガード</text>
+<text x="370" y="812" font-size="14" fill="#475569">生成結果の検査 / Gemini日次上限 / レート制限 / モデル自動フォールバック</text>
 
-  <rect x="720" y="677" width="350" height="82" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="735" y="704" font-size="17" font-weight="bold" fill="#0f172a">⑤ SocialPostingAgent</text>
-  <text x="735" y="730" font-size="14" fill="#475569">ユーザー自身のX / Blueskyから投稿</text>
-  <text x="735" y="750" font-size="14" fill="#475569">免責文を必ず付与（専用botは使わない）</text>
+<!-- 右側 GCP -->
+<rect x="1180" y="130" width="380" height="200" rx="12" fill="#fff" stroke="#7c3aed" stroke-width="2.5"/>
+<text x="1200" y="164" font-size="19" font-weight="bold" fill="#6d28d9">Gemini API</text>
+<text x="1200" y="194" font-size="15" fill="#475569">gemini_models.py で一元管理</text>
+<text x="1200" y="218" font-size="15" fill="#475569">pro: 分析・請求書生成・Vision</text>
+<text x="1200" y="242" font-size="15" fill="#475569">flash: SDGs採点・登場判定</text>
+<text x="1200" y="266" font-size="15" fill="#475569">404/429時は次のモデルへ自動切替</text>
+<text x="1200" y="300" font-size="14" fill="#64748b">失敗時はルールベースに縮退</text>
 
-  <rect x="350" y="787" width="720" height="62" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
-  <text x="370" y="814" font-size="18" font-weight="bold" fill="#065f46">費用ガード（cost_guard.py）</text>
-  <text x="370" y="838" font-size="15" fill="#047857">Gemini / TTS の日次上限・IPごとのレート制限 → 超過時はルールベースへフォールバック</text>
+<rect x="1180" y="360" width="380" height="200" rx="12" fill="#fff" stroke="#f59e0b" stroke-width="2.5"/>
+<text x="1200" y="394" font-size="19" font-weight="bold" fill="#b45309">Cloud Firestore</text>
+<text x="1200" y="424" font-size="15" fill="#475569">disclosure_outcomes ★</text>
+<text x="1200" y="448" font-size="15" fill="#475569">  （請求の結果・抜粋・機関・地域）</text>
+<text x="1200" y="472" font-size="15" fill="#475569">ニュース分析の記録・履歴</text>
+<text x="1200" y="496" font-size="15" fill="#475569">ユーザー（Firebase Auth）</text>
+<text x="1200" y="530" font-size="14" fill="#64748b">未設定環境ではローカルJSONに縮退</text>
 
-  <rect x="350" y="877" width="720" height="62" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="370" y="904" font-size="18" font-weight="bold" fill="#0f172a">gemini_models.py ／ news_reactions.py ／ storage_backend.py</text>
-  <text x="370" y="928" font-size="15" fill="#475569">モデル名の一元管理（pro / flash・404/429で自動フォールバック）／ 記録・リアクションの永続化</text>
+<rect x="1180" y="590" width="380" height="110" rx="12" fill="#fff" stroke="#0891b2" stroke-width="2.5"/>
+<text x="1200" y="624" font-size="19" font-weight="bold" fill="#0e7490">Secret Manager</text>
+<text x="1200" y="654" font-size="15" fill="#475569">gemini-api-key / auth-secret-key</text>
+<text x="1200" y="678" font-size="15" fill="#475569">専用サービスアカウントのみ参照可</text>
 
-  <!-- 縦の流れ矢印 -->
-  <g stroke="#475569" stroke-width="2.5" marker-end="url(#a)" fill="none">
-    <path d="M710 227V253"/><path d="M710 359V385"/><path d="M710 449V475"/><path d="M710 539V565"/><path d="M710 649V675"/>
-  </g>
+<rect x="1180" y="730" width="380" height="100" rx="12" fill="#fff" stroke="#64748b" stroke-width="2"/>
+<text x="1200" y="764" font-size="19" font-weight="bold" fill="#334155">Cloud Build / Artifact Registry</text>
+<text x="1200" y="794" font-size="15" fill="#475569">gcloud run deploy --source .</text>
+<text x="1200" y="816" font-size="15" fill="#475569">（Dockerfile: python3.12 + uvicorn）</text>
 
-  <!-- 右: Google Cloud AI -->
-  <rect x="1150" y="110" width="410" height="250" rx="14" fill="#fff" stroke="#2563eb" stroke-width="2.5"/>
-  <text x="1170" y="140" font-size="19" font-weight="bold" fill="#1d4ed8">Google Cloud AI</text>
-  <text x="1170" y="176" font-size="16" fill="#0f172a">• Gemini API（pro / flash）</text>
-  <text x="1190" y="198" font-size="14" fill="#475569">声の生成・統合提案・請求書の分析</text>
-  <text x="1170" y="230" font-size="16" fill="#0f172a">• Gemini TTS（音声パネル）</text>
-  <text x="1190" y="252" font-size="14" fill="#475569">エージェントごとに別の声で合成</text>
-  <text x="1170" y="284" font-size="16" fill="#0f172a">• Agent Development Kit（ADK）</text>
-  <text x="1190" y="306" font-size="14" fill="#475569">LlmAgent + SequentialAgent で自律フロー</text>
-  <text x="1170" y="338" font-size="14" fill="#2563eb">google-genai / google-adk</text>
+<!-- arrows -->
+<line x1="280" y1="230" x2="348" y2="200" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="348" y1="600" x2="282" y2="330" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="282" y1="360" x2="348" y2="700" stroke="#16a34a" stroke-width="2.5" marker-end="url(#g)"/>
+<line x1="730" y1="234" x2="730" y2="250" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="730" y1="402" x2="730" y2="418" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="730" y1="520" x2="730" y2="536" stroke="#475569" stroke-width="2.5" marker-end="url(#a)"/>
+<line x1="1110" y1="320" x2="1178" y2="250" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+<line x1="1110" y1="580" x2="1178" y2="250" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+<line x1="1110" y1="700" x2="1178" y2="460" stroke="#16a34a" stroke-width="2.5" marker-end="url(#g)"/>
+<path d="M1178 430 C 1150 430, 1130 610, 1112 610" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#g)"/>
+<line x1="1178" y1="645" x2="1142" y2="645" stroke="#0891b2" stroke-width="2" marker-end="url(#a)"/>
 
-  <!-- 右: Google データ -->
-  <rect x="1150" y="385" width="410" height="120" rx="14" fill="#fff" stroke="#2563eb" stroke-width="2.5"/>
-  <text x="1170" y="415" font-size="19" font-weight="bold" fill="#1d4ed8">Google Cloud / Firebase</text>
-  <text x="1170" y="448" font-size="16" fill="#0f172a">• Firestore（分析記録・リアクション）</text>
-  <text x="1170" y="474" font-size="16" fill="#0f172a">• Firebase Authentication（ログイン）</text>
-
-  <!-- 右: 外部サービス -->
-  <rect x="1150" y="530" width="410" height="330" rx="14" fill="#fff" stroke="#64748b" stroke-width="2"/>
-  <text x="1170" y="560" font-size="19" font-weight="bold" fill="#0f172a">外部サービス</text>
-  <text x="1170" y="594" font-size="16" fill="#0f172a">• Google News RSS（ニュース収集）</text>
-  <text x="1170" y="624" font-size="16" fill="#0f172a">• GMI Cloud（条例・判例のRAG推論）</text>
-  <text x="1170" y="654" font-size="16" fill="#0f172a">• 駅すぱあと API（役所への経路案内）</text>
-  <text x="1170" y="684" font-size="16" fill="#0f172a">• YouCam API（表情解析）</text>
-  <text x="1170" y="714" font-size="16" fill="#0f172a">• X / Bluesky（ユーザー本人の投稿）</text>
-  <text x="1170" y="744" font-size="16" fill="#0f172a">• Base Sepolia（EAS）／ IPFS</text>
-  <text x="1190" y="766" font-size="14" fill="#475569">開示請求ライフサイクルのオンチェーン台帳</text>
-  <text x="1170" y="800" font-size="14" fill="#b45309" font-weight="bold">※ AIは法的助言ではなく</text>
-  <text x="1170" y="822" font-size="14" fill="#b45309" font-weight="bold">　情報提供・書式作成支援に徹する（弁護士法72条）</text>
-
-  <!-- 接続線 -->
-  <g stroke="#475569" stroke-width="2.5" marker-end="url(#a)" marker-start="url(#a)" fill="none">
-    <path d="M270 250H318"/>
-  </g>
-  <g stroke="#2563eb" stroke-width="2.5" marker-end="url(#a)" fill="none">
-    <path d="M1100 300H1148"/><path d="M1100 440H1148"/><path d="M1100 730H1148" stroke="#64748b"/>
-  </g>
-  <text x="295" y="240" font-size="13" text-anchor="middle" fill="#64748b">HTTPS</text>
+<!-- loop legend -->
+<rect x="40" y="870" width="1520" height="100" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+<text x="60" y="902" font-size="19" font-weight="bold" fill="#15803d">♻ 自己改善ループ</text>
+<text x="60" y="934" font-size="16" fill="#334155">請求書を生成 → 市民が提出 → 結果（開示/一部開示/不開示/未提出）を記録 → Firestore に蓄積 → 次の請求書生成で、同じ機関・地域の「開示・一部開示」事例を few-shot として参照</text>
+<text x="60" y="958" font-size="15" fill="#64748b">★ = 第5回ハッカソン期間中に追加（SDGs怒りエージェント団・Cloud Run本番デプロイ・結果記録＋few-shotループ）。それ以外は9/5ミニハッカソン発の既存部分</text>
 </svg>
