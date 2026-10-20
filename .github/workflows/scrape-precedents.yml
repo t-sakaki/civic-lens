@@ -60,7 +60,7 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.ADMIN_PAT }}
           commit-message: "chore: 認容事例 自動収集エージェントによるデータ更新"
           title: "🤖 認容事例 自動収集エージェント: 総務省DBからの新規データ取り込み"
           body: |
