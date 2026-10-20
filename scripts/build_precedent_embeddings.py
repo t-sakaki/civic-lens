@@ -68,6 +68,17 @@ def main() -> int:
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         print("GEMINI_API_KEY(またはGOOGLE_API_KEY)が未設定のため、埋め込み計算をスキップします。")
+        # CI の「変更検出」ステップが常にファイルを検出できるよう、空の embeddings.json を出力する
+        EMBEDDINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "model": EMBEDDING_MODEL,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "count": 0,
+            "embeddings": {},
+        }
+        with open(EMBEDDINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        print(f"空の埋め込みファイルを出力しました: {EMBEDDINGS_PATH}")
         return 0
 
     try:
