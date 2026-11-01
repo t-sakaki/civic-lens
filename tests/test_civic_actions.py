@@ -48,7 +48,7 @@ def test_review_request_returns_formal_document_and_deadline():
     data = res.json()
     text = data["review_request_text"]
     assert text.startswith("# 審査請求書")
-    assert "安城市長 御中" in text
+    assert "安城市長　殿" in text
     assert "一部開示決定" in text
     assert "審査請求の趣旨" in text and "教示" in text
     assert data["review_addressee"] == "安城市長"
@@ -62,7 +62,7 @@ def test_review_request_police_goes_to_public_safety_commission():
         "alleged_ground": "第5条第3号",
     })
     assert res.status_code == 200
-    assert "愛知県公安委員会 御中" in res.json()["review_request_text"]
+    assert "愛知県公安委員会　殿" in res.json()["review_request_text"]
 
 
 def test_review_request_court_is_complaint_form():

@@ -186,6 +186,7 @@ def generate_review_request_document(
 - 氏名・住所・連絡先は「（氏名）」「（住所）」等のプレースホルダのままにする
 - 不開示理由の各条項について、該当しない理由・部分開示義務・公益上の開示を論じる
 - 前置きや解説は書かず、書面本文のみを出力する
+- 書式: 宛名は左寄せ（「{addressee}　殿」形式、中央揃え記号なし）、表題に下線は付けない、「審査請求の年月日」ラベルは不要（右上の日付のみ）、文書末尾に右寄せで「以上」を入れる
 - 末尾に次の一文をそのまま入れる: {LEGAL_NOTICE}
 """
     text = _generate(genai_client, prompt)
@@ -195,9 +196,9 @@ def generate_review_request_document(
     if is_court:
         body = f"""# {form_title}
 
-## {addressee} 御中
+{addressee}　殿
 
-{_today_text()}
+<div style="text-align: right;">{_today_text()}</div>
 
 申出人 住所: （住所）
 　　　 氏名: （氏名）
@@ -214,15 +215,17 @@ def generate_review_request_document(
 
 {counter_text}
 
+<div style="text-align: right;">以上</div>
+
 {LEGAL_NOTICE}
 """
         return body, True
 
     body = f"""# {form_title}
 
-## {addressee} 御中
+{addressee}　殿
 
-{_today_text()}
+<div style="text-align: right;">{_today_text()}</div>
 
 審査請求人 住所: （住所）
 　　　　　 氏名: （氏名）
@@ -255,6 +258,8 @@ def generate_review_request_document(
 
 ### 6. 添付書類
 - 開示決定等通知書の写し
+
+<div style="text-align: right;">以上</div>
 
 {LEGAL_NOTICE}
 """
