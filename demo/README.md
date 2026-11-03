@@ -11,6 +11,22 @@
 
 アプリを先に起動しておくこと（`python app.py`）。出力は `demo/out/`（git管理外）。
 
+## デモケース（ピッチ当日の再現用）
+
+ピッチで再現するニュース1件分の記録（SDGsエージェントの声・開示請求の提案・請求書分析）と、
+対応する音声（あれば）を `demo/cases/` に保存する。当日はこのケースを再生し、
+ネットワーク障害やTTS日次上限に左右されない。
+
+| やること | コマンド |
+|---|---|
+| ピッチ候補の一覧を見る | `python scripts/export_demo_case.py --list` |
+| ケースを保存する | `python scripts/export_demo_case.py --news-id <記録ID>` |
+| 音声も生成して保存する | `python scripts/export_demo_case.py --news-id <記録ID> --with-audio`（TTS日次上限を消費。リハーサル前に一度だけ） |
+
+- 音声は voice_archive に保存済みの議論音声（Gemini TTS・冒頭に免責読み上げつき）を使う
+- 当日の再生は `demo/cases/*.opus` のローカル再生を基本とし、TTS API を叩かない
+- 記録には擬似市民の声の免責文（`PSEUDO_VOICE_DISCLAIMER`）と記事の出典URLが必ず入る
+
 ## 録画前チェック（AGENTS.md の原則）
 - 「市民の声」がAI生成のフィクションだと分かる免責文が映っているか
 - 記事の内容が実在の報道と一致しているか（事実と違う画面を映さない）

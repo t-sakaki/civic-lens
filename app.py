@@ -961,7 +961,7 @@ async def analyze_news_item(
     result = await asyncio.to_thread(_multi_agent_analysis, news_id, news_text, region, authority_key)
     record = record_analysis(
         news_id=news_id,
-        source_news={"title": title, "link": link, "published": published},
+        source_news={"title": title, "link": link, "published": published, "summary": summary},
         disclaimer=PSEUDO_VOICE_DISCLAIMER,
         anger_analysis=None,
         theme="multi",
@@ -1010,7 +1010,7 @@ def _analysis_events(
     proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint)
     record = record_analysis(
         news_id=news_id,
-        source_news={"title": title, "link": link, "published": published},
+        source_news={"title": title, "link": link, "published": published, "summary": summary},
         disclaimer=PSEUDO_VOICE_DISCLAIMER,
         anger_analysis=None,
         theme="multi",
@@ -1275,7 +1275,8 @@ async def select_disclosure_proposal(
     proposal = proposals[proposal_index]
 
     source = record.get("source_news", {})
-    news_text = source.get("title", "")
+    # 履歴から再現するケースでも、記事のサマリーが保存されていれば再分析の入力に使う（旧記録はタイトルのみ）
+    news_text = "\n".join(p for p in [source.get("title", ""), source.get("summary", "")] if p)
     analysis_input = build_proposal_input(news_text, record.get("voices", []), proposal)
     analysis = await asyncio.to_thread(_run_anger_analysis, analysis_input, proposal["target_authority_key"])
     return update_record(
@@ -1349,7 +1350,7 @@ async def autonomous_scan_news(
 
                 record = record_analysis(
                     news_id=news_id,
-                    source_news={"title": item.title, "link": item.link, "published": item.published},
+                    source_news={"title": item.title, "link": item.link, "published": item.published, "summary": item.summary},
                     disclaimer=PSEUDO_VOICE_DISCLAIMER,
                     anger_analysis=None,
                     theme="multi",
@@ -1434,7 +1435,7 @@ def _ensure_watch_record(item, region: str) -> Dict[str, Any]:
     result = _multi_agent_analysis(news_id, news_text, region, None, appearances)
     return record_analysis(
         news_id=news_id,
-        source_news={"title": item.title, "link": item.link, "published": item.published},
+        source_news={"title": item.title, "link": item.link, "published": item.published, "summary": item.summary},
         disclaimer=PSEUDO_VOICE_DISCLAIMER,
         anger_analysis=None,
         theme="multi",
