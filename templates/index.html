@@ -412,6 +412,30 @@
             color: #8B93A7;
             font-size: 0.7rem;
         }
+        .cl-news-unread-badge {
+            display: inline-block;
+            background: #ef4444;
+            color: #fff;
+            border-radius: 9999px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0 6px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .cl-news-replay-btn {
+            align-self: flex-start;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.18);
+            color: #EDEDF2;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            padding: 3px 10px;
+            margin-top: 4px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .cl-news-replay-btn:hover { background: rgba(255,255,255,0.16); }
         .cl-sidebar-overlay {
             position: fixed;
             inset: 0;
@@ -1821,6 +1845,11 @@
         <p class="cl-sidebar-section-title">🕒 履歴</p>
         <div id="sidebarHistoryBody" class="cl-sidebar-body">
             <p class="cl-sidebar-empty">まだ履歴はありません</p>
+        </div>
+        <!-- 怒りの記録: これまでにSDGsエージェントたちが検討したニュース。▶ 再生で保存済みの過程と音声をもう一度見られる -->
+        <p class="cl-sidebar-section-title">🤖 怒りの記録<span id="newsUnreadBadge" class="cl-news-unread-badge hidden"></span></p>
+        <div id="newsHistoryBody" class="cl-sidebar-body">
+            <p class="cl-sidebar-empty">まだ記録はありません。ニュースを分析するとここに残ります。</p>
         </div>
     </aside>
 
@@ -4011,6 +4040,10 @@
                 logWrap.open = false;
                 renderNewsSynthesis(resultEl, record, region, { prefetchVoice: true, autoPlay: autoReadEl.checked, onAudioEnded, onVoiceUnavailable });
                 if (record.sdgs_anger) resultEl.insertAdjacentHTML('beforeend', sdgsAngerPanelHtml(record.sdgs_anger));
+                if (record.read === false) {
+                    // 自律スキャン等で未読だった記録は、表示した時点で既読にする（未読バッジの元を絶たない）
+                    markNewsRecordRead(record.news_id).then(refreshNewsUnreadBadge);
+                }
                 return record;
             } catch (err) {
                 mark(appearedThemes, false);
@@ -4887,6 +4920,100 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             if (added > 0) renderAuthorityOptions(currentAuthorityFilter);
         }
 
+        // --- 怒りの記録（ニュース分析の履歴）とリプレイ導線 ---
+        // 保存済みの記録はサーバー側で再分析されず（replay）、Geminiの費用はかからない。
+        // 自律スキャン等で未読のまま貯まった記録は、表示した時点で既読にする。
+
+        function refreshNewsUnreadBadge(count) {
+            const badge = document.getElementById('newsUnreadBadge');
+            if (!badge) return;
+            const apply = (n) => {
+                if (!n || n <= 0) { badge.classList.add('hidden'); badge.textContent = ''; return; }
+                badge.classList.remove('hidden');
+                badge.textContent = `未読${n}`;
+            };
+            if (typeof count === 'number') { apply(count); return; }
+            fetch('/api/news-agent/unread-count', { credentials: 'include' })
+                .then(res => (res.ok ? res.json() : null))
+                .then(data => apply(data ? Number(data.unread_count || 0) : 0))
+                .catch(() => {});
+        }
+
+        async function markNewsRecordRead(newsId) {
+            try {
+                const fd = new FormData();
+                fd.append('news_id', newsId);
+                await fetch('/api/news-agent/mark-read', { method: 'POST', body: fd, credentials: 'include' });
+            } catch (_) { /* 既読化の失敗は本体機能に影響させない */ }
+        }
+
+        async function loadNewsHistory() {
+            const body = document.getElementById('newsHistoryBody');
+            if (!body) return;
+            try {
+                const res = await fetch('/api/news-agent/history?limit=30', { credentials: 'include' });
+                if (!res.ok) return;
+                const data = await res.json();
+                const records = data.items || [];
+                refreshNewsUnreadBadge(records.filter(r => r.read === false).length);
+                if (!records.length) {
+                    body.innerHTML = '<p class="cl-sidebar-empty">まだ記録はありません。ニュースを分析するとここに残ります。</p>';
+                    return;
+                }
+                body.innerHTML = records.map(r => {
+                    const src = r.source_news || {};
+                    const when = r.updated_at ? new Date(r.updated_at).toLocaleString('ja-JP') : '';
+                    const replayable = (r.voices || []).length > 0 && (r.proposals || []).length > 0;
+                    const badge = r.read === false ? '<span class="cl-news-unread-badge">未読</span>' : '';
+                    const play = replayable
+                        ? `<button type="button" class="cl-news-replay-btn" data-news-id="${escapeHtml(r.news_id)}">▶ 再生</button>`
+                        : '';
+                    return `
+                        <div class="cl-history-item">
+                            <span class="cl-history-item-main">${escapeHtml(src.title || '（タイトル不明）')}${badge}</span>
+                            <span class="cl-history-item-meta">${escapeHtml(r.region || '')} ・ 怒り${escapeHtml(String(r.overall_anger_level ?? '-'))} ・ ${when}</span>
+                            ${play}
+                        </div>
+                    `;
+                }).join('');
+                body.querySelectorAll('.cl-news-replay-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const rec = records.find(r => r.news_id === btn.dataset.newsId);
+                        if (rec) replayNewsRecord(rec);
+                    });
+                });
+            } catch (e) {
+                // 履歴取得の失敗はサイレントに無視（本体機能に影響させない）
+            }
+        }
+
+        // 保存済みの検討（怒りの記録）を履歴から再生する。過程のログ→声→音声パネルの読み上げ、
+        // とライブ分析と同じ流れで見られる（runDeliberation が replay を処理する）。
+        async function replayNewsRecord(record) {
+            const src = record.source_news || {};
+            if (!src.link) return;
+            setSidebarOpen(false);
+            stopTour();  // ユーザーが自分で動き始めたら、自動巡回は止めて読み上げも止める
+            addChatBubble('user', `▶ 「${src.title || ''}」の検討の記録を再生します`);
+            const assistantBubble = addChatBubble('assistant', '🔄 保存済みの検討を再生します…');
+            const item = { title: src.title || '', link: src.link, summary: src.summary || '', published: src.published || null };
+            try {
+                await runDeliberation(assistantBubble, item, record.region || getNewsRegion(), { board: true });
+            } catch (err) {
+                assistantBubble.innerHTML = `
+                    <span class="chat-bubble-label">🔍 Civic Lens</span>
+                    ⚠️ 再生に失敗しました: ${escapeHtml(err.message)}
+                    <button type="button" class="news-analyze-retry-btn mt-2 text-xs bg-gray-800 text-white px-2.5 py-1.5 rounded-md hover:bg-gray-700">🔄 再試行</button>
+                `;
+                assistantBubble.querySelector('.news-analyze-retry-btn').addEventListener('click', () => {
+                    assistantBubble.remove();
+                    replayNewsRecord(record);
+                });
+            }
+        }
+
+        refreshNewsUnreadBadge();
+
         // --- 左サイドメニュー（履歴一覧）の開閉。Claude Codeのようにハンバーガーで開閉できる ---
         const historySidebar = document.getElementById('historySidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -4899,7 +5026,10 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
             historySidebar.setAttribute('aria-hidden', open ? 'false' : 'true');
             sidebarOverlay.classList.toggle('cl-sidebar-overlay-open', open);
             if (openSidebarBtn) openSidebarBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-            if (open) loadMunicipalityHistory();
+            if (open) {
+                loadMunicipalityHistory();
+                loadNewsHistory();
+            }
         }
 
         if (openSidebarBtn) openSidebarBtn.addEventListener('click', () => setSidebarOpen(true));
