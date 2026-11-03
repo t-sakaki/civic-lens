@@ -84,6 +84,35 @@ def test_select_proposal_validation(news):
     ).status_code == 400
 
 
+def test_analyze_saves_news_summary_and_source_for_replay(news):
+    res = client.post("/api/news-agent/analyze", data=news)
+    assert res.status_code == 200
+    record = res.json()
+    # 記事のサマリーと出典を記録に残す（履歴からの再現・再分析に必要）
+    assert record["source_news"]["summary"] == news["summary"]
+    saved = news_reactions.get_record(record["news_id"])
+    assert saved["source_news"]["summary"] == news["summary"]
+    assert saved["source_news"]["link"] == news["link"]
+
+
+def test_select_proposal_uses_saved_summary_in_analysis_input(news, monkeypatch):
+    client.post("/api/news-agent/analyze", data=news)
+    captured = {}
+    original = app_module._run_anger_analysis
+
+    def spy(analysis_input, hint_key):
+        captured["input"] = analysis_input
+        return original(analysis_input, hint_key)
+
+    monkeypatch.setattr(app_module, "_run_anger_analysis", spy)
+    res = client.post(
+        "/api/news-agent/select-proposal",
+        data={"news_id": news_reactions.make_news_id(news["link"]), "proposal_index": 0},
+    )
+    assert res.status_code == 200
+    assert news["summary"] in captured["input"]
+
+
 def test_normalize_proposals_fixes_invalid_authority_and_unknown_supporters():
     voices = [{"theme": "sdg16", "label": "目標16", "key_points": ["a"], "pseudo_citizen_voice": "b"}]
     raw = [
@@ -100,7 +129,7 @@ def test_normalize_proposals_fixes_invalid_authority_and_unknown_supporters():
 
 def test_autonomous_scan_stores_one_record_per_news(monkeypatch, news):
     class _Item:
-        title, link, published = news["title"], news["link"], None
+        title, link, published, summary = news["title"], news["link"], None, news["summary"]
         def as_text(self):
             return f"{news['title']}\n{news['summary']}"
 
