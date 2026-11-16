@@ -1612,6 +1612,8 @@
         @media (max-width: 520px) { .sdg-stage-grid { grid-template-columns: repeat(6, 1fr); } }
         .sdg-stage-btn { position: relative; padding: 0; border: 0; background: none; cursor: pointer; opacity: 0.35; transition: opacity 0.3s, transform 0.3s; line-height: 0; }
         .sdg-stage-btn img { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
+        .sdg-stage-wheel { line-height: 0; }
+        .sdg-stage-wheel img { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
         .sdg-stage-btn.is-up { opacity: 1; --l: clamp(0, var(--lvl, 5), 10); --amp: calc(0.15px + var(--l) * 0.28px); --rot: calc(var(--l) * 0.35deg); animation: sdgShake calc(2.2s - var(--l) * 0.195s) ease-in-out infinite; border-radius: 0.45rem; box-shadow: 0 0 0 calc(var(--l) * 0.2px + 1px) rgba(239, 68, 68, calc(0.25 + var(--l) * 0.06)), 0 0 calc(var(--l) * 1.4px) calc(var(--l) * 0.4px) rgba(239, 68, 68, calc(var(--l) * 0.07)); }
         .sdg-stage-btn.is-up[data-lvl="0"] { animation: none; box-shadow: none; }
         /* 震え（警鐘レベル比例・SDGsダッシュボードと同じ見せ方）。アイコン自体は無改変で、ボタンごと動かし外枠を光らせる */
@@ -3857,6 +3859,11 @@
                 btn.addEventListener('click', () => toggleSdgBoardPanel(n));
                 grid.appendChild(btn);
             }
+            // 17目標の締めに、SDGsカラーホイール（公式ロゴ）を18番目のタイルとして置く。エージェントではないのでボタンにはしない
+            const wheel = document.createElement('span');
+            wheel.className = 'sdg-stage-wheel';
+            wheel.innerHTML = `<img src="/static/sdgs/wheel.png" alt="SDGs カラー・ホイール" width="290" height="290">`;
+            grid.appendChild(wheel);
         }
 
         // 点灯したアイコンを押すと、そのエージェントが怒っているニュースを一覧し、そこから検討を始められる
