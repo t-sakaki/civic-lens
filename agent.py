@@ -16,9 +16,11 @@ from precedent_cases import (
     find_relevant_precedents_by_embedding,
     format_precedent_case_for_prompt,
 )
-from timeout_utils import call_with_timeout, GeminiCallTimeout
+from timeout_utils import GeminiCallTimeout
+import cost_guard
 from gemini_models import (
     attempts as gemini_attempts,
+    call_model as gemini_call_model,
     generate as gemini_generate,
     primary_model,
     report_failure as gemini_report_failure,
@@ -610,18 +612,27 @@ JSONのみを返してください。
             # 1回だけリトライしてから、初めてルールベースにフォールバックする。
             # モデルの優先順・タイムアウトは gemini_models.py（環境変数で差し替え可）に集約。
             # 404/403/429になったモデルは一定時間スキップされる。
-            model_attempts = list(gemini_attempts("pro", 40.0))
+            base_config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+            try:
+                cost_guard.consume("gemini")
+                budget_ok = True
+            except cost_guard.BudgetExceeded:
+                budget_ok = False
+                mock_reason = "api_error"
+
+            model_attempts = list(gemini_attempts("pro", 45.0, already_consumed=True)) if budget_ok else []
             for attempt_idx, (model_name, timeout_s) in enumerate(model_attempts):
                 is_last_attempt = attempt_idx == len(model_attempts) - 1
                 try:
-                    response = call_with_timeout(
-                        self.genai_client.models.generate_content,
-                        model=model_name,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                        ),
-                        timeout_s=timeout_s,
+                    response = gemini_call_model(
+                        self.genai_client,
+                        "pro",
+                        model_name,
+                        timeout_s,
+                        prompt,
+                        config=base_config,
                     )
                     text = response.text.strip()
                     if text.startswith("```"):
