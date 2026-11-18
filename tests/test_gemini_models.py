@@ -188,3 +188,41 @@ def test_all_models_skipped_still_tries_everything():
 def test_primary_model_skips_dead():
     gm.report_failure("gemini-4-argon", _Err(404))
     assert gm.primary_model("pro") == "gemini-4-hydrogen"
+
+
+def test_trace_calls_and_status_snapshot_track_active_and_fallback():
+    client = _FakeClient({
+        "gemini-4-argon": _Err(404),
+        "gemini-4-hydrogen": "ok-hydrogen",
+    })
+    with gm.trace_calls() as trace:
+        gm.generate(client, "pro", "hello")
+    summary = gm.summarize_trace(trace)
+    assert summary["model"] == "gemini-4-hydrogen"
+    assert summary["primary_model"] == "gemini-4-argon"
+    assert summary["fallback_used"] is True
+    assert summary["downgrade_reason"] == "fallback"
+
+    snap = gm.status_snapshot()
+    assert snap["pro_primary"] == "gemini-4-hydrogen"
+    assert snap["active"] == []
+    assert snap["last_call"]["model"] == "gemini-4-hydrogen"
+    assert "gemini-4-argon" in snap["skipped_models"]
+
+
+def test_engine_status_endpoint_and_ui_elements():
+    from fastapi.testclient import TestClient
+    import app as app_module
+
+    tc = TestClient(app_module.app)
+    res = tc.get("/api/engine/status")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["pro_primary"] == "gemini-4-argon"
+    assert "active" in data and "skipped_models" in data
+
+    home = tc.get("/")
+    assert home.status_code == 200
+    assert "argonEnginePill" in home.text
+    assert "argonEnginePopover" in home.text
+    assert "briefing-engine-bar" in home.text

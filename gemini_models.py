@@ -33,6 +33,8 @@
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import os
 import threading
 import time
@@ -79,7 +81,13 @@ BALANCED_TIMEOUT_S = 30.0
 LIGHT_TIMEOUT_S = 20.0
 
 _skip_until: dict[str, float] = {}
+_active_calls: dict[int, dict[str, Any]] = {}
+_last_event: Optional[dict[str, Any]] = None
+_next_call_id = 0
 _lock = threading.Lock()
+_trace_bucket: contextvars.ContextVar[Optional[list[dict[str, Any]]]] = contextvars.ContextVar(
+    "gemini_trace_bucket", default=None
+)
 
 
 def model_chain(tier: str = "pro") -> list[str]:
@@ -134,14 +142,20 @@ def _supports_thinking_level(model: str) -> bool:
     return m.startswith("gemini-4-") or m.startswith("gemini-3.") or m.startswith("gemini-3-")
 
 
+def thinking_level_for(tier: str, model: str) -> Optional[str]:
+    """モデルとティアに適用される thinking_level を返す（非対応モデルなら None）"""
+    if not _supports_thinking_level(model):
+        return None
+    level = (os.getenv(f"GEMINI_THINKING_{tier.upper()}") or DEFAULT_THINKING_LEVELS.get(tier) or "").strip().upper()
+    return level if level in ("MINIMAL", "LOW", "MEDIUM", "HIGH") else None
+
+
 def config_for_tier(tier: str, model: str, base_config: Any = None) -> Any:
     """ティアとモデルに応じた thinking_level を付与した config を返す（元のオブジェクトは変更しない）"""
     if base_config is not None and getattr(base_config, "thinking_config", None) is not None:
         return base_config
-    if not _supports_thinking_level(model):
-        return base_config
-    level = (os.getenv(f"GEMINI_THINKING_{tier.upper()}") or DEFAULT_THINKING_LEVELS.get(tier) or "").strip().upper()
-    if level not in ("MINIMAL", "LOW", "MEDIUM", "HIGH"):
+    level = thinking_level_for(tier, model)
+    if not level:
         return base_config
     try:
         from google.genai import types  # type: ignore
@@ -231,25 +245,172 @@ def report_failure(model: str, exc: Exception) -> None:
 
 
 def reset_state() -> None:
-    """スキップ状態を初期化する（テスト用）"""
+    """スキップ状態とライブ推論テレメトリを初期化する（テスト用）"""
+    global _last_event, _next_call_id
     with _lock:
         _skip_until.clear()
+        _active_calls.clear()
+        _last_event = None
+        _next_call_id = 0
+
+
+def _downgrade_reason(tier: str, model: str, chain_head: str) -> str:
+    if model == chain_head:
+        return ""
+    if _is_low_cost_mode():
+        flag = os.getenv("GEMINI_LOW_COST_MODE", "").strip().lower()
+        return "low_cost_mode" if flag in ("1", "true", "yes", "on") else "soft_daily_limit"
+    return "fallback"
+
+
+@contextlib.contextmanager
+def trace_calls() -> Iterator[list[dict[str, Any]]]:
+    """同一コンテキスト内の Gemini 呼び出し履歴を収集する（UIの動的推論表示向け）"""
+    bucket: list[dict[str, Any]] = []
+    token = _trace_bucket.set(bucket)
+    try:
+        yield bucket
+    finally:
+        try:
+            _trace_bucket.reset(token)
+        except ValueError:
+            # StreamingResponse 等のジェネレータが別スレッドコンテキストで閉じられた場合の保護
+            _trace_bucket.set(None)
+
+
+def summarize_trace(trace: list[dict[str, Any]], is_mock: bool = False) -> dict[str, Any]:
+    """収集したトレースからUI表示用の代表モデル情報を返す（pro > balanced > flash の順で代表を選ぶ）"""
+    tier_rank = {"pro": 3, "balanced": 2, "flash": 1, "free": 0}
+    successes = [t for t in trace if t.get("status") == "success"]
+    if successes:
+        best = max(successes, key=lambda t: (tier_rank.get(t.get("tier", ""), 0), t.get("elapsed_ms", 0)))
+        return {
+            "model": best["model"],
+            "primary_model": best["primary_model"],
+            "tier": best["tier"],
+            "thinking_level": best.get("thinking_level"),
+            "fallback_used": any(t.get("fallback_used") for t in successes),
+            "downgrade_reason": best.get("downgrade_reason", ""),
+            "elapsed_ms": sum(int(t.get("elapsed_ms", 0)) for t in successes),
+            "calls": len(successes),
+            "is_mock": is_mock,
+        }
+    return {
+        "model": "rule-based" if is_mock else primary_model("pro"),
+        "primary_model": model_chain("pro")[0],
+        "tier": "mock" if is_mock else "pro",
+        "thinking_level": None,
+        "fallback_used": is_mock,
+        "downgrade_reason": "mock" if is_mock else "",
+        "elapsed_ms": 0,
+        "calls": 0,
+        "is_mock": is_mock,
+    }
+
+
+def status_snapshot() -> dict[str, Any]:
+    """現在の推論エンジン状態（実行中モデル・直近結果・スキップ中モデル等）を返す"""
+    now_mono = time.monotonic()
+    with _lock:
+        active = [
+            {
+                "id": cid,
+                "model": info["model"],
+                "primary_model": info["primary_model"],
+                "tier": info["tier"],
+                "thinking_level": info["thinking_level"],
+                "fallback_used": info["fallback_used"],
+                "downgrade_reason": info["downgrade_reason"],
+                "elapsed_ms": int((now_mono - info["started_mono"]) * 1000),
+            }
+            for cid, info in _active_calls.items()
+        ]
+        last_call = dict(_last_event) if _last_event else None
+        skipped = {
+            m: round(until - now_mono, 1)
+            for m, until in _skip_until.items()
+            if until > now_mono
+        }
+    return {
+        "pro_primary": primary_model("pro"),
+        "balanced_primary": primary_model("balanced"),
+        "flash_primary": primary_model("flash"),
+        "low_cost_mode": _is_low_cost_mode(),
+        "daily_usage": cost_guard.usage("gemini"),
+        "skipped_models": skipped,
+        "active": active,
+        "last_call": last_call,
+    }
 
 
 def call_model(client: Any, tier: str, model: str, timeout_s: float, contents: Any, config: Any = None):
     """単一モデルをティア別の thinking_level 付きで呼び出す（thinking 非対応の 400 のみ外して再試行）"""
+    global _next_call_id, _last_event
     effective_config = config_for_tier(tier, model, config)
+    applied_thinking = (
+        thinking_level_for(tier, model)
+        if effective_config is not config or (config is not None and getattr(config, "thinking_config", None) is not None)
+        else None
+    )
+    chain = model_chain(tier)
+    chain_head = chain[0] if chain else model
+    fallback_used = model != chain_head
+    reason = _downgrade_reason(tier, model, chain_head)
+    started_mono = time.monotonic()
+    with _lock:
+        _next_call_id += 1
+        call_id = _next_call_id
+        _active_calls[call_id] = {
+            "model": model,
+            "primary_model": chain_head,
+            "tier": tier,
+            "thinking_level": applied_thinking,
+            "fallback_used": fallback_used,
+            "downgrade_reason": reason,
+            "started_mono": started_mono,
+        }
+
+    def _record_done(status: str, thinking_used: Optional[str]) -> None:
+        global _last_event
+        elapsed_ms = int((time.monotonic() - started_mono) * 1000)
+        entry = {
+            "model": model,
+            "primary_model": chain_head,
+            "tier": tier,
+            "thinking_level": thinking_used,
+            "fallback_used": fallback_used,
+            "downgrade_reason": reason,
+            "status": status,
+            "elapsed_ms": elapsed_ms,
+            "updated_at": time.time(),
+        }
+        with _lock:
+            _active_calls.pop(call_id, None)
+            _last_event = entry
+        bucket = _trace_bucket.get()
+        if bucket is not None:
+            bucket.append(entry)
+
     try:
         kwargs: dict[str, Any] = {"model": model, "contents": contents}
         if effective_config is not None:
             kwargs["config"] = effective_config
-        return call_with_timeout(client.models.generate_content, timeout_s=timeout_s, **kwargs)
+        res = call_with_timeout(client.models.generate_content, timeout_s=timeout_s, **kwargs)
+        _record_done("success", applied_thinking)
+        return res
     except Exception as e:  # noqa: BLE001
         if effective_config is not config and _is_thinking_unsupported_error(e):
-            retry_kwargs: dict[str, Any] = {"model": model, "contents": contents}
-            if config is not None:
-                retry_kwargs["config"] = config
-            return call_with_timeout(client.models.generate_content, timeout_s=timeout_s, **retry_kwargs)
+            try:
+                retry_kwargs: dict[str, Any] = {"model": model, "contents": contents}
+                if config is not None:
+                    retry_kwargs["config"] = config
+                res = call_with_timeout(client.models.generate_content, timeout_s=timeout_s, **retry_kwargs)
+                _record_done("success", None)
+                return res
+            except Exception:
+                _record_done("error", None)
+                raise
+        _record_done("error", applied_thinking)
         raise
 
 
