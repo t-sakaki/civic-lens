@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import cost_guard
+import gemini_models
 import voice_panel
 import document_reader
 from request_date import parse_request_date
@@ -252,6 +253,15 @@ async def index():
     template_file = BASE_DIR / "templates" / "index.html"
     with open(template_file, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
+
+
+@app.get("/api/engine/status")
+async def get_engine_status():
+    """現在の推論エンジン状態（Argon稼働状況・フォールバック・スキップ状態）を返す"""
+    return {
+        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+        **gemini_models.status_snapshot(),
+    }
 
 
 @app.get("/authorities")
@@ -643,71 +653,71 @@ async def analyze_anger(
             print(f"画像処理エラー: {e}")
 
     agent = get_agent()
+    with gemini_models.trace_calls() as engine_trace:
+        # 2. 添付資料があれば Gemini Vision で読み取り、分析の入力に加える
+        attachments_reading = None
+        analysis_input = user_input
+        if files:
+            attachments_reading = await asyncio.to_thread(read_attachments, files, user_input, agent.genai_client)
+            analysis_input = build_analysis_input(user_input, attachments_reading)
+        if not analysis_input:
+            analysis_input = "（写真のみ送信）"
 
-    # 2. 添付資料があれば Gemini Vision で読み取り、分析の入力に加える
-    attachments_reading = None
-    analysis_input = user_input
-    if files:
-        attachments_reading = await asyncio.to_thread(read_attachments, files, user_input, agent.genai_client)
-        analysis_input = build_analysis_input(user_input, attachments_reading)
-    if not analysis_input:
-        analysis_input = "（写真のみ送信）"
+        # 3. テキストのみの場合は簡易推定
+        if anger_level is None:
+            anger_level = text_to_anger_level(analysis_input)
 
-    # 3. テキストのみの場合は簡易推定
-    if anger_level is None:
-        anger_level = text_to_anger_level(analysis_input)
+        # 3.5 対象機関が未選択なら、内容から推定する（画面の既定値で無関係な機関が入るのを防ぐ）
+        authority_guess = None
+        if not hint_authority_key:
+            try:
+                authority_guess = await asyncio.to_thread(
+                    authority_inference.infer_authority, analysis_input, agent.genai_client)
+            except Exception as e:
+                print(f"[authority_inference] 失敗: {e}")
+                authority_guess = authority_inference._result()
+            if authority_guess.get("inferred"):
+                hint_authority_key = authority_guess["authority_key"]
 
-    # 3.5 対象機関が未選択なら、内容から推定する（画面の既定値で無関係な機関が入るのを防ぐ）
-    authority_guess = None
-    if not hint_authority_key:
+        # 4. Geminiエージェントで詳細分析
         try:
-            authority_guess = await asyncio.to_thread(
-                authority_inference.infer_authority, analysis_input, agent.genai_client)
+            anger_analysis = await asyncio.to_thread(agent.analyze_anger, analysis_input, hint_authority_key)
+            anger_analysis.anger_level = anger_level
         except Exception as e:
-            print(f"[authority_inference] 失敗: {e}")
-            authority_guess = authority_inference._result()
-        if authority_guess.get("inferred"):
-            hint_authority_key = authority_guess["authority_key"]
+            print(f"Gemini エラー: {e}")
+            # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
+            fallback_key = hint_authority_key or "anjo-city"
+            fallback_authority = get_ordinance(fallback_key) or AUTHORITIES["anjo-city"]
+            anger_analysis = AngerAnalysis(
+                anger_level=anger_level,
+                emotion_keywords=["怒り", "不信"],
+                target_authority=fallback_authority.authority,
+                target_authority_key=fallback_key,
+                pain_summary=analysis_input[:100],
+                specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
+                legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
+                next_action="disclosure_request",
+                urgency="normal",
+                recommended_response_time="30日",
+                is_mock=True,
+            )
 
-    # 4. Geminiエージェントで詳細分析
-    try:
-        anger_analysis = agent.analyze_anger(analysis_input, hint_authority_key)
-        anger_analysis.anger_level = anger_level
-    except Exception as e:
-        print(f"Gemini エラー: {e}")
-        # フォールバック（対象機関はGeolocation等のヒントがあればそれを優先）
-        fallback_key = hint_authority_key or "anjo-city"
-        fallback_authority = get_ordinance(fallback_key) or AUTHORITIES["anjo-city"]
-        anger_analysis = AngerAnalysis(
-            anger_level=anger_level,
-            emotion_keywords=["怒り", "不信"],
-            target_authority=fallback_authority.authority,
-            target_authority_key=fallback_key,
-            pain_summary=analysis_input[:100],
-            specific_documents_requested=["（具体的な文書を Gemini 解析後に表示）"],
-            legal_basis=f"{fallback_authority.authority}情報公開条例第7条",
-            next_action="disclosure_request",
-            urgency="normal",
-            recommended_response_time="30日",
-            is_mock=True,
-        )
+        # 4.5 推定できなかった場合は対象機関を埋めない（請求文書の特定結果はそのまま）
+        if authority_guess is not None and not authority_guess.get("inferred"):
+            anger_analysis.target_authority_key = ""
+            anger_analysis.target_authority = "（未特定）対象機関を選んでください"
+        elif authority_guess is not None and authority_guess.get("inferred"):
+            # 分析側が別の機関に変えた場合は、その機関を推定結果として扱う
+            if anger_analysis.target_authority_key and anger_analysis.target_authority_key != authority_guess["authority_key"]:
+                authority_guess = {**authority_guess, "authority_key": anger_analysis.target_authority_key,
+                                   "authority": anger_analysis.target_authority, "source": "analysis"}
 
-    # 4.5 推定できなかった場合は対象機関を埋めない（請求文書の特定結果はそのまま）
-    if authority_guess is not None and not authority_guess.get("inferred"):
-        anger_analysis.target_authority_key = ""
-        anger_analysis.target_authority = "（未特定）対象機関を選んでください"
-    elif authority_guess is not None and authority_guess.get("inferred"):
-        # 分析側が別の機関に変えた場合は、その機関を推定結果として扱う
-        if anger_analysis.target_authority_key and anger_analysis.target_authority_key != authority_guess["authority_key"]:
-            authority_guess = {**authority_guess, "authority_key": anger_analysis.target_authority_key,
-                               "authority": anger_analysis.target_authority, "source": "analysis"}
-
-    # 5. SDGs怒りエージェント団（17目標×169ターゲット）。請求文書の特定結果は変えず、根拠として添える
-    try:
-        sdgs_anger = await asyncio.to_thread(sdgs_scorer.score_sdgs, analysis_input, "市民の訴え", agent.genai_client)
-    except Exception as e:
-        print(f"[sdgs] スコアリング失敗: {e}")
-        sdgs_anger = None
+        # 5. SDGs怒りエージェント団（17目標×169ターゲット）。請求文書の特定結果は変えず、根拠として添える
+        try:
+            sdgs_anger = await asyncio.to_thread(sdgs_scorer.score_sdgs, analysis_input, "市民の訴え", agent.genai_client)
+        except Exception as e:
+            print(f"[sdgs] スコアリング失敗: {e}")
+            sdgs_anger = None
 
     return {
         "anger_analysis": anger_analysis.model_dump(),
@@ -717,6 +727,7 @@ async def analyze_anger(
         "emotion_is_mock": emotion_is_mock,
         "attachments_reading": attachments_reading.model_dump() if attachments_reading else None,
         "analysis_input": analysis_input,
+        "engine": gemini_models.summarize_trace(engine_trace, is_mock=anger_analysis.is_mock),
     }
 
 
@@ -978,6 +989,16 @@ async def analyze_news_item(
             "sdgs_anger": await asyncio.to_thread(_news_sdgs, news_id, news_text)}
 
 
+def _tier_engine_hint(tier: str) -> Dict[str, Any]:
+    model = gemini_models.primary_model(tier)
+    return {
+        "tier": tier,
+        "model": model,
+        "thinking_level": gemini_models.thinking_level_for(tier, model),
+        "fallback_used": model != gemini_models.model_chain(tier)[0],
+    }
+
+
 def _analysis_events(
     title: str, link: str, summary: str, published: Optional[str], region: Optional[str], authority_key: Optional[str],
 ):
@@ -988,42 +1009,45 @@ def _analysis_events(
     """
     news_text = "\n".join([p for p in [title, summary] if p])
     news_id = make_news_id(link)
-    yield {"type": "reading", "news_id": news_id}
+    yield {"type": "reading", "news_id": news_id, "engine": _tier_engine_hint("flash")}
     existing = get_record(news_id)
     if existing and existing.get("voices") and existing.get("proposals"):
         yield {"type": "appear", "replay": True, "appearances": [
             {k: v.get(k) for k in ("theme", "label", "remark", "anger_level")} for v in existing["voices"]]}
         for v in existing["voices"]:
             yield {"type": "voice", "replay": True, "voice": v}
-        yield {"type": "integrating", "replay": True}
+        yield {"type": "integrating", "replay": True, "engine": _tier_engine_hint("pro")}
         yield {"type": "done", "replay": True, "record": {
             **existing, "panel_script": voice_panel.agent_lines(existing), "sdgs_anger": _news_sdgs(news_id, news_text)}}
         return
-    hint = _resolve_hint_key(region, authority_key)
-    appearances = _get_appearances(news_id, news_text, region)
-    yield {"type": "appear", "appearances": appearances}
-    voices: List[Dict[str, Any]] = []
-    for voice in iter_agent_voices(news_text, region, appearances):
-        voices.append(voice)
-        yield {"type": "voice", "voice": voice}
-    yield {"type": "integrating"}
-    proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint)
-    record = record_analysis(
-        news_id=news_id,
-        source_news={"title": title, "link": link, "published": published, "summary": summary},
-        disclaimer=PSEUDO_VOICE_DISCLAIMER,
-        anger_analysis=None,
-        theme="multi",
-        region=region,
-        autonomous=False,
-        voices=voices,
-        proposals=proposed["proposals"],
-        summary=proposed["summary"],
-        overall_anger_level=proposed["anger_level"],
-        **_voices_to_record_fields(voices),
-    )
-    yield {"type": "done", "record": {
-        **record, "panel_script": voice_panel.agent_lines(record), "sdgs_anger": _news_sdgs(news_id, news_text)}}
+    with gemini_models.trace_calls() as engine_trace:
+        hint = _resolve_hint_key(region, authority_key)
+        appearances = _get_appearances(news_id, news_text, region)
+        yield {"type": "appear", "appearances": appearances, "engine": _tier_engine_hint("balanced")}
+        voices: List[Dict[str, Any]] = []
+        for voice in iter_agent_voices(news_text, region, appearances):
+            voices.append(voice)
+            yield {"type": "voice", "voice": voice}
+        yield {"type": "integrating", "engine": _tier_engine_hint("pro")}
+        proposed = propose_disclosure_targets(news_text, region, voices, hint_key=hint)
+        record = record_analysis(
+            news_id=news_id,
+            source_news={"title": title, "link": link, "published": published, "summary": summary},
+            disclaimer=PSEUDO_VOICE_DISCLAIMER,
+            anger_analysis=None,
+            theme="multi",
+            region=region,
+            autonomous=False,
+            voices=voices,
+            proposals=proposed["proposals"],
+            summary=proposed["summary"],
+            overall_anger_level=proposed["anger_level"],
+            **_voices_to_record_fields(voices),
+        )
+        sdgs_data = _news_sdgs(news_id, news_text)
+    engine_summary = gemini_models.summarize_trace(engine_trace, is_mock=not bool(os.getenv("GEMINI_API_KEY")))
+    yield {"type": "done", "engine": engine_summary, "record": {
+        **record, "panel_script": voice_panel.agent_lines(record), "sdgs_anger": sdgs_data}}
 
 
 @app.post("/api/news-agent/analyze-stream", dependencies=[Depends(rate_limit)])
@@ -1653,14 +1677,17 @@ async def generate_disclosure_request(
     except Exception as e:
         print(f"[disclosure_outcomes] 過去事例の取得に失敗: {e}")
         past_cases = []
-    try:
-        request_text, is_mock = agent.generate_disclosure_request(
-            user_input, ordinance, strategy_option=strategy_option or "option-fast",
-            few_shot=disclosure_outcomes.format_few_shot(past_cases))
-    except Exception as e:
-        print(f"Gemini エラー: {e}")
-        request_text = _mock_disclosure_request(user_input, ordinance)
-        is_mock = True
+    with gemini_models.trace_calls() as engine_trace:
+        try:
+            request_text, is_mock = await asyncio.to_thread(
+                agent.generate_disclosure_request,
+                user_input, ordinance, strategy_option or "option-fast",
+                disclosure_outcomes.format_few_shot(past_cases),
+            )
+        except Exception as e:
+            print(f"Gemini エラー: {e}")
+            request_text = _mock_disclosure_request(user_input, ordinance)
+            is_mock = True
 
     # 期限情報
     today = datetime.now()
@@ -1703,6 +1730,7 @@ async def generate_disclosure_request(
             "review_deadline": review_deadline.isoformat(),
         },
         "next_steps": next_steps,
+        "engine": gemini_models.summarize_trace(engine_trace, is_mock=is_mock),
     }
 
 
@@ -1760,22 +1788,26 @@ async def generate_review_request(
             raise HTTPException(400, "decision_date は YYYY-MM-DD 形式で指定してください")
 
     agent = get_agent()
-    try:
-        counter = agent.build_counter_argument(non_disclosure_decision, ordinance, alleged_ground)
-    except Exception as e:
-        print(f"Gemini エラー: {e}")
-        counter = _mock_counter_argument(ordinance, alleged_ground)
-    counter_dict = counter.model_dump() if hasattr(counter, "model_dump") else counter
+    with gemini_models.trace_calls() as engine_trace:
+        try:
+            counter = await asyncio.to_thread(
+                agent.build_counter_argument, non_disclosure_decision, ordinance, alleged_ground
+            )
+        except Exception as e:
+            print(f"Gemini エラー: {e}")
+            counter = _mock_counter_argument(ordinance, alleged_ground)
+        counter_dict = counter.model_dump() if hasattr(counter, "model_dump") else counter
 
-    review_text, review_is_mock = civic_actions.generate_review_request_document(
-        agent.genai_client,
-        ordinance,
-        decision_summary=non_disclosure_decision,
-        decision_type=decision_type,
-        alleged_ground=alleged_ground,
-        counter_arguments=counter_dict.get("counter_arguments", []),
-        decision_date=known_date.strftime("%Y年%m月%d日") if known_date else None,
-    )
+        review_text, review_is_mock = await asyncio.to_thread(
+            civic_actions.generate_review_request_document,
+            agent.genai_client,
+            ordinance,
+            non_disclosure_decision,
+            decision_type,
+            alleged_ground,
+            counter_dict.get("counter_arguments", []),
+            known_date.strftime("%Y年%m月%d日") if known_date else None,
+        )
     deadline = civic_actions.review_deadline(ordinance, known_date)
 
     # 類似事例・判例
@@ -1791,6 +1823,7 @@ async def generate_review_request(
         "review_request_is_mock": review_is_mock,
         "review_period_days": ordinance.review_period_days,
         "review_deadline": deadline.isoformat() if deadline else None,
+        "engine": gemini_models.summarize_trace(engine_trace, is_mock=review_is_mock),
     }
 
 
