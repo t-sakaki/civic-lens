@@ -226,3 +226,29 @@ def test_engine_status_endpoint_and_ui_elements():
     assert "argonEnginePill" in home.text
     assert "argonEnginePopover" in home.text
     assert "briefing-engine-bar" in home.text
+    assert "argonDemoBtn" in home.text
+    assert "runEngineCompare" in home.text
+
+
+def test_engine_override_thinking_high_and_flash_lite_comparison():
+    client = _FakeClient({
+        "gemini-4-argon": "argon-high-ok",
+        "gemini-3.5-flash-lite": "flash-lite-ok",
+    })
+    with gm.trace_calls() as high_trace, gm.engine_override(mode="argon_high", thinking="HIGH"):
+        res_high = gm.generate(client, "pro", "analyze")
+    assert res_high.text == "argon-high-ok"
+    assert client.calls[-1] == "gemini-4-argon"
+    assert client.configs[-1].thinking_config.thinking_level == types.ThinkingLevel.HIGH
+    assert gm.summarize_trace(high_trace)["thinking_level"] == "HIGH"
+
+    with gm.trace_calls() as lite_trace, gm.engine_override(mode="flash_lite", thinking="LOW"):
+        res_lite = gm.generate(client, "pro", "analyze")
+    assert res_lite.text == "flash-lite-ok"
+    assert client.calls[-1] == "gemini-3.5-flash-lite"
+    lite_summary = gm.summarize_trace(lite_trace)
+    assert lite_summary["downgrade_reason"] == "comparison_flash_lite"
+    assert lite_summary["fallback_used"] is True
+
+    # コンテキスト終了後は通常チェーン（MEDIUM）に戻る
+    assert gm.thinking_level_for("pro", "gemini-4-argon") == "MEDIUM"

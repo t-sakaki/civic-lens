@@ -231,6 +231,110 @@
             vertical-align: text-bottom;
             animation: agentBlink 1s steps(1) infinite;
         }
+        /* Argon 不開示反論シミュレーター・比較UI */
+        .argon-demo-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #c7d2fe;
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.22), rgba(6, 182, 212, 0.18));
+            border: 1px solid rgba(129, 140, 248, 0.4);
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            white-space: nowrap;
+        }
+        .argon-demo-pill:hover {
+            transform: translateY(-1px);
+            border-color: rgba(34, 211, 238, 0.7);
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+        }
+        [data-theme="light"] .argon-demo-pill {
+            color: #3730a3;
+            background: linear-gradient(135deg, rgba(224, 231, 255, 0.9), rgba(207, 250, 254, 0.9));
+            border-color: rgba(99, 102, 241, 0.4);
+        }
+        .notice-meta-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .notice-meta-pill {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.14);
+            border: 1px solid rgba(99, 102, 241, 0.32);
+            color: #3730a3;
+        }
+        [data-theme="dark"] .notice-meta-pill {
+            color: #c7d2fe;
+        }
+        .debate-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fafc;
+        }
+        [data-theme="dark"] .debate-card {
+            background: rgba(15, 23, 42, 0.65);
+            border-color: rgba(148, 163, 184, 0.22);
+        }
+        .debate-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        @media (min-width: 768px) {
+            .debate-grid { grid-template-columns: 1fr 1fr; }
+        }
+        .debate-claim {
+            background: rgba(239, 68, 68, 0.08);
+            border-left: 3px solid #ef4444;
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+        .debate-rebuttal {
+            background: rgba(16, 185, 129, 0.08);
+            border-left: 3px solid #10b981;
+            padding: 8px 10px;
+            border-radius: 6px;
+        }
+        .debate-weakness {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #b45309;
+            background: rgba(245, 158, 11, 0.1);
+            padding: 5px 8px;
+            border-radius: 6px;
+        }
+        [data-theme="dark"] .debate-weakness { color: #fcd34d; }
+        .compare-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        @media (min-width: 768px) {
+            .compare-grid { grid-template-columns: 1fr 1fr; }
+        }
+        .compare-card {
+            border-radius: 10px;
+            padding: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: #ffffff;
+        }
+        .compare-card.is-argon {
+            border-color: rgba(99, 102, 241, 0.55);
+            box-shadow: 0 0 18px rgba(99, 102, 241, 0.12);
+        }
+        [data-theme="dark"] .compare-card {
+            background: rgba(15, 23, 42, 0.78);
+        }
         /* --- 音声パネル: SDGsエージェントの簡易アイコン・表情（怒りレベル3段階・一目でAIと分かる意匠。公式ロゴは使わず色のみ参照） --- */
         .vp-agent-icon {
             display: inline-flex;
@@ -2366,6 +2470,7 @@
                         </button>
                         <button id="attachBtn" type="button" class="composer-tool-btn" title="ファイルを添付（画像・PDF）— Gemini Visionで読み取ります" aria-label="ファイルを添付"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
                         <button id="startCamera" type="button" class="composer-tool-btn" title="表情で伝える（カメラ）" aria-label="表情で伝える（カメラ）"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+                        <button id="argonDemoBtn" type="button" class="argon-demo-pill" title="架空の不開示（一部黒塗り）決定通知から、Argon HIGH 推論＋反論比較をワンクリック実演">⚡ 黒塗り不開示デモ</button>
 
                         <span class="suggestion-hint">
                             <span class="thinking-dots"><span></span><span></span><span></span></span>
@@ -3150,6 +3255,7 @@
             const reasonText = {
                 low_cost_mode: '低コストモード有効（無料枠・安価モデル優先）',
                 soft_daily_limit: 'ソフト日次上限到達により安価・無料モデルへ自動降格',
+                comparison_flash_lite: '比較モードにより軽量モデル（Flash-Lite優先）で実行',
                 fallback: '上位モデル不可（制限/障害）のため安価・無料モデルへ自動退避',
                 mock: 'API未設定・上限到達のためルールベースで生成',
             }[engine.downgrade_reason] || '最上位推論モデルで完了';
@@ -5924,10 +6030,26 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         function visionReadingHtml(reading) {
             const files = (reading.files || []).map(f => `<li><strong>${escapeHtml(f.filename)}</strong>（${escapeHtml(f.document_type)}）: ${escapeHtml(f.summary)}</li>`).join('');
             const facts = (reading.key_facts || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
+            const nm = reading.notice_meta;
+            let noticeHtml = '';
+            if (nm && nm.is_disclosure_decision) {
+                const dtypeLabel = DECISION_TYPE_LABELS[nm.decision_type] || nm.decision_type || '決定通知';
+                const pills = [
+                    `<span class="notice-meta-pill">📄 ${escapeHtml(dtypeLabel)}</span>`,
+                    nm.decision_date ? `<span class="notice-meta-pill">📅 決定日: ${escapeHtml(nm.decision_date)}</span>` : '',
+                    ...(nm.cited_articles || []).map(a => `<span class="notice-meta-pill">⚖️ ${escapeHtml(a)}</span>`),
+                ].filter(Boolean).join('');
+                noticeHtml = `
+                    <div class="notice-meta-pills">${pills}</div>
+                    ${nm.redacted_scope_summary ? `<div class="mt-1.5 text-xs">⬛ <b>黒塗り・非公開範囲:</b> ${escapeHtml(nm.redacted_scope_summary)}</div>` : ''}
+                    ${nm.boilerplate_risk ? `<div class="mt-1 text-xs text-amber-600">⚠️ <b>定型文リスク検知:</b> ${escapeHtml(nm.boilerplate_risk)}</div>` : ''}
+                `;
+            }
             return `
                 <div class="vision-card">
                     <div class="vision-card-head">📎 添付資料を読み取りました <span class="vision-badge">${reading.is_mock ? '読み取り不可' : 'Gemini Vision'}</span></div>
                     <div>${escapeHtml(reading.overall_summary || '')}</div>
+                    ${noticeHtml}
                     ${files ? `<ul>${files}</ul>` : ''}
                     ${facts ? `<div class="mt-2 text-xs" style="color: var(--chat-muted)">読み取った重要な事実</div><ul>${facts}</ul>` : ''}
                     ${reading.extracted_text ? `<details><summary>読み取った本文を表示</summary><pre>${escapeHtml(reading.extracted_text)}</pre></details>` : ''}
@@ -6008,6 +6130,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 return;
             }
             analyzeInFlight = true;
+            latestAttachmentsReading = null;
             lastSubmittedText = userInput;
             if (options.userText === undefined) {
                 inputEl.value = '';
@@ -6050,6 +6173,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     throw new Error(detail || `分析に失敗しました（HTTP ${res.status}）。`);
                 }
                 const data = await res.json();
+                latestAttachmentsReading = data.attachments_reading || null;
 
                 displayAnalysis(data);
                 if (data.sdgs_anger) document.getElementById('angerDisplay').insertAdjacentHTML('beforeend', sdgsAngerPanelHtml(data.sdgs_anger));
@@ -6151,6 +6275,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         }
 
         let latestAnalysis = null;
+        let latestAttachmentsReading = null;
+        let lastReviewParams = null;
         function displayAnalysis(data) {
             const analysis = data.anger_analysis;
             latestAnalysis = analysis;
@@ -6362,6 +6488,7 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
         const DECISION_TYPE_LABELS = {
             non_disclosure: '不開示決定',
             partial_disclosure: '一部開示決定',
+            neither_confirm_nor_deny: '存否応答拒否',
             document_absent: '文書不存在',
         };
 
@@ -6714,25 +6841,45 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
 
         // 審査請求（不開示決定への不服申立て）: 決定の内容（添付の読み取り結果を含む）と
         // 非公開の根拠条文から、反論ロジックと類似の認容事例をまとめる
-        async function runReviewRequest(chatBubble, decisionType) {
-            const targetAuthority = document.getElementById('targetAuthority').value;
+        async function runReviewRequest(chatBubble, decisionType, options = {}) {
+            const targetAuthority = options.targetAuthority || document.getElementById('targetAuthority').value;
             const btn = document.getElementById('reviewBtn');
+            const noticeMeta = latestAttachmentsReading?.notice_meta;
+            const autoMeta = (noticeMeta && noticeMeta.is_disclosure_decision) ? noticeMeta : null;
+            const resolvedType = decisionType || autoMeta?.decision_type || 'non_disclosure';
+            const resolvedDecisionText = options.decisionText || getSubjectText() || '（不開示決定の内容）';
+            const resolvedGround = options.allegedGround
+                || (autoMeta?.cited_articles?.length ? autoMeta.cited_articles.join('・') : '')
+                || latestAnalysis?.legal_basis
+                || '情報公開条例の不開示事由';
+            const resolvedDate = options.decisionDate || autoMeta?.decision_date || '';
+            const engineMode = options.engineMode || 'argon_high';
+
             const formData = new FormData();
-            formData.append('non_disclosure_decision', getSubjectText() || '（不開示決定の内容）');
+            formData.append('non_disclosure_decision', resolvedDecisionText);
             formData.append('target_authority', targetAuthority);
-            formData.append('alleged_ground', latestAnalysis?.legal_basis || '情報公開条例の不開示事由');
-            formData.append('decision_type', decisionType || 'non_disclosure');
+            formData.append('alleged_ground', resolvedGround);
+            formData.append('decision_type', resolvedType);
+            if (resolvedDate) formData.append('decision_date', resolvedDate);
+            formData.append('engine_mode', engineMode);
 
             btn.disabled = true;
             const thinkingHandle = startThinking('actionThinking', [
-                '⚖️ 非公開の根拠条文を分析中…',
-                '📚 類似の認容事例を検索中…',
-                '✍️ 反論ロジックを組み立て中…',
-            ]);
+                '⚖️ Gemini 4 Argon (HIGH) で非公開の根拠条文を精密分析中…',
+                '🛡️ 行政側の想定反論と立証の穴を反対尋問中…',
+                '📚 総務省 行政不服審査データベースの認容事例を照合中…',
+                '✍️ 審査請求書と部分開示論点を組み立て中…',
+            ], { primaryTier: 'pro' });
             try {
                 if (!targetAuthority) {
                     throw new Error('対象機関が特定できていません。入力欄の🏛️タグから対象機関を選択してください。');
                 }
+                lastReviewParams = {
+                    non_disclosure_decision: resolvedDecisionText,
+                    target_authority: targetAuthority,
+                    alleged_ground: resolvedGround,
+                    decision_type: resolvedType,
+                };
                 const res = await fetch('/api/review-request', { method: 'POST', body: formData });
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
@@ -6744,7 +6891,8 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                 activateSplitView();
                 if (chatBubble) {
                     const prob = Math.round((data.counter_argument?.winning_probability || 0) * 100);
-                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>審査請求書と反論ロジックをまとめました（見込み: 約${prob}%）。提出先は「${escapeHtml(data.review_addressee || '')}」、諮問先は「${escapeHtml(data.review_authority || '')}」です。詳しくは分析結果の「生成されたアクション」をご覧ください。`;
+                    chatBubble.innerHTML = `<span class="chat-bubble-label">🔍 Civic Lens</span>審査請求書と反対尋問反論ロジックをまとめました（参考見込み: 約${prob}%）。提出先は「${escapeHtml(data.review_addressee || '')}」、諮問先は「${escapeHtml(data.review_authority || '')}」です。右側の「⚡ 思考比較」から安価モデルとの解像度差も確認できます。`
+                        + engineStampHtml(data.engine);
                 }
             } catch (err) {
                 if (chatBubble) {
@@ -6765,6 +6913,34 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     <div class="text-xs text-gray-500">${escapeHtml(p.source)}・${escapeHtml(p.date)}</div>
                     <div class="text-sm text-gray-700">${escapeHtml(p.summary)}</div>
                 </li>`).join('');
+            const debatesHtml = (c.adversarial_rebuttals || []).map((r, idx) => `
+                <div class="debate-card mb-2">
+                    <div class="text-xs font-bold text-indigo-700 mb-1.5">論点 ${idx + 1}：行政の想定主張 vs 市民側の切り返し</div>
+                    <div class="debate-grid">
+                        <div class="debate-claim">
+                            <div class="text-xs font-semibold text-red-700 mb-0.5">🏛️ 行政側の想定主張</div>
+                            <div class="text-sm">${escapeHtml(r.authority_claim || '')}</div>
+                        </div>
+                        <div class="debate-rebuttal">
+                            <div class="text-xs font-semibold text-emerald-700 mb-0.5">🛡️ 市民側の切り返し</div>
+                            <div class="text-sm">${escapeHtml(r.citizen_rebuttal || '')}</div>
+                        </div>
+                    </div>
+                    ${r.weakness ? `<div class="debate-weakness">🔍 <b>立証の穴：</b>${escapeHtml(r.weakness)}</div>` : ''}
+                </div>
+            `).join('');
+            const partialHtml = (c.partial_disclosure_angles || []).length
+                ? `<div class="bg-blue-50 border border-blue-200 p-4 rounded-md mb-4">
+                        <h3 class="font-semibold mb-2 text-blue-900">✂️ 部分開示（黒塗り範囲の最小化）を迫る論点</h3>
+                        <ul class="text-sm list-disc list-inside space-y-1 text-blue-900">${c.partial_disclosure_angles.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+                   </div>`
+                : '';
+            const checklistHtml = (c.evidence_checklist || []).length
+                ? `<div class="bg-gray-50 border p-4 rounded-md mb-4">
+                        <h3 class="font-semibold mb-2">📋 提出前にご自身で確認する事実チェックリスト</h3>
+                        <ul class="text-sm list-disc list-inside space-y-1">${c.evidence_checklist.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+                   </div>`
+                : '';
             document.getElementById('outputContent').innerHTML = `
                 <div class="bg-orange-50 p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-1 text-orange-900">⚖️ 審査請求（不開示決定への不服申立て）</h3>
@@ -6772,23 +6948,109 @@ async function runMunicipalityLookup(prefecture, municipality, statusEl) {
                     <p class="text-sm text-orange-800">提出先（審査庁）: ${escapeHtml(data.review_addressee || '')} ／ 諮問先: ${escapeHtml(data.review_authority || '')}</p>
                     <p class="text-sm text-orange-800">審査請求期間: 決定を知った日の翌日から${data.review_period_days}日以内${data.review_deadline ? `（${new Date(data.review_deadline).toLocaleDateString()}まで）` : ''}</p>
                     <p class="text-sm text-orange-800">争点: ${escapeHtml(c.ground_number || '')} ${escapeHtml(c.ground_name || '')}</p>
-                    <p class="text-sm text-orange-800">認容の見込み（AI推定）: 約${prob}%</p>
+                    <p class="text-sm text-orange-800">認容の見込み（AI参考推定）: 約${prob}%</p>
                 </div>
-                ${documentBlock('📄 審査請求書', data.review_request_text, data.review_request_is_mock, 'AI文書生成')}
+                ${debatesHtml ? `<div class="bg-white border p-4 rounded-md mb-4"><h3 class="font-semibold mb-2">🛡️ AI反対尋問シミュレーション（2段論証）</h3>${mockBadge(c.is_mock, 'AI反対尋問')}${debatesHtml}</div>` : ''}
+                ${partialHtml}
                 <div class="bg-white border p-4 rounded-md mb-4">
                     <h3 class="font-semibold mb-2">🗣️ 反論ロジック</h3>
                     ${mockBadge(c.is_mock, 'AI反論生成')}
                     <ol class="text-sm list-decimal list-inside space-y-1">${(c.counter_arguments || []).map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ol>
                 </div>
+                ${checklistHtml}
+                ${documentBlock('📄 審査請求書', data.review_request_text, data.review_request_is_mock, 'AI文書生成')}
                 ${(c.precedent_cases || []).length ? `<div class="bg-gray-50 p-4 rounded-md mb-4"><h3 class="font-semibold mb-2">📌 参考になる判例・事例</h3><ul class="text-sm list-disc list-inside">${c.precedent_cases.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>` : ''}
-                ${precedents ? `<div class="bg-green-50 p-4 rounded-md"><h3 class="font-semibold mb-2 text-green-900">📚 類似の認容事例</h3><ul>${precedents}</ul></div>` : ''}
+                ${precedents ? `<div class="bg-green-50 p-4 rounded-md mb-4"><h3 class="font-semibold mb-2 text-green-900">📚 類似の認容事例</h3><ul>${precedents}</ul></div>` : ''}
+                <div class="border border-indigo-200 bg-indigo-50/60 p-4 rounded-md mb-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <div class="text-sm font-bold text-indigo-900">⚡ Gemini 4 Argon (HIGH) vs Flash-Lite 思考比較</div>
+                            <div class="text-xs text-indigo-700">同じ不開示決定に対して、フロンティア推論と軽量モデルの論点解像度をライブ比較します。</div>
+                        </div>
+                        <button type="button" id="compareEngineBtn" class="px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">⚡ 思考差をライブ比較</button>
+                    </div>
+                    <div id="engineCompareResult" class="mt-2"></div>
+                </div>
+                ${c.legal_disclaimer ? `<p class="text-xs text-gray-500 mt-2 mb-2">${escapeHtml(c.legal_disclaimer)}</p>` : ''}
                 ${engineStampHtml(data.engine)}
             `;
+            const cmpBtn = document.getElementById('compareEngineBtn');
+            if (cmpBtn) cmpBtn.addEventListener('click', runEngineCompare);
         }
+
+        async function runEngineCompare() {
+            const box = document.getElementById('engineCompareResult');
+            const btn = document.getElementById('compareEngineBtn');
+            if (!box || !lastReviewParams) return;
+            if (btn) btn.disabled = true;
+            box.innerHTML = `<div class="text-xs text-indigo-700 py-2">⚡ Gemini 4 Argon (HIGH) と軽量モデル (Flash-Lite) を並列実行して比較中…</div>`;
+            argonEngine.boostPolling(true);
+            try {
+                const fd = new FormData();
+                fd.append('non_disclosure_decision', lastReviewParams.non_disclosure_decision);
+                fd.append('target_authority', lastReviewParams.target_authority);
+                fd.append('alleged_ground', lastReviewParams.alleged_ground);
+                fd.append('decision_type', lastReviewParams.decision_type);
+                const res = await fetch('/api/review-request/compare', { method: 'POST', body: fd });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(typeof errData.detail === 'string' ? errData.detail : `HTTP ${res.status}`);
+                }
+                const cmp = await res.json();
+                const renderSide = (title, item, isArgon) => {
+                    const eng = item.engine || {};
+                    const ca = item.counter_argument || {};
+                    const sec = eng.elapsed_ms ? (eng.elapsed_ms / 1000).toFixed(1) + 's' : '-';
+                    const deb = (ca.adversarial_rebuttals || [])[0];
+                    const args = (ca.counter_arguments || []).slice(0, 3).map(a => `<li>${escapeHtml(a)}</li>`).join('');
+                    return `
+                        <div class="compare-card ${isArgon ? 'is-argon' : ''}">
+                            <div class="flex items-center justify-between gap-2 mb-1.5">
+                                <span class="text-xs font-bold ${isArgon ? 'text-indigo-700' : 'text-amber-700'}">${escapeHtml(title)}</span>
+                                <span class="text-[11px] font-mono opacity-80">${escapeHtml(formatEngineShort(eng.model))} · ${escapeHtml(eng.thinking_level || 'NONE')} · ${escapeHtml(sec)}</span>
+                            </div>
+                            <div class="text-xs mb-2">見込み推定: <b>${Math.round((ca.winning_probability || 0) * 100)}%</b> ／ 反対尋問: <b>${(ca.adversarial_rebuttals || []).length}件</b> ／ 部分開示論点: <b>${(ca.partial_disclosure_angles || []).length}件</b></div>
+                            ${deb ? `<div class="text-xs p-2 rounded bg-emerald-50 border border-emerald-200 mb-2"><b>代表切り返し:</b> ${escapeHtml(deb.citizen_rebuttal || '')}</div>` : ''}
+                            <ol class="text-xs list-decimal list-inside space-y-1">${args}</ol>
+                        </div>`;
+                };
+                box.innerHTML = `<div class="compare-grid">
+                    ${renderSide('⚡ Gemini 4 Argon (HIGH推論)', cmp.argon || {}, true)}
+                    ${renderSide('🪶 Flash-Lite (軽量・安価比較)', cmp.flash_lite || {}, false)}
+                </div>`;
+            } catch (err) {
+                box.innerHTML = `<div class="text-xs text-red-600 py-1">⚠️ 比較に失敗しました: ${escapeHtml(err.message)}</div>`;
+            } finally {
+                argonEngine.boostPolling(false);
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function runArgonNonDisclosureDemo() {
+            const sel = document.getElementById('targetAuthority');
+            if (!sel.value) {
+                const preferred = Array.from(sel.options).find(o => o.value === 'anjo-city')
+                    || Array.from(sel.options).find(o => o.value);
+                if (preferred) setSelectedAuthority(preferred.value);
+            }
+            const demoText = '【架空デモ：一部開示決定通知書】\n'
+                + '庁舎広報DX委託業務の契約書・仕様書・精算内訳書を開示請求したところ、受託事業者の見積内訳金額・単価・作業工数が「第7条第2号（法人情報：公にすることにより競争上の地位を害するおそれ）」を理由に全面黒塗り（一部開示決定・2026年11月1日通知）となった。定型文のみの理由説明で、公金の支出単価や総額の検証ができない。';
+            const demoGround = '第7条第2号（法人情報）';
+            const demoDate = '2026-11-01';
+            addChatBubble('user', '⚡ <b>デモ：黒塗り一部開示決定への反論シミュレーション</b><br><span class="text-xs opacity-80">' + escapeHtml(demoText) + '</span>');
+            const bubble = addChatBubble('assistant', '⚡ Gemini 4 Argon (HIGH) で黒塗り不開示通知の反対尋問と審査請求書を構築しています…');
+            runReviewRequest(bubble, 'partial_disclosure', {
+                decisionText: demoText,
+                allegedGround: demoGround,
+                decisionDate: demoDate,
+                engineMode: 'argon_high',
+            });
+        }
+        document.getElementById('argonDemoBtn')?.addEventListener('click', runArgonNonDisclosureDemo);
 
         document.getElementById('reviewBtn').addEventListener('click', () => {
             const bubble = addChatBubble('assistant', '🔄 非公開決定への反論ロジックを組み立てています…');
-            runReviewRequest(bubble, 'non_disclosure');
+            runReviewRequest(bubble, latestAttachmentsReading?.notice_meta?.decision_type || 'non_disclosure');
         });
 
         let lastDisclosureGroupId = null;
