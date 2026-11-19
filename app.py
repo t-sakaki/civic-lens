@@ -1769,17 +1769,22 @@ async def generate_review_request(
     alleged_ground: str = Form(...),
     decision_type: Optional[str] = Form("non_disclosure"),
     decision_date: Optional[str] = Form(None),
+    engine_mode: Optional[str] = Form("argon_high"),
 ):
     """審査請求書 + 反論ロジックを生成
 
     decision_type: non_disclosure / partial_disclosure / neither_confirm_nor_deny / document_absent
     decision_date: 決定通知を受け取った日（YYYY-MM-DD）。指定時は審査請求期限を算出する
+    engine_mode: argon_high（Gemini 4 Argon HIGH推論優先）/ auto（標準ティア）/ flash_lite（軽量比較用）
     """
     ordinance = get_ordinance(target_authority)
     if not ordinance:
         raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
     if decision_type not in civic_actions.DECISION_TYPES:
         decision_type = "non_disclosure"
+    mode = (engine_mode or "argon_high").strip().lower()
+    if mode not in ("argon_high", "auto", "flash_lite"):
+        mode = "argon_high"
     known_date = None
     if decision_date:
         try:
@@ -1787,11 +1792,19 @@ async def generate_review_request(
         except ValueError:
             raise HTTPException(400, "decision_date は YYYY-MM-DD 形式で指定してください")
 
+    thinking_arg = "HIGH" if mode == "argon_high" else ("LOW" if mode == "flash_lite" else None)
+    override_mode = None if mode == "auto" else mode
+
     agent = get_agent()
-    with gemini_models.trace_calls() as engine_trace:
+    with gemini_models.trace_calls() as engine_trace, gemini_models.engine_override(mode=override_mode, thinking=thinking_arg):
         try:
             counter = await asyncio.to_thread(
-                agent.build_counter_argument, non_disclosure_decision, ordinance, alleged_ground
+                agent.build_counter_argument,
+                non_disclosure_decision,
+                ordinance,
+                alleged_ground,
+                thinking_level=thinking_arg,
+                decision_type=decision_type,
             )
         except Exception as e:
             print(f"Gemini エラー: {e}")
@@ -1823,7 +1836,58 @@ async def generate_review_request(
         "review_request_is_mock": review_is_mock,
         "review_period_days": ordinance.review_period_days,
         "review_deadline": deadline.isoformat() if deadline else None,
-        "engine": gemini_models.summarize_trace(engine_trace, is_mock=review_is_mock),
+        "engine_mode": mode,
+        "engine": gemini_models.summarize_trace(
+            engine_trace,
+            is_mock=review_is_mock and bool(counter_dict.get("is_mock", review_is_mock)),
+        ),
+    }
+
+
+@app.post("/api/review-request/compare", dependencies=[Depends(generation_rate_limit)])
+async def compare_review_request_engines(
+    non_disclosure_decision: str = Form(...),
+    target_authority: str = Form(...),
+    alleged_ground: str = Form(...),
+    decision_type: Optional[str] = Form("non_disclosure"),
+):
+    """同一の不開示決定に対し、Gemini 4 Argon (HIGH) と軽量モデル (Flash-Lite) の反論推論を並べて比較する。"""
+    ordinance = get_ordinance(target_authority)
+    if not ordinance:
+        raise HTTPException(404, f"対象機関が見つかりません: {target_authority}")
+    if decision_type not in civic_actions.DECISION_TYPES:
+        decision_type = "non_disclosure"
+
+    agent = get_agent()
+
+    def _run_variant(mode_name: str, thinking_arg: str) -> dict:
+        with gemini_models.trace_calls() as trace, gemini_models.engine_override(mode=mode_name, thinking=thinking_arg):
+            try:
+                counter = agent.build_counter_argument(
+                    non_disclosure_decision,
+                    ordinance,
+                    alleged_ground,
+                    thinking_level=thinking_arg,
+                    decision_type=decision_type,
+                )
+            except Exception as e:
+                print(f"Compare Gemini エラー ({mode_name}): {e}")
+                counter = _mock_counter_argument(ordinance, alleged_ground)
+        counter_dict = counter.model_dump() if hasattr(counter, "model_dump") else counter
+        is_mock = bool(counter_dict.get("is_mock", False))
+        return {
+            "mode": mode_name,
+            "counter_argument": counter_dict,
+            "engine": gemini_models.summarize_trace(trace, is_mock=is_mock),
+        }
+
+    argon_res, flash_res = await asyncio.gather(
+        asyncio.to_thread(_run_variant, "argon_high", "HIGH"),
+        asyncio.to_thread(_run_variant, "flash_lite", "LOW"),
+    )
+    return {
+        "argon": argon_res,
+        "flash_lite": flash_res,
     }
 
 
@@ -2654,6 +2718,25 @@ def _mock_counter_argument(ordinance, alleged_ground: str) -> dict:
         "counter_arguments": counter_args,
         "precedent_cases": precedents,
         "winning_probability": 0.74,
+        "adversarial_rebuttals": [
+            {
+                "authority_claim": f"{alleged_ground}に基づく一律の不開示該当性の主張",
+                "weakness": "具体的な支障の立証がなく定型文にとどまっている",
+                "citizen_rebuttal": "処分庁側に具体的・実質的支障の立証責任があり、部分開示義務も尽くすべきである。",
+            }
+        ],
+        "partial_disclosure_angles": [
+            "契約金額の総額・契約日・件名など、競争上の利益や個人識別に直結しない部分の部分開示を求める。",
+        ],
+        "evidence_checklist": [
+            "通知書記載の条例条文番号と処分理由の原文を確認する",
+            "審査請求期限（原則3か月以内）を確認する",
+        ],
+        "legal_disclaimer": (
+            "※本出力はAIによる論点整理の参考情報であり、弁護士法72条に基づく法的助言や"
+            "裁決・認容の保証ではありません。審査請求の提出判断・最終記載はご自身で行ってください。"
+        ),
+        "is_mock": True,
     }
 
 

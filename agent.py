@@ -5,6 +5,7 @@ AngerAnalysis → 条例マッチング → 開示請求書作成 → 審査請�
 一気通貫で処理するエージェントシステム。
 """
 import os
+import contextlib
 import json
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -21,6 +22,7 @@ import cost_guard
 from gemini_models import (
     attempts as gemini_attempts,
     call_model as gemini_call_model,
+    engine_override as gemini_engine_override,
     generate as gemini_generate,
     primary_model,
     report_failure as gemini_report_failure,
@@ -103,6 +105,19 @@ class AngerAnalysis(BaseModel):
     )
 
 
+LEGAL_COUNTER_DISCLAIMER = (
+    "※本出力はAIによる論点整理の参考情報であり、弁護士法72条に基づく法的助言や"
+    "裁決・認容の保証ではありません。審査請求の提出判断・最終記載はご自身で行ってください。"
+)
+
+
+class AdversarialRebuttal(BaseModel):
+    """行政側の想定主張に対する反対尋問（2段論証）"""
+    authority_claim: str = Field(description="処分庁（行政側）が主張してくると想定される不開示根拠・言い分")
+    weakness: str = Field(description="行政側の立証不足・紋切り型適用などの論理的弱点")
+    citizen_rebuttal: str = Field(description="条文趣旨や実在答申を踏まえた市民側の切り返しポイント")
+
+
 class CounterArgument(BaseModel):
     """反論ロジック"""
     ground_number: str
@@ -110,6 +125,10 @@ class CounterArgument(BaseModel):
     counter_arguments: List[str]
     precedent_cases: List[str]
     winning_probability: float
+    adversarial_rebuttals: List[AdversarialRebuttal] = Field(default_factory=list)
+    partial_disclosure_angles: List[str] = Field(default_factory=list)
+    evidence_checklist: List[str] = Field(default_factory=list)
+    legal_disclaimer: str = Field(default=LEGAL_COUNTER_DISCLAIMER)
     is_mock: bool = Field(default=False, description="True の場合、GEMINI_API_KEY未設定/API失敗によるテンプレートのフォールバック結果")
 
 
@@ -695,18 +714,16 @@ JSONのみを返してください。
         non_disclosure_decision: str,
         ordinance,
         alleged_ground: str,
+        thinking_level: Optional[str] = "HIGH",
+        decision_type: str = "non_disclosure",
     ) -> CounterArgument:
-        """反論ロジック構築（Gemini Vertex AI優先）
+        """反論ロジック構築（Gemini 4 Argon HIGH推論優先 + 実在認容事例RAG）
 
         precedent_cases（類似の裁決・答申例）は、Geminiに創作させるのではなく、
         総務省「行政不服審査裁決・答申検索データベース」から収集・蓄積した実在の
         認容事例（precedent_cases.py, data/gyofuku_cases.json）から関連度の高いものを
         検索して使用する。適合する実データが見つからない場合に限り、Geminiによる
         生成（フォールバック）を利用する。
-
-        検索はGemini Embeddingsによるコサイン類似度検索を優先し、埋め込みデータ未生成・
-        API未設定・呼び出し失敗の場合はNgramヒューリスティック検索に自動フォールバックする
-        （find_relevant_precedents_by_embedding内部で処理）。
         """
         real_precedents = find_relevant_precedents_by_embedding(
             ordinance_name=getattr(ordinance, "ordinance_name", ""),
@@ -728,31 +745,46 @@ JSONのみを返してください。
                     "（実在性を保証できない旨は呼び出し側で扱います）。"
                 )
                 prompt = f"""
-あなたは情報公開・審査請求の実務専門家AIです。
-自治体（{ordinance.authority}）からの不開示決定に対する反論ロジックと勝訴・開示見込みを検討してください。
+あなたは情報公開・行政不服審査の論点整理を支援するAIです（法的助言ではなく一般市民向けの情報提供・論点整理を行います）。
+自治体・機関（{ordinance.authority}）からの不開示・一部開示等の決定に対する反論ロジックを、行政側の想定反論への切り返し（反対尋問）まで含めて構造化してください。
+氏名・住所等の個人情報は一切含めないでください。
 
+【決定区分】：{decision_type}
 【不開示理由】：{alleged_ground}
-【市民の請求・経緯】：{non_disclosure_decision}
+【市民の請求・決定内容】：{non_disclosure_decision}
 【適用条例】：{ordinance.ordinance_name}
 
 以下のJSON形式で返してください:
 - ground_number: 不開示事由の番号 (例: "第7条第2号")
 - ground_name: 不開示事由の名称 (例: "個人情報" または "法人情報" 等)
 - counter_arguments: 不開示決定を覆すための法的反論ポイントのリスト (3つ以上、具体的かつ説得力のある論理)
+- adversarial_rebuttals: 行政側の想定主張に対する2段論証（反対尋問）の配列（2〜3件）。各要素は:
+  {{"authority_claim": "行政側が主張する想定根拠", "weakness": "立証不足・紋切り型適用の弱点", "citizen_rebuttal": "条例趣旨・裁判例・実在答申を踏まえた市民側の切り返し"}}
+- partial_disclosure_angles: 全面不開示や広範な黒塗りに対し「部分開示（マスキング範囲の最小化）」を求める具体論点のリスト（2〜3件）
+- evidence_checklist: 市民本人が提出前に確認すべき客観的事実のチェックリスト（2〜3件、個人情報は含めない）
 {precedent_instruction}
-- winning_probability: 審査請求で一部開示以上を勝ち取れる推定確率 (0.0 〜 1.0)
+- winning_probability: 審査請求で一部開示以上が認められる見込みの参考値 (0.0 〜 1.0)
 
 JSONのみを出力してください。
 """
-                response = gemini_generate(
-                    self.genai_client,
-                    "pro",
-                    prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                    ),
+                ctx = (
+                    gemini_engine_override(thinking=thinking_level)
+                    if thinking_level
+                    else contextlib.nullcontext()
                 )
+                with ctx:
+                    response = gemini_generate(
+                        self.genai_client,
+                        "pro",
+                        prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                        ),
+                    )
                 text = response.text.strip()
+                if text.startswith("```"):
+                    lines = text.split("\n")
+                    text = "\n".join(lines[1:-1]) if lines[-1].startswith("```") else "\n".join(lines[1:])
                 data = json.loads(text.strip())
 
                 def _to_str(item):
@@ -763,8 +795,25 @@ JSONのみを出力してください。
                         return " : ".join(parts) if parts else str(item)
                     return str(item)
 
-                if isinstance(data.get("counter_arguments"), list):
-                    data["counter_arguments"] = [_to_str(x) for x in data["counter_arguments"]]
+                for list_key in ("counter_arguments", "partial_disclosure_angles", "evidence_checklist"):
+                    if isinstance(data.get(list_key), list):
+                        data[list_key] = [_to_str(x) for x in data[list_key] if _to_str(x).strip()]
+
+                raw_adv = data.get("adversarial_rebuttals")
+                norm_adv: List[AdversarialRebuttal] = []
+                if isinstance(raw_adv, list):
+                    for item in raw_adv:
+                        if isinstance(item, dict):
+                            claim = str(item.get("authority_claim") or "").strip()
+                            weak = str(item.get("weakness") or "").strip()
+                            reb = str(item.get("citizen_rebuttal") or "").strip()
+                            if claim or reb:
+                                norm_adv.append(AdversarialRebuttal(
+                                    authority_claim=claim or "行政側の不開示該当性の主張",
+                                    weakness=weak or "具体的・実質的な支障の立証が抽象的",
+                                    citizen_rebuttal=reb or "条例の原則開示趣旨に照らし非公開範囲が過大",
+                                ))
+                data["adversarial_rebuttals"] = norm_adv
 
                 # precedent_cases は実データがあれば必ず実データで上書きする
                 # （Geminiが指示に反して創作・改変するリスクを排除するため）
@@ -773,21 +822,58 @@ JSONのみを出力してください。
                 elif isinstance(data.get("precedent_cases"), list):
                     data["precedent_cases"] = [_to_str(x) for x in data["precedent_cases"]]
 
+                data["legal_disclaimer"] = LEGAL_COUNTER_DISCLAIMER
                 return CounterArgument(**data)
             except Exception as e:
                 print(f"Gemini counter argument error: {e}, using local templates")
+
+        default_rebuttals = [
+            AdversarialRebuttal(
+                authority_claim=f"{alleged_ground}に基づく一律の不開示該当性の主張",
+                weakness="「おそれ」の具体性・客観的根拠が定型文にとどまり、個別検討を欠く可能性",
+                citizen_rebuttal="情報公開条例は原則開示が建前であり、不開示事由の該当性は処分庁側が具体的支障を立証する責任を負う。",
+            ),
+            AdversarialRebuttal(
+                authority_claim="対象文書の黒塗り・部分開示は事務処理上困難との主張",
+                weakness="独立した意味を持つ部分（件名・総額・日付・契約相手方等）の分離検討が不十分",
+                citizen_rebuttal="部分開示義務に基づき、真に秘匿が必要な箇所のみを限定的に黒塗りし、それ以外は開示すべきである。",
+            ),
+        ]
+        default_partial = [
+            "契約金額の総額・契約件名・決裁日など、特定の個人や競争上のノウハウに直結しない基礎的項目の部分開示を求める。",
+            "定型的な「事務執行に支障」の主張に対し、既に終了した事業・契約については支障が解消されている点を指摘する。",
+        ]
+        default_checklist = [
+            "決定通知書に記載された『不開示理由』の条文番号と具体的な説明文を手元で確認する",
+            "黒塗りされた箇所が『文書全体』か『一部（金額・氏名など）』かを整理する",
+            "審査請求期間（原則として決定を知った日の翌日から3か月以内）の期限日を確認する",
+        ]
 
         tool_result = get_counter_argument(alleged_ground)
         if "error" not in tool_result:
             if real_precedent_texts:
                 tool_result["precedent_cases"] = real_precedent_texts
-            return CounterArgument(**tool_result, is_mock=True)
+            return CounterArgument(
+                **tool_result,
+                adversarial_rebuttals=default_rebuttals,
+                partial_disclosure_angles=default_partial,
+                evidence_checklist=default_checklist,
+                legal_disclaimer=LEGAL_COUNTER_DISCLAIMER,
+                is_mock=True,
+            )
         return CounterArgument(
             ground_number=alleged_ground,
             ground_name="不開示事由",
-            counter_arguments=["反論ロジックを構築中"],
+            counter_arguments=[
+                f"{alleged_ground}の適用には具体的・実質的な支障の立証が必要であり、抽象的おそれのみでは不開示要件を満たさない。",
+                "部分開示義務に基づき、公開可能な箇所と非公開箇所を厳密に切り分けて判断すべきである。",
+            ],
             precedent_cases=real_precedent_texts,
             winning_probability=0.5,
+            adversarial_rebuttals=default_rebuttals,
+            partial_disclosure_angles=default_partial,
+            evidence_checklist=default_checklist,
+            legal_disclaimer=LEGAL_COUNTER_DISCLAIMER,
             is_mock=True,
         )
 
