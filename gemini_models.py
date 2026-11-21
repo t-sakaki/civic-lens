@@ -88,6 +88,12 @@ _lock = threading.Lock()
 _trace_bucket: contextvars.ContextVar[Optional[list[dict[str, Any]]]] = contextvars.ContextVar(
     "gemini_trace_bucket", default=None
 )
+_thinking_override: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "gemini_thinking_override", default=None
+)
+_engine_mode_override: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "gemini_engine_mode_override", default=None
+)
 
 
 def model_chain(tier: str = "pro") -> list[str]:
@@ -142,19 +148,27 @@ def _supports_thinking_level(model: str) -> bool:
     return m.startswith("gemini-4-") or m.startswith("gemini-3.") or m.startswith("gemini-3-")
 
 
-def thinking_level_for(tier: str, model: str) -> Optional[str]:
+def thinking_level_for(tier: str, model: str, thinking_override: Optional[str] = None) -> Optional[str]:
     """モデルとティアに適用される thinking_level を返す（非対応モデルなら None）"""
     if not _supports_thinking_level(model):
         return None
+    override = (thinking_override or _thinking_override.get() or "").strip().upper()
+    if override in ("MINIMAL", "LOW", "MEDIUM", "HIGH"):
+        return override
     level = (os.getenv(f"GEMINI_THINKING_{tier.upper()}") or DEFAULT_THINKING_LEVELS.get(tier) or "").strip().upper()
     return level if level in ("MINIMAL", "LOW", "MEDIUM", "HIGH") else None
 
 
-def config_for_tier(tier: str, model: str, base_config: Any = None) -> Any:
+def config_for_tier(
+    tier: str,
+    model: str,
+    base_config: Any = None,
+    thinking_override: Optional[str] = None,
+) -> Any:
     """ティアとモデルに応じた thinking_level を付与した config を返す（元のオブジェクトは変更しない）"""
     if base_config is not None and getattr(base_config, "thinking_config", None) is not None:
         return base_config
-    level = thinking_level_for(tier, model)
+    level = thinking_level_for(tier, model, thinking_override=thinking_override)
     if not level:
         return base_config
     try:
@@ -177,10 +191,17 @@ def attempts(
     """(モデル名, タイムアウト秒) を優先順に返す。一時的に使えないモデルは飛ばす。
 
     低コストモードまたはソフト上限超過時は有料専用モデルを外して安価・無料モデルを優先する。
+    比較用モード（flash_lite）時は軽量・安価モデル（Flash-Lite優先）のみを試す。
     すべて飛ばされる場合でも全滅させないよう、その場合は全モデルを返す。
     """
     chain = model_chain(tier)
-    if _is_low_cost_mode(already_consumed=already_consumed):
+    mode = _engine_mode_override.get()
+    if mode == "flash_lite":
+        cheap = [m for m in chain if not _is_paid_only(m)] or list(CHEAP_FALLBACK_CHAIN)
+        lite_first = [m for m in cheap if "flash-lite" in m.lower()]
+        others = [m for m in cheap if "flash-lite" not in m.lower()]
+        chain = lite_first + others
+    elif _is_low_cost_mode(already_consumed=already_consumed):
         cheap = [m for m in chain if not _is_paid_only(m)]
         chain = cheap or list(CHEAP_FALLBACK_CHAIN)
     now = time.monotonic()
@@ -257,10 +278,30 @@ def reset_state() -> None:
 def _downgrade_reason(tier: str, model: str, chain_head: str) -> str:
     if model == chain_head:
         return ""
+    if _engine_mode_override.get() == "flash_lite":
+        return "comparison_flash_lite"
     if _is_low_cost_mode():
         flag = os.getenv("GEMINI_LOW_COST_MODE", "").strip().lower()
         return "low_cost_mode" if flag in ("1", "true", "yes", "on") else "soft_daily_limit"
     return "fallback"
+
+
+@contextlib.contextmanager
+def engine_override(mode: Optional[str] = None, thinking: Optional[str] = None) -> Iterator[None]:
+    """リクエストスコープでエンジン動作モードや thinking_level を一時上書きする（環境変数は汚さない）"""
+    mode_token = _engine_mode_override.set(mode)
+    think_token = _thinking_override.set(thinking.strip().upper() if thinking else None)
+    try:
+        yield
+    finally:
+        try:
+            _engine_mode_override.reset(mode_token)
+        except ValueError:
+            _engine_mode_override.set(None)
+        try:
+            _thinking_override.reset(think_token)
+        except ValueError:
+            _thinking_override.set(None)
 
 
 @contextlib.contextmanager

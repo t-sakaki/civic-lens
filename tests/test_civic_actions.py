@@ -134,3 +134,72 @@ def test_council_question_rejects_court():
         "user_input": "x", "target_authority": "supreme-court",
     })
     assert res.status_code == 400
+
+
+def test_attachment_notice_meta_normalization_and_input_build():
+    import attachment_reader as ar
+
+    norm = ar._normalize_notice_meta({
+        "is_disclosure_decision": True,
+        "decision_type": "partial_disclosure",
+        "decision_date": "2026/11/1",
+        "cited_articles": ["第7条第2号", "第7条第5号"],
+        "redacted_scope_summary": "単価・積算内訳が黒塗り",
+        "boilerplate_risk": "定型文のみで具体的支障の記載なし",
+    })
+    assert norm is not None
+    assert norm.is_disclosure_decision is True
+    assert norm.decision_type == "partial_disclosure"
+    assert norm.decision_date == "2026-11-01"
+    assert norm.cited_articles == ["第7条第2号", "第7条第5号"]
+
+    bad_norm = ar._normalize_notice_meta({
+        "is_disclosure_decision": True,
+        "decision_type": "unknown_type",
+        "decision_date": "令和8年11月",
+    })
+    assert bad_norm.decision_type == "non_disclosure"
+    assert bad_norm.decision_date is None
+
+    reading = ar.AttachmentReading(
+        files=[ar.AttachmentFinding(filename="notice.png", document_type="一部開示決定通知書", summary="単価が黒塗り")],
+        overall_summary="委託契約書の単価が一部不開示",
+        notice_meta=norm,
+    )
+    combined = ar.build_analysis_input("納得できない", reading)
+    assert "決定区分=partial_disclosure" in combined
+    assert "決定日=2026-11-01" in combined
+    assert "引用条文=第7条第2号・第7条第5号" in combined
+
+
+def test_review_request_returns_adversarial_rebuttals_and_compare_endpoint():
+    res = client.post("/api/review-request", data={
+        "non_disclosure_decision": "委託契約書の単価が黒塗りされた",
+        "target_authority": "anjo-city",
+        "alleged_ground": "第7条第2号",
+        "decision_type": "partial_disclosure",
+        "engine_mode": "argon_high",
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["engine_mode"] == "argon_high"
+    ca = data["counter_argument"]
+    assert len(ca["adversarial_rebuttals"]) >= 1
+    assert "authority_claim" in ca["adversarial_rebuttals"][0]
+    assert "citizen_rebuttal" in ca["adversarial_rebuttals"][0]
+    assert len(ca["partial_disclosure_angles"]) >= 1
+    assert len(ca["evidence_checklist"]) >= 1
+    assert "弁護士法72条" in ca["legal_disclaimer"]
+
+    cmp_res = client.post("/api/review-request/compare", data={
+        "non_disclosure_decision": "委託契約書の単価が黒塗りされた",
+        "target_authority": "anjo-city",
+        "alleged_ground": "第7条第2号",
+        "decision_type": "partial_disclosure",
+    })
+    assert cmp_res.status_code == 200
+    cmp_data = cmp_res.json()
+    assert "argon" in cmp_data and "flash_lite" in cmp_data
+    assert cmp_data["argon"]["mode"] == "argon_high"
+    assert cmp_data["flash_lite"]["mode"] == "flash_lite"
+    assert len(cmp_data["argon"]["counter_argument"]["adversarial_rebuttals"]) >= 1
