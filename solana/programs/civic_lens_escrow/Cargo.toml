@@ -1,0 +1,35 @@
+[package]
+name = "civic_lens_escrow"
+version = "0.1.0"
+description = "Civic Lens: 行政不服審査ケースの支援金エスクロー（総務省裁決DBオラクル）"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "civic_lens_escrow"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "1.2.0", features = ["init-if-needed"] }
+anchor-spl = "1.2.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+[dev-dependencies]
+litesvm = "0.12"
+litesvm-token = "0.12"
+solana-keypair = "3"
+solana-signer = "3"
+solana-message = "3"
+solana-transaction = "3"
