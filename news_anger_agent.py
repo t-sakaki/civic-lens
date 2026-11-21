@@ -248,14 +248,15 @@ class AngerReproductionAgent:
         theme_persona = get_theme(theme)["persona"]
         if GENAI_AVAILABLE and self._civic_agent.genai_client:
             try:
+                # 1記事あたり最大3エージェントを並列実行するため、品質と速度・費用の両立で balanced ティアを使用
                 response = gemini_generate(
                     self._civic_agent.genai_client,
-                    "pro",
+                    "balanced",
                     NEWS_ANALYSIS_PROMPT.format(
                         news_text=news_text, region_line=region_line, theme_persona=theme_persona
                     ),
                     config=types.GenerateContentConfig(response_mime_type="application/json"),
-                    timeout_s=25.0,
+                    timeout_s=30.0,
                 )
                 text = response.text.strip()
                 if text.startswith("```"):

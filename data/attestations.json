@@ -9,9 +9,21 @@
       "block_number": 47205479,
       "owner_user_id": null,
       "created_at": "2026-09-23 16:00:42 UTC"
+    },
+    "0x2c8cd0658dbbb0fdf68154c8b2e7fc9f888ebc0050c9a988fe77cae464a91213": {
+      "uid": "0x2c8cd0658dbbb0fdf68154c8b2e7fc9f888ebc0050c9a988fe77cae464a91213",
+      "record_id": "req-anjo-appeal-db-2026",
+      "title": "開示請求書（安城市長あて・行政不服審査裁決・答申検索データベース関連）",
+      "chain_id": 84532,
+      "tx_hash": "0xdc356a67616bf0afffafaca015c8cfeaca3ec0e57f43ac3828c76ac68cd44cd6",
+      "block_number": 55069635,
+      "owner_user_id": null,
+      "created_at": "2026-11-06 03:29:53 UTC",
+      "signer_type": "server"
     }
   },
   "by_record_id": {
-    "aichi-aikon-navi-20260924": "0x9141b625cb51f4490d6d4f34f9ec2d69b5af2a9128edc58aab56dfc719845c6e"
+    "aichi-aikon-navi-20260924": "0x9141b625cb51f4490d6d4f34f9ec2d69b5af2a9128edc58aab56dfc719845c6e",
+    "req-anjo-appeal-db-2026": "0x2c8cd0658dbbb0fdf68154c8b2e7fc9f888ebc0050c9a988fe77cae464a91213"
   }
 }
