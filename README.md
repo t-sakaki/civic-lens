@@ -220,3 +220,22 @@ MIT License
 - Google Cloud Japan
 - GMI Cloud（開発時のLLM）
 - 安城市の実際の運用知見（実案件ベース）
+## MCP 公開機能（ローカル stdio）
+信頼できるローカル MCP クライアントから mcp_server.py を Python で起動します。
+依存関係: pip install -r requirements.txt
+起動コマンド: python /home/taira/civic-lens-develop/mcp_server.py
+作業ディレクトリ: /home/taira/civic-lens-develop
+
+ツール:
+- prepare_publication(kind, content, public_summary, authority, legal_basis): kind は disclosure（開示請求）または appeal（審査請求）。
+- publish_record(confirmation_token, preview_digest, user_confirmed): プレビューの全文・不可逆性・ガス代負担を本人に提示し、明示的に確認した場合だけ user_confirmed=true として実行。
+- get_publication_status(uid_or_record_id): チェーンから公開記録を確認。
+- verify_publication(uid_or_record_id, content): 原本のハッシュを検証。
+
+既存の CHAIN_RPC_URL / CHAIN_PRIVATE_KEY / EAS_SCHEMA_UID を起動環境または作業ディレクトリの .env に設定してください。秘密鍵をクライアント設定へ直書きしないでください。
+本機能はサーバー代理署名です。ウォレット本人署名ではありません。
+公開概要・機関・根拠・種別・記録ID・本文のハッシュを既存 EAS スキーマに記録します。原文そのものは公開せず、審査請求の公開概要を公開します。自動検出で氏名など全ての個人情報を検出できるわけではないため、本人が必ず全公開項目を確認してください。
+存在証明は行政への提出完了や内容の真実性を証明しません。公開文面は削除できません。AIは情報提供・書式作成支援を行います。
+確認トークンは10分間有効・一回限り・プロセス内のみ。送信失敗時も自動再試行せず、チェーンで結果を照合してください。複数プレビューによる重複公開を自動防止するものではありません。
+MCP クライアントは公開ツールに対する本人承認を必須にしてください。user_confirmed は人間の確認を暗号学的に証明するものではありません。
+HTTP/Cloud Run 向けのリモート MCP エンドポイント、OAuth、審査請求全文のオフチェーン公開ページは本版には含まれません。
