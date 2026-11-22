@@ -4958,7 +4958,8 @@
             const resultEl = bubbleEl.querySelector('.news-share-result');
 
             async function share(platform) {
-                resultEl.innerHTML = '<span class="text-xs text-gray-400">🔄 シェア処理中...</span>';
+                const resultElNow = bubbleEl.querySelector('.news-share-result') || resultEl;
+                if (resultElNow) resultElNow.innerHTML = '<span class="text-xs text-gray-400">🔄 シェア処理中...</span>';
                 try {
                     const res = await fetch('/api/social/share', {
                         method: 'POST',
@@ -4972,29 +4973,58 @@
                             key_points: record ? record.key_points : null,
                         }),
                     });
-                    const data = await res.json();
+                    let data = null;
+                    try { data = await res.json(); } catch (_) { data = null; }
+                    if (!res.ok) {
+                        const msg = (data && data.detail) ? data.detail : ('HTTP ' + res.status);
+                        if (resultElNow) resultElNow.innerHTML = '<span class="text-xs text-red-600">エラー: ' + escapeHtml(String(msg)) + '</span>';
+                        return;
+                    }
+                    if (!data) {
+                        if (resultElNow) resultElNow.innerHTML = '<span class="text-xs text-red-600">エラー: サーバーからの応答を解析できませんでした</span>';
+                        return;
+                    }
 
                     if (data.success) {
-                        resultEl.innerHTML = `<span class="text-xs text-green-700">✅ 投稿しました${data.post_url ? `（<a href="${data.post_url}" target="_blank" rel="noopener" class="underline">投稿を見る</a>）` : ''}</span>`;
+                        const linkHtml = data.post_url ? ('（<a href="' + escapeHtml(data.post_url) + '" target="_blank" rel="noopener" class="underline">投稿を見る</a>）') : '';
+                        resultElNow.innerHTML = '<span class="text-xs text-green-700">✅ 投稿しました' + linkHtml + '</span>';
                         return;
                     }
                     if (data.action === 'manual_post_needed') {
-                        const text = platform === 'bluesky'
-                            ? data.share_text.bluesky
-                            : (data.share_text.x.mode === 'thread'
-                                ? data.share_text.x.posts.map((p, i) => `--- ポスト${i + 1}/${data.share_text.x.posts.length} ---\n${p}`).join('\n\n')
-                                : data.share_text.x.posts[0]);
-                        resultEl.innerHTML = `
-                            <p class="text-xs text-gray-500 mb-1">認証情報が未設定のため、投稿用テキストを表示します。コピーしてご自身のアカウントから投稿してください。</p>
-                            <textarea readonly rows="6" class="w-full text-xs p-2 border border-gray-300 rounded-md bg-white">${text}</textarea>
-                        `;
-                    } else {
-                        resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${data.detail || 'シェアに失敗しました'}</span>`;
+                        const st = data.share_text || {};
+                        let text = '';
+                        if (platform === 'bluesky') {
+                            text = (st.bluesky != null) ? String(st.bluesky) : '';
+                        } else {
+                            const x = st.x || {};
+                            if (x.mode === 'thread' && Array.isArray(x.posts)) {
+                                text = x.posts.map(function (p, i) { return '--- ポスト' + (i + 1) + '/' + x.posts.length + ' ---\n' + p; }).join('\n\n');
+                            } else if (Array.isArray(x.posts)) {
+                                text = (x.posts[0] != null) ? String(x.posts[0]) : '';
+                            } else if (x.posts != null) {
+                                text = String(x.posts);
+                            }
+                        }
+                        const wrap = document.createElement('div');
+                        const p = document.createElement('p');
+                        p.className = 'text-xs text-gray-500 mb-1';
+                        p.textContent = '認証情報が未設定のため、投稿用テキストを表示します。コピーしてご自身のアカウントから投稿してください。';
+                        wrap.appendChild(p);
+                        const ta = document.createElement('textarea');
+                        ta.readOnly = true;
+                        ta.rows = 6;
+                        ta.className = 'w-full text-xs p-2 border border-gray-300 rounded-md bg-white';
+                        ta.value = text;
+                        wrap.appendChild(ta);
+                        if (resultElNow) { resultElNow.innerHTML = ''; resultElNow.appendChild(wrap); }
+                        return;
                     }
+                    if (resultElNow) resultElNow.innerHTML = '<span class="text-xs text-red-600">エラー: ' + escapeHtml(data.detail || 'シェアに失敗しました') + '</span>';
                 } catch (err) {
-                    resultEl.innerHTML = `<span class="text-xs text-red-600">エラー: ${escapeHtml(err.message)}</span>`;
+                    if (resultElNow) resultElNow.innerHTML = '<span class="text-xs text-red-600">エラー: ' + escapeHtml(err && err.message ? err.message : String(err)) + '</span>';
                 }
             }
+
 
             const blueskyBtn = document.createElement('button');
             blueskyBtn.type = 'button';
